@@ -1,0 +1,195 @@
+import { HubSpotContact } from "./types";
+
+const HUBSPOT_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN!;
+const BASE_URL = "https://api.hubapi.com";
+
+const CONTACT_PROPERTIES = [
+  "account_lifecycle",
+  "airbnb_authorization_status",
+  "airbnbdqreason",
+  "user_properties_created",
+  "user_clicked_launch_property",
+  "trial__start_date",
+  "subscription_status",
+  "subscription_type",
+  "first_touch_utm_campaign",
+  "first_touch_utm_source",
+  "first_touch_utm_medium",
+  "first_touch_utm_term",
+  "hubspot_owner_id",
+  "country",
+  "city",
+  "ip_country",
+  "ip_city",
+  "referral_source",
+  "createdate",
+  "hs_v2_date_entered_opportunity",
+  "hs_v2_date_exited_opportunity",
+  "hs_v2_date_entered_customer",
+  "hs_v2_date_exited_customer",
+];
+
+// Simple in-memory cache
+let contactsCache: { data: HubSpotContact[]; timestamp: number } | null = null;
+let ownersCache: { data: Record<string, string>; timestamp: number } | null =
+  null;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function hubspotFetch(
+  url: string,
+  options?: RequestInit,
+  retries = 3
+): Promise<Record<string, unknown>> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const res = await fetch(url, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${HUBSPOT_TOKEN}`,
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
+    });
+
+    if (res.status === 429) {
+      // Rate limited — wait and retry
+      const waitMs = Math.min(1000 * Math.pow(2, attempt), 10000);
+      console.log(`Rate limited, waiting ${waitMs}ms (attempt ${attempt + 1})`);
+      await sleep(waitMs);
+      continue;
+    }
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`HubSpot API error ${res.status}: ${text}`);
+    }
+
+    return res.json();
+  }
+
+  throw new Error("HubSpot API: max retries exceeded (rate limit)");
+}
+
+export async function fetchAllContacts(): Promise<HubSpotContact[]> {
+  // Check cache
+  if (contactsCache && Date.now() - contactsCache.timestamp < CACHE_TTL) {
+    return contactsCache.data;
+  }
+
+  const allContacts: HubSpotContact[] = [];
+  let after: string | undefined;
+  let pageCount = 0;
+  const MAX_PAGES = 100; // 10,000 contacts max (HubSpot search limit)
+
+  // Only fetch contacts created since Jan 1, 2026
+  const SINCE_DATE = "2026-01-01T00:00:00.000Z";
+
+  do {
+    const body: Record<string, unknown> = {
+      filterGroups: [
+        {
+          filters: [
+            {
+              propertyName: "createdate",
+              operator: "GTE",
+              value: new Date(SINCE_DATE).getTime().toString(),
+            },
+          ],
+        },
+      ],
+      sorts: [
+        {
+          propertyName: "createdate",
+          direction: "DESCENDING",
+        },
+      ],
+      properties: CONTACT_PROPERTIES,
+      limit: 100,
+      ...(after ? { after } : {}),
+    };
+
+    const data = await hubspotFetch(
+      `${BASE_URL}/crm/v3/objects/contacts/search`,
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      }
+    );
+
+    const results = (data.results || []) as Array<{
+      id: string;
+      properties: Record<string, string | null>;
+    }>;
+    for (const result of results) {
+      const p = result.properties;
+      allContacts.push({
+        id: result.id,
+        createdate: p.createdate || "",
+        account_lifecycle: p.account_lifecycle || null,
+        airbnb_authorization_status: p.airbnb_authorization_status || null,
+        airbnbdqreason: p.airbnbdqreason || null,
+        user_properties_created: p.user_properties_created || null,
+        user_clicked_launch_property: p.user_clicked_launch_property || null,
+        trial__start_date: p.trial__start_date || null,
+        subscription_status: p.subscription_status || null,
+        subscription_type: p.subscription_type || null,
+        first_touch_utm_campaign: p.first_touch_utm_campaign || null,
+        first_touch_utm_source: p.first_touch_utm_source || null,
+        first_touch_utm_medium: p.first_touch_utm_medium || null,
+        first_touch_utm_term: p.first_touch_utm_term || null,
+        hubspot_owner_id: p.hubspot_owner_id || null,
+        country: p.country || null,
+        city: p.city || null,
+        ip_country: p.ip_country || null,
+        ip_city: p.ip_city || null,
+        referral_source: p.referral_source || null,
+        hs_v2_date_entered_opportunity: p.hs_v2_date_entered_opportunity || null,
+        hs_v2_date_exited_opportunity: p.hs_v2_date_exited_opportunity || null,
+        hs_v2_date_entered_customer: p.hs_v2_date_entered_customer || null,
+        hs_v2_date_exited_customer: p.hs_v2_date_exited_customer || null,
+      });
+    }
+
+    after = (data.paging as Record<string, Record<string, string>>)?.next
+      ?.after;
+    pageCount++;
+
+    // Small delay between pages to avoid rate limits
+    if (after) await sleep(150);
+  } while (after && pageCount < MAX_PAGES);
+
+  // Update cache
+  contactsCache = { data: allContacts, timestamp: Date.now() };
+  return allContacts;
+}
+
+export async function fetchOwnerNames(): Promise<Record<string, string>> {
+  if (ownersCache && Date.now() - ownersCache.timestamp < CACHE_TTL) {
+    return ownersCache.data;
+  }
+
+  const data = await hubspotFetch(`${BASE_URL}/crm/v3/owners?limit=100`);
+  const map: Record<string, string> = {};
+  const ownerResults = (data.results || []) as Array<{
+    id: string;
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+  }>;
+
+  for (const owner of ownerResults) {
+    const name = [owner.firstName, owner.lastName].filter(Boolean).join(" ");
+    map[owner.id] = name || owner.email || owner.id;
+  }
+
+  ownersCache = { data: map, timestamp: Date.now() };
+  return map;
+}
+
+export function invalidateCache() {
+  contactsCache = null;
+  ownersCache = null;
+}
