@@ -428,7 +428,7 @@ const TOP_DQ_REASONS = ["UNSUPPORTED_COUNTRY", "INCOMPLETE_ADDRESS", "NO_PUBLISH
 
 function computeDQWeekly(contacts: HubSpotContact[]): DQWeekly[] {
   const dqContacts = contacts.filter(hasDQ);
-  const weekMap: Record<string, DQWeekly> = {};
+  const weekMap: Record<string, { data: DQWeekly; sortKey: string }> = {};
 
   for (const c of dqContacts) {
     const d = new Date(c.createdate);
@@ -439,23 +439,30 @@ function computeDQWeekly(contacts: HubSpotContact[]): DQWeekly[] {
     sunday.setDate(monday.getDate() + 6);
     const fmt = (dt: Date) => `${dt.getMonth() + 1}/${dt.getDate()}`;
     const weekKey = `${fmt(monday)}-${fmt(sunday)}`;
+    // Sort key: YYYY-MM-DD of Monday for correct chronological sort
+    const sortKey = monday.toISOString().slice(0, 10);
 
     if (!weekMap[weekKey]) {
       weekMap[weekKey] = {
-        week: weekKey, UNSUPPORTED_COUNTRY: 0, INCOMPLETE_ADDRESS: 0,
-        NO_PUBLISHED_LISTINGS_FOUND: 0, UNPUBLISHED_LISTING: 0, OTHER: 0,
+        sortKey,
+        data: {
+          week: weekKey, UNSUPPORTED_COUNTRY: 0, INCOMPLETE_ADDRESS: 0,
+          NO_PUBLISHED_LISTINGS_FOUND: 0, UNPUBLISHED_LISTING: 0, OTHER: 0,
+        },
       };
     }
     const reasons = (c.airbnbdqreason || "").trim().toUpperCase().split(";").map((r) => r.trim());
     for (const r of reasons) {
       if (TOP_DQ_REASONS.includes(r)) {
-        weekMap[weekKey][r as keyof Omit<DQWeekly, "week">] += 1;
+        weekMap[weekKey].data[r as keyof Omit<DQWeekly, "week">] += 1;
       } else if (r) {
-        weekMap[weekKey].OTHER += 1;
+        weekMap[weekKey].data.OTHER += 1;
       }
     }
   }
-  return Object.values(weekMap).sort((a, b) => a.week.localeCompare(b.week, undefined, { numeric: true }));
+  return Object.values(weekMap)
+    .sort((a, b) => a.sortKey.localeCompare(b.sortKey))
+    .map((v) => v.data);
 }
 
 // ---- Main entry point ----
