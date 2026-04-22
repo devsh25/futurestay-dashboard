@@ -6,13 +6,13 @@ import Sparkline from "./Sparkline";
 
 function TrendBadge({ delta }: { delta: TrendDelta }) {
   if (delta.previous === 0 && delta.current === 0) {
-    return <span className="text-[10px] text-[#B0B7BF] font-medium">\u2014</span>;
+    return <span className="text-[10px] text-[#6B6B75] font-medium">\u2014</span>;
   }
   const up = delta.pct >= 0;
-  const color = up ? "text-[#0F5955] bg-[#EDFBF8]" : "text-[#801F50] bg-[#FFC5E3]/40";
+  const color = up ? "text-[#6EE7B7] bg-[#0F2A1F]" : "text-[#F87171] bg-[#2A0F13]";
   const arrow = up ? "\u2191" : "\u2193";
   return (
-    <span className={`inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded ${color}`}>
+    <span className={`inline-flex items-center gap-0.5 text-[10px] font-semibold px-2 py-0.5 rounded-full ${color}`}>
       {arrow} {Math.abs(delta.pct).toFixed(0)}%
     </span>
   );
@@ -32,23 +32,23 @@ function KPIMainCard({
   color: string;
 }) {
   return (
-    <Card className="border-[#E8EAF0] shadow-[0_1px_3px_rgba(17,17,17,0.04)] hover:shadow-[0_4px_12px_rgba(17,17,17,0.08)] transition-shadow duration-200">
-      <CardContent className="pt-5 pb-4 px-5">
-        <div className="flex items-start justify-between mb-2">
-          <p className="text-[11px] font-semibold text-[#656C74] uppercase tracking-wider">
+    <Card className="bg-[#15151A] border border-[#1F1F28] rounded-2xl shadow-none hover:border-[#2A2A32] transition-colors duration-200">
+      <CardContent className="pt-5 pb-5 px-5">
+        <div className="flex items-start justify-between mb-3">
+          <p className="text-[11px] font-medium text-[#8A8A94] uppercase tracking-wider">
             {label}
           </p>
           <TrendBadge delta={delta} />
         </div>
         <div className="flex items-end justify-between gap-3">
-          <p className="text-3xl font-bold text-[#111111] tracking-tight">
+          <p className="text-[48px] leading-none font-bold text-white tracking-tight tabular-nums">
             {value.toLocaleString()}
           </p>
-          <div className="flex-shrink-0">
-            <Sparkline data={sparklineData} color={color} />
+          <div className="flex-shrink-0 pb-1">
+            <Sparkline data={sparklineData} color={color} width={80} height={32} />
           </div>
         </div>
-        <p className="text-[10px] text-[#B0B7BF] mt-2">
+        <p className="text-[10px] text-[#6B6B75] mt-3">
           vs {delta.previous.toLocaleString()} prior period
         </p>
       </CardContent>
@@ -65,19 +65,19 @@ function RateCard({
   value: number;
   color: "green" | "amber" | "red";
 }) {
-  const styles = {
-    green: { text: "text-[#0F5955]", bg: "bg-[#EDFBF8]", border: "border-[#079289]/20" },
-    amber: { text: "text-[#999258]", bg: "bg-[#FBFAED]", border: "border-[#999258]/30" },
-    red: { text: "text-[#801F50]", bg: "bg-[#FFC5E3]/30", border: "border-[#801F50]/20" },
+  const valueColor = {
+    green: "text-[#6EE7B7]",
+    amber: "text-[#FBBF24]",
+    red: "text-[#F87171]",
   }[color];
 
   return (
-    <Card className={`border ${styles.border} ${styles.bg} shadow-none`}>
-      <CardContent className="pt-4 pb-3 px-5">
-        <p className="text-[11px] font-semibold text-[#656C74] uppercase tracking-wider">
+    <Card className="bg-[#15151A] border border-[#1F1F28] rounded-2xl shadow-none">
+      <CardContent className="pt-4 pb-4 px-5">
+        <p className="text-[11px] font-medium text-[#8A8A94] uppercase tracking-wider">
           {label}
         </p>
-        <p className={`text-2xl font-bold mt-1 ${styles.text}`}>
+        <p className={`text-3xl font-bold mt-2 tabular-nums ${valueColor}`}>
           {value.toFixed(1)}%
         </p>
       </CardContent>
@@ -87,7 +87,7 @@ function RateCard({
 
 export default function KPICards({ kpis, cohort }: { kpis: KPIs; cohort: CohortData }) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* Row 1: Core health numbers with sparklines + trend deltas */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KPIMainCard
@@ -95,28 +95,28 @@ export default function KPICards({ kpis, cohort }: { kpis: KPIs; cohort: CohortD
           value={kpis.totalSignups}
           delta={kpis.deltas.signups}
           sparklineData={kpis.sparkline.signups}
-          color="#3863E6"
+          color="#A78BFA"
         />
         <KPIMainCard
           label="Total Trials"
           value={kpis.totalTrials}
           delta={kpis.deltas.trials}
           sparklineData={kpis.sparkline.trials}
-          color="#0F5955"
+          color="#6EE7B7"
         />
         <KPIMainCard
           label="In Trial"
           value={kpis.totalInTrial}
           delta={kpis.deltas.inTrial}
           sparklineData={kpis.sparkline.inTrial}
-          color="#999258"
+          color="#FB923C"
         />
         <KPIMainCard
           label="Total Customers"
           value={kpis.totalCustomers}
           delta={kpis.deltas.customers}
           sparklineData={kpis.sparkline.customers}
-          color="#079289"
+          color="#60A5FA"
         />
       </div>
 

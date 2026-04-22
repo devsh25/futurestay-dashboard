@@ -8,12 +8,12 @@ import { RepRow } from "@/lib/types";
 function RateBadge({ value, thresholds }: { value: number; thresholds: [number, number] }) {
   const color =
     value > thresholds[0]
-      ? "border-[#079289]/30 text-[#0F5955] bg-[#EDFBF8]"
+      ? "text-[#6EE7B7] bg-[#0F2A1F] border-[#6EE7B7]/20"
       : value > thresholds[1]
-        ? "border-[#999258]/30 text-[#999258] bg-[#FBFAED]"
-        : "border-[#801F50]/30 text-[#801F50] bg-[#FFC5E3]/10";
+        ? "text-[#FBBF24] bg-[#2A1F0F] border-[#FBBF24]/20"
+        : "text-[#F87171] bg-[#2A0F13] border-[#F87171]/20";
   return (
-    <Badge variant="outline" className={`font-mono text-[11px] ${color}`}>
+    <Badge variant="outline" className={`font-mono text-[11px] tabular-nums ${color}`}>
       {value.toFixed(1)}%
     </Badge>
   );
@@ -21,16 +21,16 @@ function RateBadge({ value, thresholds }: { value: number; thresholds: [number, 
 
 export default function RepCard({ reps }: { reps: RepRow[] }) {
   return (
-    <Card className="border-[#E8EAF0] shadow-[0_1px_3px_rgba(17,17,17,0.04)] rounded-2xl hover:shadow-[0_4px_12px_rgba(17,17,17,0.08)] transition-shadow duration-200">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-[15px] font-semibold text-[#111111] tracking-tight">Rep Scorecard</CardTitle>
+    <Card className="bg-[#15151A] border border-[#1F1F28] rounded-2xl shadow-none">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-[15px] font-semibold text-white tracking-tight">Rep Scorecard</CardTitle>
       </CardHeader>
       <CardContent>
         <Table>
           <TableHeader>
-            <TableRow className="border-[#E8EAF0]">
+            <TableRow className="border-[#1F1F28] hover:bg-transparent">
               {["Rep", "Contacts", "Trials", "In Trial", "Customers", "Contact-to-Trial", "Trial-to-Cust", "Contact-to-Cust"].map((h) => (
-                <TableHead key={h} className={`text-[11px] uppercase tracking-wider text-[#656C74] font-semibold ${h !== "Rep" ? "text-right" : ""}`}>
+                <TableHead key={h} className={`text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold ${h !== "Rep" ? "text-right" : ""}`}>
                   {h}
                 </TableHead>
               ))}
@@ -38,12 +38,12 @@ export default function RepCard({ reps }: { reps: RepRow[] }) {
           </TableHeader>
           <TableBody>
             {reps.map((row) => (
-              <TableRow key={row.rep} className="border-[#E8EAF0]">
-                <TableCell className="font-medium text-[13px] text-[#111111]">{row.rep}</TableCell>
-                <TableCell className="text-right font-mono text-[13px]">{row.contacts}</TableCell>
-                <TableCell className="text-right font-mono text-[13px]">{row.trials}</TableCell>
-                <TableCell className="text-right font-mono text-[13px] text-[#999258]">{row.inTrial}</TableCell>
-                <TableCell className="text-right font-mono text-[13px]">{row.customers}</TableCell>
+              <TableRow key={row.rep} className="border-[#1F1F28] hover:bg-[#1A1A22] transition-colors">
+                <TableCell className="font-medium text-[13px] text-white">{row.rep}</TableCell>
+                <TableCell className="text-right font-mono text-[13px] tabular-nums text-white">{row.contacts}</TableCell>
+                <TableCell className="text-right font-mono text-[13px] tabular-nums text-white">{row.trials}</TableCell>
+                <TableCell className="text-right font-mono text-[13px] tabular-nums text-[#FBBF24]">{row.inTrial}</TableCell>
+                <TableCell className="text-right font-mono text-[13px] tabular-nums text-white">{row.customers}</TableCell>
                 <TableCell className="text-right">
                   <RateBadge value={row.signupToTrial} thresholds={[10, 5]} />
                 </TableCell>
@@ -51,7 +51,7 @@ export default function RepCard({ reps }: { reps: RepRow[] }) {
                   {row.trialToCustomer !== null ? (
                     <RateBadge value={row.trialToCustomer} thresholds={[50, 30]} />
                   ) : (
-                    <span className="text-[12px] text-[#B0B7BF]">—</span>
+                    <span className="text-[12px] text-[#6B6B75]">\u2014</span>
                   )}
                 </TableCell>
                 <TableCell className="text-right">

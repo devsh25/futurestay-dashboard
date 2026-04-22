@@ -6,7 +6,7 @@ export default function SectionHeading({
   icon,
   title,
   description,
-  iconColor = "#3863E6",
+  iconColor = "#A78BFA",
 }: {
   icon: ReactNode;
   title: string;
@@ -14,19 +14,19 @@ export default function SectionHeading({
   iconColor?: string;
 }) {
   return (
-    <div className="flex items-center gap-3 pt-2 pb-1">
+    <div className="flex items-center gap-3 pt-3 pb-1">
       <div
-        className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-        style={{ backgroundColor: `${iconColor}14`, color: iconColor }}
+        className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+        style={{ backgroundColor: `${iconColor}1A`, color: iconColor }}
       >
         {icon}
       </div>
       <div>
-        <h2 className="text-[15px] font-semibold text-[#111111] tracking-tight">
+        <h2 className="text-[16px] font-semibold text-white tracking-tight">
           {title}
         </h2>
         {description && (
-          <p className="text-[12px] text-[#656C74] mt-0.5">{description}</p>
+          <p className="text-[12px] text-[#8A8A94] mt-0.5">{description}</p>
         )}
       </div>
     </div>

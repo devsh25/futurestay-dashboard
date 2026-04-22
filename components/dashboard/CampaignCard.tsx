@@ -16,9 +16,9 @@ function getCampaignType(campaign: string): "Airbnb" | "Direct Booking" | "Other
 }
 
 const TYPE_STYLES = {
-  Airbnb: "bg-[#FBFAED] text-[#999258] border-[#999258]/30",
-  "Direct Booking": "bg-[#F1F4FF] text-[#3863E6] border-[#3863E6]/30",
-  Other: "bg-[#F3F6FA] text-[#656C74] border-[#E8EAF0]",
+  Airbnb: "bg-[#2A1F0F] text-[#FBBF24] border-[#FBBF24]/20",
+  "Direct Booking": "bg-[#1A1F2A] text-[#60A5FA] border-[#60A5FA]/20",
+  Other: "bg-[#1F1F28] text-[#8A8A94] border-[#2A2A32]",
 };
 
 const FILTER_BUTTONS: { value: CampaignType; label: string }[] = [
@@ -36,9 +36,9 @@ export default function CampaignCard({ campaigns }: { campaigns: CampaignRow[] }
   });
 
   return (
-    <Card className="border-[#E8EAF0] shadow-[0_1px_3px_rgba(17,17,17,0.04)] rounded-2xl hover:shadow-[0_4px_12px_rgba(17,17,17,0.08)] transition-shadow duration-200">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center justify-between text-[15px] font-semibold text-[#111111] tracking-tight">
+    <Card className="bg-[#15151A] border border-[#1F1F28] rounded-2xl shadow-none">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center justify-between text-[15px] font-semibold text-white tracking-tight">
           <span>Paid Campaign Performance</span>
           <div className="flex gap-1">
             {FILTER_BUTTONS.map((btn) => (
@@ -47,8 +47,8 @@ export default function CampaignCard({ campaigns }: { campaigns: CampaignRow[] }
                 onClick={() => setTypeFilter(btn.value)}
                 className={`px-3 py-1 text-[11px] font-medium rounded-full border transition-all ${
                   typeFilter === btn.value
-                    ? "bg-[#3863E6] text-white border-[#3863E6]"
-                    : "bg-white text-[#656C74] border-[#E8EAF0] hover:border-[#3863E6]/40"
+                    ? "bg-[#A78BFA] text-[#0A0A0C] border-[#A78BFA]"
+                    : "bg-transparent text-[#8A8A94] border-[#2A2A32] hover:border-[#A78BFA]/40 hover:text-white"
                 }`}
               >
                 {btn.label}
@@ -60,9 +60,9 @@ export default function CampaignCard({ campaigns }: { campaigns: CampaignRow[] }
       <CardContent>
         <Table>
           <TableHeader>
-            <TableRow className="border-[#E8EAF0]">
+            <TableRow className="border-[#1F1F28] hover:bg-transparent">
               {["Type", "Campaign", "Source", "Qual. Signups", "Trials", "In Trial", "Cust", "QS-to-T", "QS-to-C"].map((h) => (
-                <TableHead key={h} className={`text-[11px] uppercase tracking-wider text-[#656C74] font-semibold ${h !== "Type" && h !== "Campaign" && h !== "Source" ? "text-right" : h === "Source" ? "text-center" : ""}`}>
+                <TableHead key={h} className={`text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold ${h !== "Type" && h !== "Campaign" && h !== "Source" ? "text-right" : h === "Source" ? "text-center" : ""}`}>
                   {h}
                 </TableHead>
               ))}
@@ -70,30 +70,30 @@ export default function CampaignCard({ campaigns }: { campaigns: CampaignRow[] }
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={9} className="text-center text-[#656C74] py-8 text-sm">No campaigns match this filter</TableCell></TableRow>
+              <TableRow><TableCell colSpan={9} className="text-center text-[#8A8A94] py-8 text-sm">No campaigns match this filter</TableCell></TableRow>
             ) : (
               filtered.map((row) => {
                 const type = getCampaignType(row.campaign);
                 const stc = row.signups > 0 ? (row.customers / row.signups) * 100 : 0;
                 return (
-                  <TableRow key={row.campaign} className="border-[#E8EAF0]">
+                  <TableRow key={row.campaign} className="border-[#1F1F28] hover:bg-[#1A1A22] transition-colors">
                     <TableCell>
                       <Badge variant="outline" className={`text-[10px] font-medium ${TYPE_STYLES[type]}`}>
                         {type === "Direct Booking" ? "DBW" : type}
                       </Badge>
                     </TableCell>
-                    <TableCell className="max-w-[200px] truncate text-[13px] text-[#111111]">{row.campaign}</TableCell>
+                    <TableCell className="max-w-[200px] truncate text-[13px] text-white">{row.campaign}</TableCell>
                     <TableCell className="text-center">
-                      <Badge variant="outline" className={`text-[10px] font-medium ${row.source.includes("facebook") ? "border-[#3863E6]/30 text-[#3863E6] bg-[#F1F4FF]" : "border-[#0F5955]/30 text-[#0F5955] bg-[#EDFBF8]"}`}>
+                      <Badge variant="outline" className={`text-[10px] font-medium ${row.source.includes("facebook") ? "border-[#60A5FA]/30 text-[#60A5FA] bg-[#1A1F2A]" : "border-[#6EE7B7]/30 text-[#6EE7B7] bg-[#0F2A1F]"}`}>
                         {row.source.includes("facebook") ? "FB" : row.source.includes("google") ? "Google" : row.source}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right font-mono text-[13px]">{row.signups}</TableCell>
-                    <TableCell className="text-right font-mono text-[13px]">{row.trials}</TableCell>
-                    <TableCell className="text-right font-mono text-[13px] text-[#999258]">{row.inTrial}</TableCell>
-                    <TableCell className="text-right font-mono text-[13px]">{row.customers}</TableCell>
-                    <TableCell className="text-right font-mono text-[13px]">{row.signupToTrial.toFixed(1)}%</TableCell>
-                    <TableCell className="text-right font-mono text-[13px]">{stc.toFixed(1)}%</TableCell>
+                    <TableCell className="text-right font-mono text-[13px] tabular-nums text-white">{row.signups}</TableCell>
+                    <TableCell className="text-right font-mono text-[13px] tabular-nums text-white">{row.trials}</TableCell>
+                    <TableCell className="text-right font-mono text-[13px] tabular-nums text-[#FBBF24]">{row.inTrial}</TableCell>
+                    <TableCell className="text-right font-mono text-[13px] tabular-nums text-white">{row.customers}</TableCell>
+                    <TableCell className="text-right font-mono text-[13px] tabular-nums text-[#8A8A94]">{row.signupToTrial.toFixed(1)}%</TableCell>
+                    <TableCell className="text-right font-mono text-[13px] tabular-nums text-[#8A8A94]">{stc.toFixed(1)}%</TableCell>
                   </TableRow>
                 );
               })

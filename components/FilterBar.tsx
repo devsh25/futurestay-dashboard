@@ -81,7 +81,7 @@ function MultiCheckPopover({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
-        className="inline-flex items-center justify-between h-9 px-3 text-[13px] font-medium min-w-[140px] max-w-[220px] rounded-lg border border-[#E8EAF0] bg-white text-[#111111] hover:border-[#3863E6]/40 transition-colors cursor-pointer"
+        className="inline-flex items-center justify-between h-9 px-3 text-[13px] font-medium min-w-[140px] max-w-[220px] rounded-lg border border-[#2A2A32] bg-[#15151A] text-[#E5E5EB] hover:border-[#A78BFA]/40 hover:text-white transition-colors cursor-pointer"
       >
         <span className="truncate">{displayText}</span>
         <svg
@@ -98,12 +98,12 @@ function MultiCheckPopover({
           />
         </svg>
       </PopoverTrigger>
-      <PopoverContent className="w-[200px] p-2" align="start">
+      <PopoverContent className="w-[200px] p-2 bg-[#1A1A22] border-[#2A2A32]" align="start">
         <div className="space-y-1">
           {options.map((opt) => (
             <label
               key={opt.value}
-              className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer text-sm"
+              className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#252530] cursor-pointer text-sm text-[#E5E5EB]"
             >
               <Checkbox
                 checked={
@@ -114,9 +114,9 @@ function MultiCheckPopover({
               {opt.label}
             </label>
           ))}
-          <div className="border-t mt-1 pt-1">
+          <div className="border-t border-[#2A2A32] mt-1 pt-1">
             <button
-              className="text-xs text-muted-foreground hover:text-foreground px-2 py-1"
+              className="text-xs text-[#8A8A94] hover:text-white px-2 py-1"
               onClick={() => onChange([])}
             >
               Clear all
@@ -147,12 +147,12 @@ export default function FilterBar({
         value={period}
         onValueChange={(v) => onPeriodChange((v ?? "allTime") as PeriodFilter)}
       >
-        <SelectTrigger className="w-[150px] h-9">
+        <SelectTrigger className="w-[150px] h-9 bg-[#15151A] border-[#2A2A32] text-[#E5E5EB] hover:border-[#A78BFA]/40">
           <SelectValue placeholder="Period" />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="bg-[#1A1A22] border-[#2A2A32]">
           {PERIOD_OPTIONS.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value}>
+            <SelectItem key={opt.value} value={opt.value} className="text-[#E5E5EB] focus:bg-[#252530] focus:text-white">
               {opt.label}
             </SelectItem>
           ))}
@@ -165,14 +165,14 @@ export default function FilterBar({
             type="date"
             value={customStart}
             onChange={(e) => onCustomStartChange(e.target.value)}
-            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+            className="h-9 rounded-md border border-[#2A2A32] bg-[#15151A] text-[#E5E5EB] px-2 text-sm [color-scheme:dark]"
           />
-          <span className="text-sm text-muted-foreground">to</span>
+          <span className="text-sm text-[#8A8A94]">to</span>
           <input
             type="date"
             value={customEnd}
             onChange={(e) => onCustomEndChange(e.target.value)}
-            className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+            className="h-9 rounded-md border border-[#2A2A32] bg-[#15151A] text-[#E5E5EB] px-2 text-sm [color-scheme:dark]"
           />
         </>
       )}
@@ -194,8 +194,8 @@ export default function FilterBar({
       />
 
       {loading && (
-        <span className="text-sm text-muted-foreground animate-pulse">
-          Loading...
+        <span className="text-sm text-[#A78BFA] animate-pulse">
+          Loading…
         </span>
       )}
     </div>

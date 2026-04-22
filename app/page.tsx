@@ -55,22 +55,22 @@ export default function Dashboard() {
   }, [fetchData]);
 
   return (
-    <div className="min-h-screen bg-[var(--background)]">
+    <div className="min-h-screen bg-[#0A0A0C] text-white">
       {/* Header */}
-      <header className="bg-white border-b border-[#E8EAF0] sticky top-0 z-10">
-        <div className="max-w-[1400px] mx-auto px-6 py-3">
+      <header className="bg-[#0A0A0C] border-b border-[#1F1F28] sticky top-0 z-10 backdrop-blur-sm">
+        <div className="max-w-[1400px] mx-auto px-6 py-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center gap-3">
               {/* Futurestay logo mark */}
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#3863E6] to-[#543CE8] flex items-center justify-center">
-                <span className="text-white font-bold text-sm">F</span>
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#A78BFA] to-[#6366F1] flex items-center justify-center shadow-[0_4px_16px_rgba(167,139,250,0.3)]">
+                <span className="text-white font-bold text-base">F</span>
               </div>
               <div>
-                <h1 className="text-base font-bold text-[#111111] tracking-tight">
-                  Futurestay Growth Dashboard
+                <h1 className="text-[15px] font-semibold text-white tracking-tight">
+                  Futurestay Growth
                 </h1>
                 {data && (
-                  <p className="text-[11px] text-[#656C74]">
+                  <p className="text-[11px] text-[#8A8A94]">
                     {data.totalContacts.toLocaleString()} qualified signups
                   </p>
                 )}
@@ -94,17 +94,17 @@ export default function Dashboard() {
       </header>
 
       {/* Content */}
-      <main className="max-w-[1400px] mx-auto px-6 py-5">
+      <main className="max-w-[1400px] mx-auto px-6 py-6">
         {error && (
-          <div className="bg-[#FFC5E3] border border-[#801F50]/20 rounded-xl p-4 text-[#801F50] mb-5">
+          <div className="bg-[#2D1B21] border border-[#EF4444]/30 rounded-xl p-4 text-[#FCA5A5] mb-5">
             <p className="font-semibold text-sm">Error loading data</p>
-            <p className="text-xs mt-1">{error}</p>
+            <p className="text-xs mt-1 text-[#F87171]">{error}</p>
           </div>
         )}
 
         {/* Loading overlay */}
         <div
-          className={`transition-opacity duration-200 space-y-5 ${loading ? "opacity-40 pointer-events-none" : "opacity-100"}`}
+          className={`transition-opacity duration-200 space-y-6 ${loading ? "opacity-40 pointer-events-none" : "opacity-100"}`}
         >
           {data && (
             <>
@@ -123,7 +123,7 @@ export default function Dashboard() {
                 icon={Icons.Gauge}
                 title="Overview"
                 description="Headline metrics with 14-day trend vs prior period"
-                iconColor="#3863E6"
+                iconColor="#A78BFA"
               />
               <KPICards kpis={data.kpis} cohort={data.cohort} />
 
@@ -131,7 +131,7 @@ export default function Dashboard() {
                 icon={Icons.Funnel}
                 title="Funnel & Campaign Performance"
                 description="How qualified signups progress through stages, and where they come from"
-                iconColor="#543CE8"
+                iconColor="#6EE7B7"
               />
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 <FunnelCard funnel={data.funnel} />
@@ -142,7 +142,7 @@ export default function Dashboard() {
                 icon={Icons.Shield}
                 title="Quality & Team"
                 description="DQ reasons by week and sales rep performance"
-                iconColor="#801F50"
+                iconColor="#FB923C"
               />
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 <DQChartCard data={data.dqWeekly} />
@@ -153,7 +153,7 @@ export default function Dashboard() {
                 icon={Icons.Globe}
                 title="Cohort & Geography"
                 description="Signup cohort progression and country/city breakdown"
-                iconColor="#0F5955"
+                iconColor="#60A5FA"
               />
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 <CohortCard cohort={data.cohort} period={data.period} />
@@ -166,25 +166,25 @@ export default function Dashboard() {
         {/* Skeleton loading */}
         {!data && loading && (
           <div className="space-y-5 animate-pulse">
-            <div className="grid grid-cols-3 gap-4">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-24 bg-white rounded-xl border border-[#E8EAF0]" />
+            <div className="grid grid-cols-4 gap-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-32 bg-[#15151A] rounded-2xl" />
               ))}
             </div>
             <div className="grid grid-cols-4 gap-4">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-20 bg-white rounded-xl border border-[#E8EAF0]" />
+                <div key={i} className="h-24 bg-[#15151A] rounded-2xl" />
               ))}
             </div>
             <div className="grid grid-cols-2 gap-5">
-              <div className="h-96 bg-white rounded-xl border border-[#E8EAF0]" />
-              <div className="h-96 bg-white rounded-xl border border-[#E8EAF0]" />
+              <div className="h-96 bg-[#15151A] rounded-2xl" />
+              <div className="h-96 bg-[#15151A] rounded-2xl" />
             </div>
           </div>
         )}
 
         {!data && !loading && !error && (
-          <div className="text-center py-20 text-[#656C74]">
+          <div className="text-center py-20 text-[#8A8A94]">
             <p>No data available. Check your HubSpot API token.</p>
           </div>
         )}

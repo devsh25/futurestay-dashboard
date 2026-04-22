@@ -49,30 +49,32 @@
 }
 
 :root {
-  --background: #F3F6FA;
-  --foreground: #111111;
-  --card: #FFFFFF;
-  --card-foreground: #111111;
-  --popover: #FFFFFF;
-  --popover-foreground: #111111;
-  --primary: #3863E6;
-  --primary-foreground: #FFFFFF;
-  --secondary: #F1F4FF;
-  --secondary-foreground: #3863E6;
-  --muted: #ECEDF2;
-  --muted-foreground: #656C74;
-  --accent: #F1F4FF;
-  --accent-foreground: #3863E6;
-  --destructive: #E04850;
-  --border: #E8EAF0;
-  --input: #E8EAF0;
-  --ring: #3863E6;
-  --chart-1: #3863E6;
-  --chart-2: #543CE8;
-  --chart-3: #0F5955;
-  --chart-4: #1BB8CD;
-  --chart-5: #801F50;
-  --radius: 0.75rem;
+  /* Dark theme — inspired by modern analytics dashboards */
+  --background: #0A0A0C;
+  --foreground: #FFFFFF;
+  --card: #15151A;
+  --card-foreground: #FFFFFF;
+  --popover: #1A1A22;
+  --popover-foreground: #FFFFFF;
+  --primary: #A78BFA;
+  --primary-foreground: #0A0A0C;
+  --secondary: #1F1F28;
+  --secondary-foreground: #E5E5EB;
+  --muted: #1F1F28;
+  --muted-foreground: #8A8A94;
+  --accent: #252530;
+  --accent-foreground: #FFFFFF;
+  --destructive: #EF4444;
+  --border: #2A2A32;
+  --input: #1F1F28;
+  --ring: #A78BFA;
+  /* Chart palette tuned for dark bg */
+  --chart-1: #A78BFA;  /* violet — primary */
+  --chart-2: #6EE7B7;  /* mint — growth */
+  --chart-3: #FB923C;  /* coral — attention */
+  --chart-4: #60A5FA;  /* sky blue */
+  --chart-5: #F87171;  /* rose */
+  --radius: 1rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
