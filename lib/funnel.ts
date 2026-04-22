@@ -192,18 +192,19 @@ function getCustomerEnteredDate(c: HubSpotContact): Date | null {
 
 // ---- Compute funnel (signup-cohort based for progression metrics) ----
 
-function computeFunnel(contacts: HubSpotContact[]): FunnelStage[] {
-  const total = contacts.length;
-  const dqCount = contacts.filter(hasDQ).length;
-  const authCount = contacts.filter(isAuth).length;
-  const propsCount = contacts.filter(createdProps).length;
-  const launchCount = contacts.filter(clickedLaunch).length;
-  const trialCount = contacts.filter(everTrialed).length;
-  const inTrialCount = contacts.filter(isInTrial).length;
-  const customerCount = contacts.filter(isCustomer).length;
+function computeFunnel(qualified: HubSpotContact[], allSignups: HubSpotContact[]): FunnelStage[] {
+  const qualifiedTotal = qualified.length;
+  const totalSignups = allSignups.length;
+  const dqCount = allSignups.filter(hasDQ).length;
+  const authCount = qualified.filter(isAuth).length;
+  const propsCount = qualified.filter(createdProps).length;
+  const launchCount = qualified.filter(clickedLaunch).length;
+  const trialCount = qualified.filter(everTrialed).length;
+  const inTrialCount = qualified.filter(isInTrial).length;
+  const customerCount = qualified.filter(isCustomer).length;
 
   const mainStages: [string, number][] = [
-    ["Signed Up", total],
+    ["Qualified Signups", qualifiedTotal],
     ["Authorized Airbnb", authCount],
     ["Created Properties", propsCount],
     ["Clicked Launch", launchCount],
@@ -215,7 +216,7 @@ function computeFunnel(contacts: HubSpotContact[]): FunnelStage[] {
   const funnel: FunnelStage[] = [];
   funnel.push({
     name: "AirbnbDQ", count: dqCount, lost: null,
-    dropoff: total > 0 ? (dqCount / total) * 100 : null, stepConv: null,
+    dropoff: totalSignups > 0 ? (dqCount / totalSignups) * 100 : null, stepConv: null,
   });
 
   for (let i = 0; i < mainStages.length; i++) {
@@ -241,11 +242,13 @@ function computeFunnel(contacts: HubSpotContact[]): FunnelStage[] {
 function computeKPIs(
   allContacts: HubSpotContact[],
   signupFiltered: HubSpotContact[],
+  qualifiedSignups: HubSpotContact[],
   start: Date,
   end: Date
 ): KPIs {
-  // Signups = created during this period
-  const totalSignups = signupFiltered.length;
+  // Qualified signups = total signups minus DQ. This is the headline metric.
+  const totalQualifiedSignups = qualifiedSignups.length;
+  const totalSignups = signupFiltered.length; // used only for DQ rate
 
   // Trials = entered trial during this period (hs_v2_date_entered_opportunity or fallback)
   const totalTrials = allContacts.filter((c) => {
@@ -268,12 +271,13 @@ function computeKPIs(
   const dqCount = signupFiltered.filter(hasDQ).length;
 
   return {
-    totalSignups,
+    totalSignups: totalQualifiedSignups, // headline "Qualified Signups"
+    totalRawSignups: totalSignups,
     totalTrials,
     totalInTrial,
     totalCustomers,
-    trialRate: totalSignups > 0 ? (totalTrials / totalSignups) * 100 : 0,
-    customerRate: totalSignups > 0 ? (totalCustomers / totalSignups) * 100 : 0,
+    trialRate: totalQualifiedSignups > 0 ? (totalTrials / totalQualifiedSignups) * 100 : 0,
+    customerRate: totalQualifiedSignups > 0 ? (totalCustomers / totalQualifiedSignups) * 100 : 0,
     trialToPayRate: totalTrials > 0 ? (totalCustomers / totalTrials) * 100 : 0,
     dqRate: totalSignups > 0 ? (dqCount / totalSignups) * 100 : 0,
   };
@@ -514,19 +518,23 @@ export function processDashboardData(
   signupFiltered = filterByCountries(signupFiltered, countries);
   signupFiltered = filterByChannels(signupFiltered, channels);
 
+  // Qualified signups = signups without an Airbnb DQ reason.
+  // This is what most funnel/cohort/campaign/geo cards operate on.
+  const qualifiedSignups = signupFiltered.filter((c) => !hasDQ(c));
+
   // All clean contacts (for period-based trial/customer counts)
   let allFiltered = filterByCountries(clean, countries);
   allFiltered = filterByChannels(allFiltered, channels);
 
   return {
-    funnel: computeFunnel(signupFiltered),
-    campaigns: computeCampaigns(signupFiltered),
-    geo: computeGeo(signupFiltered),
+    funnel: computeFunnel(qualifiedSignups, signupFiltered),
+    campaigns: computeCampaigns(qualifiedSignups),
+    geo: computeGeo(qualifiedSignups),
     reps: computeReps(allFiltered, ownerNames, start, end),
-    kpis: computeKPIs(allFiltered, signupFiltered, start, end),
+    kpis: computeKPIs(allFiltered, signupFiltered, qualifiedSignups, start, end),
     dqWeekly: computeDQWeekly(signupFiltered),
-    cohort: computeCohort(signupFiltered),
+    cohort: computeCohort(qualifiedSignups),
     period,
-    totalContacts: signupFiltered.length,
+    totalContacts: qualifiedSignups.length,
   };
 }

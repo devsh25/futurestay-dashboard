@@ -69,7 +69,7 @@ export default function Dashboard() {
                 </h1>
                 {data && (
                   <p className="text-[11px] text-[#656C74]">
-                    {data.totalContacts.toLocaleString()} contacts
+                    {data.totalContacts.toLocaleString()} qualified signups
                   </p>
                 )}
               </div>

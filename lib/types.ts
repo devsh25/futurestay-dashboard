@@ -75,12 +75,13 @@ export interface RepRow {
 }
 
 export interface KPIs {
-  totalSignups: number;
+  totalSignups: number;      // Qualified Signups (excludes DQ'd)
+  totalRawSignups: number;   // All signups including DQ'd — used only for DQ rate
   totalTrials: number;
   totalInTrial: number;
   totalCustomers: number;
-  trialRate: number;
-  customerRate: number;
+  trialRate: number;         // Qualified Signup → Trial
+  customerRate: number;      // Qualified Signup → Customer
   trialToPayRate: number;
   dqRate: number;
 }

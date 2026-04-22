@@ -44,7 +44,7 @@ export default function KPICards({ kpis, cohort }: { kpis: KPIs; cohort: CohortD
     <div className="space-y-4">
       {/* Row 1: Core health numbers (period-based) */}
       <div className="grid grid-cols-4 gap-4">
-        <KPICard label="Total Signups" value={kpis.totalSignups} format="number" color="blue" size="large" />
+        <KPICard label="Qualified Signups" value={kpis.totalSignups} format="number" color="blue" size="large" />
         <KPICard label="Total Trials" value={kpis.totalTrials} format="number" color="teal" size="large" />
         <KPICard label="In Trial" value={kpis.totalInTrial} format="number" color="amber" size="large" />
         <KPICard label="Total Customers" value={kpis.totalCustomers} format="number" color="green" size="large" />
@@ -53,7 +53,7 @@ export default function KPICards({ kpis, cohort }: { kpis: KPIs; cohort: CohortD
       {/* Row 2: Cohort conversion rates + DQ */}
       <div className="grid grid-cols-4 gap-4">
         <KPICard
-          label="Signup to Trial (Cohort)"
+          label="Qualified Signup to Trial (Cohort)"
           value={cohort.trialRate}
           color={cohort.trialRate > 15 ? "green" : cohort.trialRate > 10 ? "amber" : "red"}
         />
@@ -63,7 +63,7 @@ export default function KPICards({ kpis, cohort }: { kpis: KPIs; cohort: CohortD
           color={cohort.trialToCustomerRate > 40 ? "green" : cohort.trialToCustomerRate > 25 ? "amber" : "red"}
         />
         <KPICard
-          label="Signup to Customer (Cohort)"
+          label="Qualified Signup to Customer (Cohort)"
           value={cohort.customerRate}
           color={cohort.customerRate > 5 ? "green" : cohort.customerRate > 3 ? "amber" : "red"}
         />

@@ -61,7 +61,7 @@ export default function CampaignCard({ campaigns }: { campaigns: CampaignRow[] }
         <Table>
           <TableHeader>
             <TableRow className="border-[#E8EAF0]">
-              {["Type", "Campaign", "Source", "Signups", "Trials", "In Trial", "Cust", "S-to-T", "S-to-C"].map((h) => (
+              {["Type", "Campaign", "Source", "Qual. Signups", "Trials", "In Trial", "Cust", "QS-to-T", "QS-to-C"].map((h) => (
                 <TableHead key={h} className={`text-[11px] uppercase tracking-wider text-[#656C74] font-semibold ${h !== "Type" && h !== "Campaign" && h !== "Source" ? "text-right" : h === "Source" ? "text-center" : ""}`}>
                   {h}
                 </TableHead>

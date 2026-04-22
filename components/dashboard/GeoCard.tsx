@@ -22,7 +22,7 @@ export default function GeoCard({ geo }: { geo: GeoRow[] }) {
         <Table>
           <TableHeader>
             <TableRow className="border-[#E8EAF0]">
-              {["Country", "Signups", "Auth", "Props", "Launch", "Trial", "In Trial", "Cust", "S-to-C", "S-to-T", "T-to-C"].map((h) => (
+              {["Country", "Qual. Signups", "Auth", "Props", "Launch", "Trial", "In Trial", "Cust", "QS-to-C", "QS-to-T", "T-to-C"].map((h) => (
                 <TableHead key={h} className={`text-[11px] uppercase tracking-wider text-[#656C74] font-semibold ${h !== "Country" ? "text-right" : ""}`}>
                   {h}
                 </TableHead>

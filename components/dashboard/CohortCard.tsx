@@ -21,7 +21,7 @@ function RateBadge({ value, thresholds }: { value: number; thresholds: [number, 
 
 export default function CohortCard({ cohort, period }: { cohort: CohortData; period: string }) {
   const stages = [
-    { name: "Signed Up", count: cohort.signups, rate: null },
+    { name: "Qualified Signups", count: cohort.signups, rate: null },
     { name: "Authorized Airbnb", count: cohort.authorized, rate: cohort.authRate },
     { name: "Created Properties", count: cohort.createdProperties, rate: cohort.propsRate },
     { name: "Clicked Launch", count: cohort.clickedLaunch, rate: cohort.launchRate },
@@ -36,13 +36,13 @@ export default function CohortCard({ cohort, period }: { cohort: CohortData; per
         <CardTitle className="flex items-center justify-between text-sm font-bold text-[#111111]">
           <span>Cohort Analysis</span>
           <Badge className="bg-[#F1F4FF] text-[#3863E6] border-[#3863E6]/20 text-[10px] font-medium">
-            Signups who signed up during this period
+            Qualified signups from this period (excl Airbnb DQ)
           </Badge>
         </CardTitle>
       </CardHeader>
       <CardContent>
         <p className="text-[12px] text-[#656C74] mb-3">
-          Of {cohort.signups.toLocaleString()} people who signed up, what % reached each stage?
+          Of {cohort.signups.toLocaleString()} qualified signups (Airbnb DQ excluded), what % reached each stage?
         </p>
         <Table>
           <TableHeader>
@@ -86,7 +86,7 @@ export default function CohortCard({ cohort, period }: { cohort: CohortData; per
         {/* Key conversion rates summary */}
         <div className="mt-4 pt-3 border-t border-[#E8EAF0] grid grid-cols-3 gap-3">
           <div className="text-center">
-            <p className="text-[10px] uppercase tracking-wider text-[#656C74] font-semibold">S-to-T</p>
+            <p className="text-[10px] uppercase tracking-wider text-[#656C74] font-semibold">QS-to-T</p>
             <p className="text-lg font-bold text-[#0F5955]">{cohort.trialRate.toFixed(1)}%</p>
           </div>
           <div className="text-center">
@@ -94,7 +94,7 @@ export default function CohortCard({ cohort, period }: { cohort: CohortData; per
             <p className="text-lg font-bold text-[#0F5955]">{cohort.trialToCustomerRate.toFixed(1)}%</p>
           </div>
           <div className="text-center">
-            <p className="text-[10px] uppercase tracking-wider text-[#656C74] font-semibold">S-to-C</p>
+            <p className="text-[10px] uppercase tracking-wider text-[#656C74] font-semibold">QS-to-C</p>
             <p className="text-lg font-bold text-[#3863E6]">{cohort.customerRate.toFixed(1)}%</p>
           </div>
         </div>

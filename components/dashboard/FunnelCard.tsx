@@ -14,7 +14,12 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
   const dqRow = funnel.find((f) => f.name === "AirbnbDQ");
   const mainFunnel = funnel.filter((f) => f.name !== "AirbnbDQ");
   const chartData = mainFunnel.map((s) => ({
-    name: s.name.replace("Authorized ", "Auth ").replace("Created ", "").replace("Properties", "Props").replace("Clicked ", ""),
+    name: s.name
+      .replace("Qualified Signups", "Qual. Signups")
+      .replace("Authorized ", "Auth ")
+      .replace("Created ", "")
+      .replace("Properties", "Props")
+      .replace("Clicked ", ""),
     count: s.count,
   }));
 
