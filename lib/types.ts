@@ -38,6 +38,7 @@ export interface CampaignRow {
   source: string;
   signups: number;
   trials: number;
+  inTrial: number;
   customers: number;
   signupToTrial: number;
   trialToCustomer: number | null;
@@ -50,12 +51,14 @@ export interface GeoRow {
   createdProperties: number;
   clickedLaunch: number;
   trials: number;
+  inTrial: number;
   customers: number;
   signupToTrial: number;
   cities: {
     city: string;
     signups: number;
     trials: number;
+    inTrial: number;
     customers: number;
   }[];
 }
@@ -64,6 +67,7 @@ export interface RepRow {
   rep: string;
   contacts: number;
   trials: number;
+  inTrial: number;
   customers: number;
   signupToTrial: number;
   trialToCustomer: number | null;
@@ -73,6 +77,7 @@ export interface RepRow {
 export interface KPIs {
   totalSignups: number;
   totalTrials: number;
+  totalInTrial: number;
   totalCustomers: number;
   trialRate: number;
   customerRate: number;
@@ -104,11 +109,13 @@ export interface CohortData {
   createdProperties: number;
   clickedLaunch: number;
   trials: number;
+  inTrial: number;
   customers: number;
   authRate: number;
   propsRate: number;
   launchRate: number;
   trialRate: number;
+  inTrialRate: number;
   customerRate: number;
   trialToCustomerRate: number;
 }

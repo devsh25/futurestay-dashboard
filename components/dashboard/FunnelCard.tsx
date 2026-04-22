@@ -63,6 +63,7 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
               <TableRow key={stage.name} className="border-[#E8EAF0]">
                 <TableCell className="font-medium text-[13px] text-[#111111]">
                   {stage.name === "Trial Started" ? "★ " + stage.name
+                    : stage.name === "In Trial" ? "☆ " + stage.name
                     : stage.name === "Customer" ? "★★ " + stage.name
                     : stage.name}
                 </TableCell>

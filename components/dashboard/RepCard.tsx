@@ -29,7 +29,7 @@ export default function RepCard({ reps }: { reps: RepRow[] }) {
         <Table>
           <TableHeader>
             <TableRow className="border-[#E8EAF0]">
-              {["Rep", "Contacts", "Trials", "Customers", "Contact-to-Trial", "Trial-to-Cust", "Contact-to-Cust"].map((h) => (
+              {["Rep", "Contacts", "Trials", "In Trial", "Customers", "Contact-to-Trial", "Trial-to-Cust", "Contact-to-Cust"].map((h) => (
                 <TableHead key={h} className={`text-[11px] uppercase tracking-wider text-[#656C74] font-semibold ${h !== "Rep" ? "text-right" : ""}`}>
                   {h}
                 </TableHead>
@@ -42,6 +42,7 @@ export default function RepCard({ reps }: { reps: RepRow[] }) {
                 <TableCell className="font-medium text-[13px] text-[#111111]">{row.rep}</TableCell>
                 <TableCell className="text-right font-mono text-[13px]">{row.contacts}</TableCell>
                 <TableCell className="text-right font-mono text-[13px]">{row.trials}</TableCell>
+                <TableCell className="text-right font-mono text-[13px] text-[#999258]">{row.inTrial}</TableCell>
                 <TableCell className="text-right font-mono text-[13px]">{row.customers}</TableCell>
                 <TableCell className="text-right">
                   <RateBadge value={row.signupToTrial} thresholds={[10, 5]} />

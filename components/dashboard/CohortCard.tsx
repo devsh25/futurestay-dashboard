@@ -26,6 +26,7 @@ export default function CohortCard({ cohort, period }: { cohort: CohortData; per
     { name: "Created Properties", count: cohort.createdProperties, rate: cohort.propsRate },
     { name: "Clicked Launch", count: cohort.clickedLaunch, rate: cohort.launchRate },
     { name: "★ Trial Started", count: cohort.trials, rate: cohort.trialRate },
+    { name: "☆ In Trial", count: cohort.inTrial, rate: cohort.inTrialRate },
     { name: "★★ Customer", count: cohort.customers, rate: cohort.customerRate },
   ];
 

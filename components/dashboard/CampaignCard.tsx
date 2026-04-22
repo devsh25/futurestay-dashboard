@@ -61,7 +61,7 @@ export default function CampaignCard({ campaigns }: { campaigns: CampaignRow[] }
         <Table>
           <TableHeader>
             <TableRow className="border-[#E8EAF0]">
-              {["Type", "Campaign", "Source", "Signups", "Trials", "Cust", "S-to-T", "S-to-C"].map((h) => (
+              {["Type", "Campaign", "Source", "Signups", "Trials", "In Trial", "Cust", "S-to-T", "S-to-C"].map((h) => (
                 <TableHead key={h} className={`text-[11px] uppercase tracking-wider text-[#656C74] font-semibold ${h !== "Type" && h !== "Campaign" && h !== "Source" ? "text-right" : h === "Source" ? "text-center" : ""}`}>
                   {h}
                 </TableHead>
@@ -70,7 +70,7 @@ export default function CampaignCard({ campaigns }: { campaigns: CampaignRow[] }
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={8} className="text-center text-[#656C74] py-8 text-sm">No campaigns match this filter</TableCell></TableRow>
+              <TableRow><TableCell colSpan={9} className="text-center text-[#656C74] py-8 text-sm">No campaigns match this filter</TableCell></TableRow>
             ) : (
               filtered.map((row) => {
                 const type = getCampaignType(row.campaign);
@@ -90,6 +90,7 @@ export default function CampaignCard({ campaigns }: { campaigns: CampaignRow[] }
                     </TableCell>
                     <TableCell className="text-right font-mono text-[13px]">{row.signups}</TableCell>
                     <TableCell className="text-right font-mono text-[13px]">{row.trials}</TableCell>
+                    <TableCell className="text-right font-mono text-[13px] text-[#999258]">{row.inTrial}</TableCell>
                     <TableCell className="text-right font-mono text-[13px]">{row.customers}</TableCell>
                     <TableCell className="text-right font-mono text-[13px]">{row.signupToTrial.toFixed(1)}%</TableCell>
                     <TableCell className="text-right font-mono text-[13px]">{stc.toFixed(1)}%</TableCell>

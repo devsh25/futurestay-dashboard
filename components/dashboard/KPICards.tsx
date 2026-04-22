@@ -43,9 +43,10 @@ export default function KPICards({ kpis, cohort }: { kpis: KPIs; cohort: CohortD
   return (
     <div className="space-y-4">
       {/* Row 1: Core health numbers (period-based) */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <KPICard label="Total Signups" value={kpis.totalSignups} format="number" color="blue" size="large" />
         <KPICard label="Total Trials" value={kpis.totalTrials} format="number" color="teal" size="large" />
+        <KPICard label="In Trial" value={kpis.totalInTrial} format="number" color="amber" size="large" />
         <KPICard label="Total Customers" value={kpis.totalCustomers} format="number" color="green" size="large" />
       </div>
 

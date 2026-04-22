@@ -162,6 +162,21 @@ function isCustomer(c: HubSpotContact): boolean {
   return CUSTOMER_LIFECYCLES.includes(c.account_lifecycle || "");
 }
 
+// Currently in trial = entered trial AND not exited trial yet
+// Primary signal: account_lifecycle === "Trialist"
+// Secondary: has trial start date but no trial exit date
+function isInTrial(c: HubSpotContact): boolean {
+  if (c.account_lifecycle === "Trialist") return true;
+  // Fallback: has entered trial stage but never exited (still ongoing)
+  const entered = c.hs_v2_date_entered_opportunity || c.trial__start_date;
+  const exited = c.hs_v2_date_exited_opportunity;
+  if (entered && !exited && !CUSTOMER_LIFECYCLES.includes(c.account_lifecycle || "") &&
+      c.account_lifecycle !== "former.customer") {
+    return true;
+  }
+  return false;
+}
+
 // ---- Date-based trial/customer detection (using HubSpot lifecycle dates) ----
 
 function getTrialEnteredDate(c: HubSpotContact): Date | null {
@@ -199,6 +214,7 @@ function computeFunnel(contacts: HubSpotContact[]): FunnelStage[] {
   const propsCount = contacts.filter(createdProps).length;
   const launchCount = contacts.filter(clickedLaunch).length;
   const trialCount = contacts.filter(everTrialed).length;
+  const inTrialCount = contacts.filter(isInTrial).length;
   const customerCount = contacts.filter(isCustomer).length;
 
   const mainStages: [string, number][] = [
@@ -207,6 +223,7 @@ function computeFunnel(contacts: HubSpotContact[]): FunnelStage[] {
     ["Created Properties", propsCount],
     ["Clicked Launch", launchCount],
     ["Trial Started", trialCount],
+    ["In Trial", inTrialCount],
     ["Customer", customerCount],
   ];
 
@@ -221,7 +238,12 @@ function computeFunnel(contacts: HubSpotContact[]): FunnelStage[] {
     if (i === 0) {
       funnel.push({ name, count, lost: null, dropoff: null, stepConv: null });
     } else {
-      const prev = mainStages[i - 1][1];
+      // In Trial and Customer both compare to Trial Started (branch, not sequential)
+      const isBranchOfTrial = name === "In Trial" || name === "Customer";
+      const prevIdx = isBranchOfTrial
+        ? mainStages.findIndex(([n]) => n === "Trial Started")
+        : i - 1;
+      const prev = mainStages[prevIdx][1];
       const lost = prev - count;
       funnel.push({ name, count, lost, dropoff: prev > 0 ? (lost / prev) * 100 : null, stepConv: null });
     }
@@ -252,11 +274,18 @@ function computeKPIs(
     return cd && cd >= start && cd <= end;
   }).length;
 
+  // In Trial = entered trial during this period AND still currently in trial
+  const totalInTrial = allContacts.filter((c) => {
+    const td = getTrialEnteredDate(c);
+    return td && td >= start && td <= end && isInTrial(c);
+  }).length;
+
   const dqCount = signupFiltered.filter(hasDQ).length;
 
   return {
     totalSignups,
     totalTrials,
+    totalInTrial,
     totalCustomers,
     trialRate: totalSignups > 0 ? (totalTrials / totalSignups) * 100 : 0,
     customerRate: totalSignups > 0 ? (totalCustomers / totalSignups) * 100 : 0,
@@ -273,6 +302,7 @@ function computeCohort(contacts: HubSpotContact[]): CohortData {
   const props = contacts.filter(createdProps).length;
   const launch = contacts.filter(clickedLaunch).length;
   const trials = contacts.filter(everTrialed).length;
+  const inTrial = contacts.filter(isInTrial).length;
   const customers = contacts.filter(isCustomer).length;
 
   return {
@@ -281,11 +311,13 @@ function computeCohort(contacts: HubSpotContact[]): CohortData {
     createdProperties: props,
     clickedLaunch: launch,
     trials,
+    inTrial,
     customers,
     authRate: n > 0 ? (auth / n) * 100 : 0,
     propsRate: n > 0 ? (props / n) * 100 : 0,
     launchRate: n > 0 ? (launch / n) * 100 : 0,
     trialRate: n > 0 ? (trials / n) * 100 : 0,
+    inTrialRate: n > 0 ? (inTrial / n) * 100 : 0,
     customerRate: n > 0 ? (customers / n) * 100 : 0,
     trialToCustomerRate: trials > 0 ? (customers / trials) * 100 : 0,
   };
@@ -307,11 +339,12 @@ function computeCampaigns(contacts: HubSpotContact[]): CampaignRow[] {
     .map(([campaign, cs]) => {
       const signups = cs.length;
       const trials = cs.filter(everTrialed).length;
+      const inTrial = cs.filter(isInTrial).length;
       const customers = cs.filter(isCustomer).length;
       const source = cs[0]?.first_touch_utm_source?.toLowerCase() || "unknown";
       return {
         campaign: campaign.length > 65 ? campaign.slice(0, 62) + "..." : campaign,
-        source, signups, trials, customers,
+        source, signups, trials, inTrial, customers,
         signupToTrial: signups > 0 ? (trials / signups) * 100 : 0,
         trialToCustomer: trials > 0 ? (customers / trials) * 100 : null,
       };
@@ -347,6 +380,7 @@ function computeGeo(contacts: HubSpotContact[]): GeoRow[] {
       const props = cs.filter(createdProps).length;
       const launch = cs.filter(clickedLaunch).length;
       const trials = cs.filter(everTrialed).length;
+      const inTrial = cs.filter(isInTrial).length;
       const customers = cs.filter(isCustomer).length;
 
       const cityGroups: Record<string, HubSpotContact[]> = {};
@@ -360,13 +394,14 @@ function computeGeo(contacts: HubSpotContact[]): GeoRow[] {
         .map(([city, cityCs]) => ({
           city, signups: cityCs.length,
           trials: cityCs.filter(everTrialed).length,
+          inTrial: cityCs.filter(isInTrial).length,
           customers: cityCs.filter(isCustomer).length,
         }))
         .sort((a, b) => b.signups - a.signups).slice(0, 20);
 
       return {
         country, signups, authorized, createdProperties: props, clickedLaunch: launch,
-        trials, customers, signupToTrial: signups > 0 ? (trials / signups) * 100 : 0, cities,
+        trials, inTrial, customers, signupToTrial: signups > 0 ? (trials / signups) * 100 : 0, cities,
       };
     })
     .sort((a, b) => b.signups - a.signups);
@@ -409,10 +444,17 @@ function computeReps(
         return cd && cd >= start && cd <= end;
       }).length;
 
+      // In Trial = entered trial during period AND currently still in trial
+      const inTrial = cs.filter((c) => {
+        const td = getTrialEnteredDate(c);
+        return td && td >= start && td <= end && isInTrial(c);
+      }).length;
+
       return {
         rep,
         contacts: contactCount,
         trials,
+        inTrial,
         customers,
         signupToTrial: contactCount > 0 ? (trials / contactCount) * 100 : 0,
         trialToCustomer: trials > 0 ? (customers / trials) * 100 : null,
