@@ -10,6 +10,8 @@ import GeoCard from "@/components/dashboard/GeoCard";
 import RepCard from "@/components/dashboard/RepCard";
 import DQChartCard from "@/components/dashboard/DQChartCard";
 import CohortCard from "@/components/dashboard/CohortCard";
+import SectionHeading, { Icons } from "@/components/dashboard/SectionHeading";
+import ActiveFilterChips from "@/components/ActiveFilterChips";
 
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -106,18 +108,53 @@ export default function Dashboard() {
         >
           {data && (
             <>
+              <ActiveFilterChips
+                period={period}
+                customStart={customStart}
+                customEnd={customEnd}
+                countries={countries}
+                channels={channels}
+                onCountriesChange={setCountries}
+                onChannelsChange={setChannels}
+                onPeriodChange={setPeriod}
+              />
+
+              <SectionHeading
+                icon={Icons.Gauge}
+                title="Overview"
+                description="Headline metrics with 14-day trend vs prior period"
+                iconColor="#3863E6"
+              />
               <KPICards kpis={data.kpis} cohort={data.cohort} />
 
+              <SectionHeading
+                icon={Icons.Funnel}
+                title="Funnel & Campaign Performance"
+                description="How qualified signups progress through stages, and where they come from"
+                iconColor="#543CE8"
+              />
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 <FunnelCard funnel={data.funnel} />
                 <CampaignCard campaigns={data.campaigns} />
               </div>
 
+              <SectionHeading
+                icon={Icons.Shield}
+                title="Quality & Team"
+                description="DQ reasons by week and sales rep performance"
+                iconColor="#801F50"
+              />
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 <DQChartCard data={data.dqWeekly} />
                 <RepCard reps={data.reps} />
               </div>
 
+              <SectionHeading
+                icon={Icons.Globe}
+                title="Cohort & Geography"
+                description="Signup cohort progression and country/city breakdown"
+                iconColor="#0F5955"
+              />
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 <CohortCard cohort={data.cohort} period={data.period} />
                 <GeoCard geo={data.geo} />

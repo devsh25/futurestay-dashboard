@@ -203,11 +203,12 @@ function computeFunnel(qualified: HubSpotContact[], allSignups: HubSpotContact[]
   const inTrialCount = qualified.filter(isInTrial).length;
   const customerCount = qualified.filter(isCustomer).length;
 
+  // Note: launchCount removed from funnel display per product request
+  void launchCount;
   const mainStages: [string, number][] = [
     ["Qualified Signups", qualifiedTotal],
     ["Authorized Airbnb", authCount],
     ["Created Properties", propsCount],
-    ["Clicked Launch", launchCount],
     ["Trial Started", trialCount],
     ["In Trial", inTrialCount],
     ["Customer", customerCount],
@@ -270,6 +271,84 @@ function computeKPIs(
 
   const dqCount = signupFiltered.filter(hasDQ).length;
 
+  // ---- Sparkline (14 daily buckets ending at period end) ----
+  const SPARKLINE_DAYS = 14;
+  const sparklineEnd = new Date(end);
+  const sparklineStart = new Date(end);
+  sparklineStart.setDate(sparklineStart.getDate() - (SPARKLINE_DAYS - 1));
+  sparklineStart.setHours(0, 0, 0, 0);
+
+  const days: string[] = [];
+  const signupsDaily = new Array(SPARKLINE_DAYS).fill(0);
+  const trialsDaily = new Array(SPARKLINE_DAYS).fill(0);
+  const customersDaily = new Array(SPARKLINE_DAYS).fill(0);
+  const inTrialDaily = new Array(SPARKLINE_DAYS).fill(0);
+
+  for (let i = 0; i < SPARKLINE_DAYS; i++) {
+    const d = new Date(sparklineStart);
+    d.setDate(sparklineStart.getDate() + i);
+    days.push(d.toISOString().slice(0, 10));
+  }
+
+  const dayIndex = (d: Date): number => {
+    const diffMs = d.getTime() - sparklineStart.getTime();
+    const idx = Math.floor(diffMs / 86400000);
+    return idx >= 0 && idx < SPARKLINE_DAYS ? idx : -1;
+  };
+
+  for (const c of allContacts) {
+    // Signups (qualified only, matching the headline metric)
+    if (!hasDQ(c) && c.createdate) {
+      const idx = dayIndex(new Date(c.createdate));
+      if (idx >= 0) signupsDaily[idx]++;
+    }
+    // Trials entered
+    const td = getTrialEnteredDate(c);
+    if (td) {
+      const idx = dayIndex(td);
+      if (idx >= 0) trialsDaily[idx]++;
+      // In Trial: entered AND still Trialist
+      if (isInTrial(c) && idx >= 0) inTrialDaily[idx]++;
+    }
+    // Customers entered
+    const cd = getCustomerEnteredDate(c);
+    if (cd) {
+      const idx = dayIndex(cd);
+      if (idx >= 0) customersDaily[idx]++;
+    }
+  }
+
+  // ---- Trend deltas (this period vs equal-length prior period) ----
+  const periodMs = end.getTime() - start.getTime();
+  const prevEnd = new Date(start.getTime() - 1);
+  const prevStart = new Date(start.getTime() - periodMs);
+
+  const countInRange = (
+    contacts: HubSpotContact[],
+    extract: (c: HubSpotContact) => Date | null,
+    s: Date,
+    e: Date,
+    extraFilter?: (c: HubSpotContact) => boolean
+  ): number =>
+    contacts.filter((c) => {
+      if (extraFilter && !extraFilter(c)) return false;
+      const d = extract(c);
+      return d !== null && d >= s && d <= e;
+    }).length;
+
+  const createdateOf = (c: HubSpotContact): Date | null =>
+    c.createdate ? new Date(c.createdate) : null;
+
+  const prevSignups = countInRange(allContacts, createdateOf, prevStart, prevEnd, (c) => !hasDQ(c));
+  const prevTrials = countInRange(allContacts, getTrialEnteredDate, prevStart, prevEnd);
+  const prevCustomers = countInRange(allContacts, getCustomerEnteredDate, prevStart, prevEnd);
+  const prevInTrial = countInRange(allContacts, getTrialEnteredDate, prevStart, prevEnd, isInTrial);
+
+  const delta = (current: number, previous: number) => ({
+    current, previous,
+    pct: previous > 0 ? ((current - previous) / previous) * 100 : (current > 0 ? 100 : 0),
+  });
+
   return {
     totalSignups: totalQualifiedSignups, // headline "Qualified Signups"
     totalRawSignups: totalSignups,
@@ -280,6 +359,19 @@ function computeKPIs(
     customerRate: totalQualifiedSignups > 0 ? (totalCustomers / totalQualifiedSignups) * 100 : 0,
     trialToPayRate: totalTrials > 0 ? (totalCustomers / totalTrials) * 100 : 0,
     dqRate: totalSignups > 0 ? (dqCount / totalSignups) * 100 : 0,
+    sparkline: {
+      signups: signupsDaily,
+      trials: trialsDaily,
+      customers: customersDaily,
+      inTrial: inTrialDaily,
+      days,
+    },
+    deltas: {
+      signups: delta(totalQualifiedSignups, prevSignups),
+      trials: delta(totalTrials, prevTrials),
+      inTrial: delta(totalInTrial, prevInTrial),
+      customers: delta(totalCustomers, prevCustomers),
+    },
   };
 }
 

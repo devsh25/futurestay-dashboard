@@ -31,9 +31,9 @@ export default function CohortCard({ cohort, period }: { cohort: CohortData; per
   ];
 
   return (
-    <Card className="border-[#E8EAF0] shadow-sm">
+    <Card className="border-[#E8EAF0] shadow-[0_1px_3px_rgba(17,17,17,0.04)] rounded-2xl hover:shadow-[0_4px_12px_rgba(17,17,17,0.08)] transition-shadow duration-200">
       <CardHeader className="pb-2">
-        <CardTitle className="flex items-center justify-between text-sm font-bold text-[#111111]">
+        <CardTitle className="flex items-center justify-between text-[15px] font-semibold text-[#111111] tracking-tight">
           <span>Cohort Analysis</span>
           <Badge className="bg-[#F1F4FF] text-[#3863E6] border-[#3863E6]/20 text-[10px] font-medium">
             Qualified signups from this period (excl Airbnb DQ)

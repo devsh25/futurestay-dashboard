@@ -14,9 +14,9 @@ export default function GeoCard({ geo }: { geo: GeoRow[] }) {
   const topGeo = geo.slice(0, 15);
 
   return (
-    <Card className="border-[#E8EAF0] shadow-sm">
+    <Card className="border-[#E8EAF0] shadow-[0_1px_3px_rgba(17,17,17,0.04)] rounded-2xl hover:shadow-[0_4px_12px_rgba(17,17,17,0.08)] transition-shadow duration-200">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-bold text-[#111111]">Country & City Analysis</CardTitle>
+        <CardTitle className="text-[15px] font-semibold text-[#111111] tracking-tight">Country & City Analysis</CardTitle>
       </CardHeader>
       <CardContent>
         <Table>

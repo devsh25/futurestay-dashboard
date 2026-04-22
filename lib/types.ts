@@ -74,6 +74,20 @@ export interface RepRow {
   contactToCustomer: number;
 }
 
+export interface SparklineSeries {
+  signups: number[];    // daily counts, oldest → newest
+  trials: number[];
+  customers: number[];
+  inTrial: number[];
+  days: string[];       // ISO date labels
+}
+
+export interface TrendDelta {
+  current: number;      // this period total
+  previous: number;     // same-length prior period total
+  pct: number;          // % change; positive = up
+}
+
 export interface KPIs {
   totalSignups: number;      // Qualified Signups (excludes DQ'd)
   totalRawSignups: number;   // All signups including DQ'd — used only for DQ rate
@@ -84,6 +98,13 @@ export interface KPIs {
   customerRate: number;      // Qualified Signup → Customer
   trialToPayRate: number;
   dqRate: number;
+  sparkline: SparklineSeries;
+  deltas: {
+    signups: TrendDelta;
+    trials: TrendDelta;
+    inTrial: TrendDelta;
+    customers: TrendDelta;
+  };
 }
 
 export interface DQWeekly {
