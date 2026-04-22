@@ -162,26 +162,19 @@ function isCustomer(c: HubSpotContact): boolean {
   return CUSTOMER_LIFECYCLES.includes(c.account_lifecycle || "");
 }
 
-// Currently in trial = entered trial AND not exited trial yet
-// Primary signal: account_lifecycle === "Trialist"
-// Secondary: has trial start date but no trial exit date
+// Currently in trial = account_lifecycle === "Trialist"
+// This is HubSpot's definitive signal. We don't infer from dates
+// because it creates phantom in-trial contacts.
 function isInTrial(c: HubSpotContact): boolean {
-  if (c.account_lifecycle === "Trialist") return true;
-  // Fallback: has entered trial stage but never exited (still ongoing)
-  const entered = c.hs_v2_date_entered_opportunity || c.trial__start_date;
-  const exited = c.hs_v2_date_exited_opportunity;
-  if (entered && !exited && !CUSTOMER_LIFECYCLES.includes(c.account_lifecycle || "") &&
-      c.account_lifecycle !== "former.customer") {
-    return true;
-  }
-  return false;
+  return c.account_lifecycle === "Trialist";
 }
 
 // ---- Date-based trial/customer detection (using HubSpot lifecycle dates) ----
 
 function getTrialEnteredDate(c: HubSpotContact): Date | null {
-  // Primary: hs_v2_date_entered_opportunity (definitive)
-  // Fallback: trial__start_date
+  // Primary: hs_v2_date_entered_opportunity (HubSpot canonical trial entry date)
+  // Fallback: trial__start_date — only used when v2 date is absent to capture
+  // older contacts that predate v2 lifecycle tracking.
   const raw = c.hs_v2_date_entered_opportunity || c.trial__start_date;
   if (!raw) return null;
   const d = new Date(raw);
@@ -189,20 +182,12 @@ function getTrialEnteredDate(c: HubSpotContact): Date | null {
 }
 
 function getCustomerEnteredDate(c: HubSpotContact): Date | null {
-  // Primary: hs_v2_date_entered_customer (definitive)
-  // Fallback: trial entered date + 14 days (estimation)
-  if (c.hs_v2_date_entered_customer) {
-    const d = new Date(c.hs_v2_date_entered_customer);
-    return isNaN(d.getTime()) ? null : d;
-  }
-  // Fallback for contacts without the lifecycle date
-  const trialDate = getTrialEnteredDate(c);
-  if (trialDate && EVER_PAID_LIFECYCLES.includes(c.account_lifecycle || "")) {
-    const est = new Date(trialDate);
-    est.setDate(est.getDate() + 14);
-    return est;
-  }
-  return null;
+  // Use hs_v2_date_entered_customer (definitive — HubSpot's canonical customer entry date).
+  // No fallback: estimating from trial_start + 14 days creates phantom customers
+  // when the contact's actual customer entry was outside the period.
+  if (!c.hs_v2_date_entered_customer) return null;
+  const d = new Date(c.hs_v2_date_entered_customer);
+  return isNaN(d.getTime()) ? null : d;
 }
 
 // ---- Compute funnel (signup-cohort based for progression metrics) ----
