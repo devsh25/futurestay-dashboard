@@ -10,6 +10,7 @@ import GeoCard from "@/components/dashboard/GeoCard";
 import RepCard from "@/components/dashboard/RepCard";
 import DQChartCard from "@/components/dashboard/DQChartCard";
 import CohortCard from "@/components/dashboard/CohortCard";
+import TrialOutcomesCard from "@/components/dashboard/TrialOutcomesCard";
 import SectionHeading, { Icons } from "@/components/dashboard/SectionHeading";
 import ActiveFilterChips from "@/components/ActiveFilterChips";
 
@@ -152,9 +153,10 @@ export default function Dashboard() {
               <SectionHeading
                 icon={Icons.Globe}
                 title="Cohort & Geography"
-                description="Signup cohort progression and country/city breakdown"
+                description="Signup cohort progression, trial outcomes, and country/city breakdown"
                 iconColor="#60A5FA"
               />
+              <TrialOutcomesCard outcomes={data.trialOutcomes} />
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 <CohortCard cohort={data.cohort} period={data.period} />
                 <GeoCard geo={data.geo} />

@@ -120,8 +120,8 @@ export default function KPICards({ kpis, cohort }: { kpis: KPIs; cohort: CohortD
         />
       </div>
 
-      {/* Row 2: Cohort conversion rates + DQ */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* Row 2: Cohort conversion rates + Churn + DQ */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <RateCard
           label="Qualified Signup → Trial"
           value={cohort.trialRate}
@@ -136,6 +136,11 @@ export default function KPICards({ kpis, cohort }: { kpis: KPIs; cohort: CohortD
           label="Qualified Signup → Customer"
           value={cohort.customerRate}
           color={cohort.customerRate > 5 ? "green" : cohort.customerRate > 3 ? "amber" : "red"}
+        />
+        <RateCard
+          label="Churn Rate"
+          value={kpis.churnRate}
+          color={kpis.churnRate < 10 ? "green" : kpis.churnRate < 20 ? "amber" : "red"}
         />
         <RateCard
           label="AirbnbDQ Rate"

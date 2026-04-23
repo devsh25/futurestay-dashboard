@@ -169,6 +169,16 @@ function isInTrial(c: HubSpotContact): boolean {
   return c.account_lifecycle === "Trialist";
 }
 
+// Former customer = paid then churned
+function isFormerCustomer(c: HubSpotContact): boolean {
+  return c.account_lifecycle === "former.customer";
+}
+
+// Limited access customer (currently paying, limited tier)
+function isLimitedAccess(c: HubSpotContact): boolean {
+  return c.account_lifecycle === "Customer/Limited Access";
+}
+
 // ---- Date-based trial/customer detection (using HubSpot lifecycle dates) ----
 
 function getTrialEnteredDate(c: HubSpotContact): Date | null {
@@ -202,6 +212,7 @@ function computeFunnel(qualified: HubSpotContact[], allSignups: HubSpotContact[]
   const trialCount = qualified.filter(everTrialed).length;
   const inTrialCount = qualified.filter(isInTrial).length;
   const customerCount = qualified.filter(isCustomer).length;
+  const formerCustomerCount = qualified.filter(isFormerCustomer).length;
 
   // Note: launchCount removed from funnel display per product request
   void launchCount;
@@ -212,6 +223,7 @@ function computeFunnel(qualified: HubSpotContact[], allSignups: HubSpotContact[]
     ["Trial Started", trialCount],
     ["In Trial", inTrialCount],
     ["Customer", customerCount],
+    ["Former Customer", formerCustomerCount],
   ];
 
   const funnel: FunnelStage[] = [];
@@ -225,11 +237,14 @@ function computeFunnel(qualified: HubSpotContact[], allSignups: HubSpotContact[]
     if (i === 0) {
       funnel.push({ name, count, lost: null, dropoff: null, stepConv: null });
     } else {
-      // In Trial and Customer both compare to Trial Started (branch, not sequential)
-      const isBranchOfTrial = name === "In Trial" || name === "Customer";
-      const prevIdx = isBranchOfTrial
-        ? mainStages.findIndex(([n]) => n === "Trial Started")
-        : i - 1;
+      // In Trial and Customer branch off Trial Started (parallel, not sequential)
+      // Former Customer branches off Customer
+      let prevIdx = i - 1;
+      if (name === "In Trial" || name === "Customer") {
+        prevIdx = mainStages.findIndex(([n]) => n === "Trial Started");
+      } else if (name === "Former Customer") {
+        prevIdx = mainStages.findIndex(([n]) => n === "Customer");
+      }
       const prev = mainStages[prevIdx][1];
       const lost = prev - count;
       funnel.push({ name, count, lost, dropoff: prev > 0 ? (lost / prev) * 100 : null, stepConv: null });
@@ -349,15 +364,27 @@ function computeKPIs(
     pct: previous > 0 ? ((current - previous) / previous) * 100 : (current > 0 ? 100 : 0),
   });
 
+  // Former customers & limited access — from qualified signup cohort
+  const totalFormerCustomers = qualifiedSignups.filter(isFormerCustomer).length;
+  const totalLimitedAccess = qualifiedSignups.filter(isLimitedAccess).length;
+  // Churn rate uses cohort-based customer count (signups from this period who became paying),
+  // not the period-based totalCustomers (which counts conversions regardless of signup date).
+  const cohortActiveCustomers = qualifiedSignups.filter(isCustomer).length;
+  const cohortEverPaid = cohortActiveCustomers + totalFormerCustomers;
+  const churnRate = cohortEverPaid > 0 ? (totalFormerCustomers / cohortEverPaid) * 100 : 0;
+
   return {
     totalSignups: totalQualifiedSignups, // headline "Qualified Signups"
     totalRawSignups: totalSignups,
     totalTrials,
     totalInTrial,
     totalCustomers,
+    totalFormerCustomers,
+    totalLimitedAccess,
     trialRate: totalQualifiedSignups > 0 ? (totalTrials / totalQualifiedSignups) * 100 : 0,
     customerRate: totalQualifiedSignups > 0 ? (totalCustomers / totalQualifiedSignups) * 100 : 0,
     trialToPayRate: totalTrials > 0 ? (totalCustomers / totalTrials) * 100 : 0,
+    churnRate,
     dqRate: totalSignups > 0 ? (dqCount / totalSignups) * 100 : 0,
     sparkline: {
       signups: signupsDaily,
@@ -385,6 +412,8 @@ function computeCohort(contacts: HubSpotContact[]): CohortData {
   const trials = contacts.filter(everTrialed).length;
   const inTrial = contacts.filter(isInTrial).length;
   const customers = contacts.filter(isCustomer).length;
+  const formerCustomers = contacts.filter(isFormerCustomer).length;
+  const limitedAccess = contacts.filter(isLimitedAccess).length;
 
   return {
     signups: n,
@@ -394,12 +423,16 @@ function computeCohort(contacts: HubSpotContact[]): CohortData {
     trials,
     inTrial,
     customers,
+    formerCustomers,
+    limitedAccess,
     authRate: n > 0 ? (auth / n) * 100 : 0,
     propsRate: n > 0 ? (props / n) * 100 : 0,
     launchRate: n > 0 ? (launch / n) * 100 : 0,
     trialRate: n > 0 ? (trials / n) * 100 : 0,
     inTrialRate: n > 0 ? (inTrial / n) * 100 : 0,
     customerRate: n > 0 ? (customers / n) * 100 : 0,
+    formerCustomerRate: n > 0 ? (formerCustomers / n) * 100 : 0,
+    limitedAccessRate: n > 0 ? (limitedAccess / n) * 100 : 0,
     trialToCustomerRate: trials > 0 ? (customers / trials) * 100 : 0,
   };
 }
@@ -545,6 +578,27 @@ function computeReps(
     .sort((a, b) => b.trials - a.trials);
 }
 
+// ---- Trial Outcomes: where did people who entered trial end up? ----
+// Input = qualifiedSignups (people who signed up in the period, excl DQ)
+// Output = breakdown of the trial cohort by current lifecycle.
+
+function computeTrialOutcomes(qualifiedSignups: HubSpotContact[]) {
+  const trialists = qualifiedSignups.filter(everTrialed);
+  const inTrial = trialists.filter(isInTrial).length;
+  const customer = trialists.filter((c) => c.account_lifecycle === "customer").length;
+  const formerCustomer = trialists.filter(isFormerCustomer).length;
+  const limitedAccess = trialists.filter(isLimitedAccess).length;
+  const reverted = trialists.length - inTrial - customer - formerCustomer - limitedAccess;
+  return {
+    total: trialists.length,
+    inTrial,
+    customer,
+    formerCustomer,
+    limitedAccess,
+    reverted: Math.max(0, reverted),
+  };
+}
+
 // ---- DQ Weekly ----
 
 const TOP_DQ_REASONS = ["UNSUPPORTED_COUNTRY", "INCOMPLETE_ADDRESS", "NO_PUBLISHED_LISTINGS_FOUND", "UNPUBLISHED_LISTING"];
@@ -626,6 +680,7 @@ export function processDashboardData(
     kpis: computeKPIs(allFiltered, signupFiltered, qualifiedSignups, start, end),
     dqWeekly: computeDQWeekly(signupFiltered),
     cohort: computeCohort(qualifiedSignups),
+    trialOutcomes: computeTrialOutcomes(qualifiedSignups),
     period,
     totalContacts: qualifiedSignups.length,
   };

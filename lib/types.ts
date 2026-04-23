@@ -94,9 +94,12 @@ export interface KPIs {
   totalTrials: number;
   totalInTrial: number;
   totalCustomers: number;
+  totalFormerCustomers: number;   // churned paying customers
+  totalLimitedAccess: number;     // limited tier paying customers
   trialRate: number;         // Qualified Signup → Trial
   customerRate: number;      // Qualified Signup → Customer
   trialToPayRate: number;
+  churnRate: number;         // Former / (Customer + Former + Limited) — % of ever-paid who churned
   dqRate: number;
   sparkline: SparklineSeries;
   deltas: {
@@ -105,6 +108,15 @@ export interface KPIs {
     inTrial: TrendDelta;
     customers: TrendDelta;
   };
+}
+
+export interface TrialOutcomes {
+  total: number;            // total people who entered trial (cohort)
+  inTrial: number;          // currently Trialist
+  customer: number;         // currently customer
+  formerCustomer: number;   // churned
+  limitedAccess: number;    // Customer/Limited Access
+  reverted: number;         // rare: reverted to signup/other
 }
 
 export interface DQWeekly {
@@ -133,12 +145,16 @@ export interface CohortData {
   trials: number;
   inTrial: number;
   customers: number;
+  formerCustomers: number;
+  limitedAccess: number;
   authRate: number;
   propsRate: number;
   launchRate: number;
   trialRate: number;
   inTrialRate: number;
   customerRate: number;
+  formerCustomerRate: number;  // % of qualified signups
+  limitedAccessRate: number;
   trialToCustomerRate: number;
 }
 
@@ -150,6 +166,7 @@ export interface DashboardData {
   kpis: KPIs;
   dqWeekly: DQWeekly[];
   cohort: CohortData;
+  trialOutcomes: TrialOutcomes;
   period: string;
   totalContacts: number;
 }
