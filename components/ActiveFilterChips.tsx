@@ -74,7 +74,7 @@ export default function ActiveFilterChips({
   onPeriodChange: (p: PeriodFilter) => void;
 }) {
   const periodLabel =
-    period === "custom" ? `${customStart} \u2192 ${customEnd}` : PERIOD_LABELS[period];
+    period === "custom" ? `${customStart} → ${customEnd}` : PERIOD_LABELS[period];
 
   const hasAnyFilter = countries.length > 0 || channels.length > 0;
 

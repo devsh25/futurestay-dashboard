@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { GeoRow } from "@/lib/types";
 
 function pct(num: number, denom: number): string {
-  return denom > 0 ? `${((num / denom) * 100).toFixed(1)}%` : "\u2014";
+  return denom > 0 ? `${((num / denom) * 100).toFixed(1)}%` : "—";
 }
 
 export default function GeoCard({ geo }: { geo: GeoRow[] }) {
@@ -37,7 +37,7 @@ export default function GeoCard({ geo }: { geo: GeoRow[] }) {
                   onClick={() => setExpanded(expanded === row.country ? null : row.country)}
                 >
                   <TableCell className="font-medium text-[13px] text-white">
-                    <span className="mr-1.5 text-[#6B6B75]">{expanded === row.country ? "\u25BC" : "\u25B6"}</span>
+                    <span className="mr-1.5 text-[#6B6B75]">{expanded === row.country ? "▼" : "▶"}</span>
                     {row.country}
                   </TableCell>
                   <TableCell className="text-right font-mono text-[13px] tabular-nums text-white">{row.signups}</TableCell>
@@ -56,9 +56,9 @@ export default function GeoCard({ geo }: { geo: GeoRow[] }) {
                     <TableRow key={`${row.country}-${city.city}`} className="bg-[#0F0F14] border-[#1F1F28]">
                       <TableCell className="pl-9 text-[12px] text-[#8A8A94]">{city.city}</TableCell>
                       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#8A8A94]">{city.signups}</TableCell>
-                      <TableCell className="text-right text-[12px] text-[#6B6B75]">\u2014</TableCell>
-                      <TableCell className="text-right text-[12px] text-[#6B6B75]">\u2014</TableCell>
-                      <TableCell className="text-right text-[12px] text-[#6B6B75]">\u2014</TableCell>
+                      <TableCell className="text-right text-[12px] text-[#6B6B75]">—</TableCell>
+                      <TableCell className="text-right text-[12px] text-[#6B6B75]">—</TableCell>
+                      <TableCell className="text-right text-[12px] text-[#6B6B75]">—</TableCell>
                       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#8A8A94]">{city.trials}</TableCell>
                       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#FBBF24]">{city.inTrial}</TableCell>
                       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#8A8A94]">{city.customers}</TableCell>

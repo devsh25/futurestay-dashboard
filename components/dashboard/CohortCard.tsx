@@ -25,9 +25,9 @@ export default function CohortCard({ cohort }: { cohort: CohortData; period: str
     { name: "Authorized Airbnb", count: cohort.authorized, rate: cohort.authRate },
     { name: "Created Properties", count: cohort.createdProperties, rate: cohort.propsRate },
     { name: "Clicked Launch", count: cohort.clickedLaunch, rate: cohort.launchRate },
-    { name: "\u2605 Trial Started", count: cohort.trials, rate: cohort.trialRate },
-    { name: "\u2606 In Trial", count: cohort.inTrial, rate: cohort.inTrialRate },
-    { name: "\u2605\u2605 Customer", count: cohort.customers, rate: cohort.customerRate },
+    { name: "★ Trial Started", count: cohort.trials, rate: cohort.trialRate },
+    { name: "☆ In Trial", count: cohort.inTrial, rate: cohort.inTrialRate },
+    { name: "★★ Customer", count: cohort.customers, rate: cohort.customerRate },
   ];
 
   return (

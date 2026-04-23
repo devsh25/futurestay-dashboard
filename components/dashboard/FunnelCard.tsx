@@ -34,11 +34,11 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
             const color = COLORS[i % COLORS.length];
             const label =
               stage.name === "Trial Started"
-                ? "\u2605 Trial Started"
+                ? "★ Trial Started"
                 : stage.name === "In Trial"
-                  ? "\u2606 In Trial"
+                  ? "☆ In Trial"
                   : stage.name === "Customer"
-                    ? "\u2605\u2605 Customer"
+                    ? "★★ Customer"
                     : stage.name;
             const isLast = i === mainFunnel.length - 1;
 
@@ -70,7 +70,7 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
                   </div>
                   {stage.dropoff !== null && stage.dropoff >= 0 && stage.dropoff > 0 && (
                     <span className={`text-[10px] font-semibold whitespace-nowrap ${stage.dropoff > 50 ? "text-[#F87171]" : "text-[#8A8A94]"}`}>
-                      \u2212{stage.dropoff.toFixed(0)}%
+                      −{stage.dropoff.toFixed(0)}%
                     </span>
                   )}
                 </div>
@@ -93,21 +93,21 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
             {mainFunnel.map((stage) => (
               <TableRow key={stage.name} className="border-[#1F1F28] hover:bg-[#1A1A22] transition-colors">
                 <TableCell className="font-medium text-[13px] text-white">
-                  {stage.name === "Trial Started" ? "\u2605 " + stage.name
-                    : stage.name === "In Trial" ? "\u2606 " + stage.name
-                    : stage.name === "Customer" ? "\u2605\u2605 " + stage.name
+                  {stage.name === "Trial Started" ? "★ " + stage.name
+                    : stage.name === "In Trial" ? "☆ " + stage.name
+                    : stage.name === "Customer" ? "★★ " + stage.name
                     : stage.name}
                 </TableCell>
                 <TableCell className="text-right font-mono text-[13px] tabular-nums text-white">{stage.count.toLocaleString()}</TableCell>
                 <TableCell className="text-right font-mono text-[13px] text-[#8A8A94] tabular-nums">
-                  {stage.lost !== null && stage.lost >= 0 ? `-${stage.lost}` : stage.lost !== null ? `+${Math.abs(stage.lost)}` : "\u2014"}
+                  {stage.lost !== null && stage.lost >= 0 ? `-${stage.lost}` : stage.lost !== null ? `+${Math.abs(stage.lost)}` : "—"}
                 </TableCell>
                 <TableCell className="text-right">
                   {stage.dropoff !== null && stage.dropoff >= 0 ? (
                     <Badge variant="outline" className={`font-mono text-[11px] tabular-nums border-0 ${stage.dropoff > 50 ? "text-[#F87171] bg-[#2A0F13]" : "text-[#8A8A94] bg-[#1F1F28]"}`}>
                       {stage.dropoff.toFixed(0)}%
                     </Badge>
-                  ) : "\u2014"}
+                  ) : "—"}
                 </TableCell>
               </TableRow>
             ))}

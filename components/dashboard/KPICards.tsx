@@ -6,11 +6,11 @@ import Sparkline from "./Sparkline";
 
 function TrendBadge({ delta }: { delta: TrendDelta }) {
   if (delta.previous === 0 && delta.current === 0) {
-    return <span className="text-[10px] text-[#6B6B75] font-medium">\u2014</span>;
+    return <span className="text-[10px] text-[#6B6B75] font-medium">—</span>;
   }
   const up = delta.pct >= 0;
   const color = up ? "text-[#6EE7B7] bg-[#0F2A1F]" : "text-[#F87171] bg-[#2A0F13]";
-  const arrow = up ? "\u2191" : "\u2193";
+  const arrow = up ? "↑" : "↓";
   return (
     <span className={`inline-flex items-center gap-0.5 text-[10px] font-semibold px-2 py-0.5 rounded-full ${color}`}>
       {arrow} {Math.abs(delta.pct).toFixed(0)}%
@@ -123,17 +123,17 @@ export default function KPICards({ kpis, cohort }: { kpis: KPIs; cohort: CohortD
       {/* Row 2: Cohort conversion rates + DQ */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <RateCard
-          label="Qualified Signup \u2192 Trial"
+          label="Qualified Signup → Trial"
           value={cohort.trialRate}
           color={cohort.trialRate > 15 ? "green" : cohort.trialRate > 10 ? "amber" : "red"}
         />
         <RateCard
-          label="Trial \u2192 Customer"
+          label="Trial → Customer"
           value={cohort.trialToCustomerRate}
           color={cohort.trialToCustomerRate > 40 ? "green" : cohort.trialToCustomerRate > 25 ? "amber" : "red"}
         />
         <RateCard
-          label="Qualified Signup \u2192 Customer"
+          label="Qualified Signup → Customer"
           value={cohort.customerRate}
           color={cohort.customerRate > 5 ? "green" : cohort.customerRate > 3 ? "amber" : "red"}
         />

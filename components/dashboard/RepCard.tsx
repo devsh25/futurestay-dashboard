@@ -51,7 +51,7 @@ export default function RepCard({ reps }: { reps: RepRow[] }) {
                   {row.trialToCustomer !== null ? (
                     <RateBadge value={row.trialToCustomer} thresholds={[50, 30]} />
                   ) : (
-                    <span className="text-[12px] text-[#6B6B75]">\u2014</span>
+                    <span className="text-[12px] text-[#6B6B75]">—</span>
                   )}
                 </TableCell>
                 <TableCell className="text-right">
