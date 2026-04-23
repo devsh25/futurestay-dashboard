@@ -52,7 +52,7 @@ function getDateRange(period: PeriodFilter): { start: Date; end: Date } {
   }
 }
 
-function resolvedDateRange(
+export function resolvedDateRange(
   period: PeriodFilter,
   customStart?: string,
   customEnd?: string

@@ -11,6 +11,7 @@ import RepCard from "@/components/dashboard/RepCard";
 import DQChartCard from "@/components/dashboard/DQChartCard";
 import CohortCard from "@/components/dashboard/CohortCard";
 import TrialOutcomesCard from "@/components/dashboard/TrialOutcomesCard";
+import MetaSpendCard from "@/components/dashboard/MetaSpendCard";
 import SectionHeading, { Icons } from "@/components/dashboard/SectionHeading";
 import ActiveFilterChips from "@/components/ActiveFilterChips";
 
@@ -138,6 +139,12 @@ export default function Dashboard() {
                 <FunnelCard funnel={data.funnel} />
                 <CampaignCard campaigns={data.campaigns} />
               </div>
+
+              <MetaSpendCard
+                period={period}
+                customStart={customStart}
+                customEnd={customEnd}
+              />
 
               <SectionHeading
                 icon={Icons.Shield}

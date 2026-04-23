@@ -171,6 +171,42 @@ export interface DashboardData {
   totalContacts: number;
 }
 
+// ---- Meta Ads ----
+
+export interface MetaCampaignRow {
+  id: string;
+  name: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  ctr: number;   // %, Meta returns this directly
+  cpc: number;   // $, Meta returns this directly
+  reach: number;
+}
+
+export interface MetaDailyPoint {
+  date: string;       // YYYY-MM-DD
+  spend: number;
+  impressions: number;
+  clicks: number;
+}
+
+export interface MetaInsightsData {
+  since: string;
+  until: string;
+  summary: {
+    spend: number;
+    impressions: number;
+    clicks: number;
+    ctr: number;         // derived %
+    cpc: number;         // derived $
+    cpm: number;         // derived $ per 1000 impr
+    campaignCount: number;
+  };
+  campaigns: MetaCampaignRow[];
+  daily: MetaDailyPoint[];
+}
+
 export type PeriodFilter =
   | "last7d"
   | "last30d"
