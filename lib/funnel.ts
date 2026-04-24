@@ -169,14 +169,54 @@ function isInTrial(c: HubSpotContact): boolean {
   return c.account_lifecycle === "Trialist";
 }
 
-// Former customer = paid then churned
+// Raw: any contact currently in former.customer lifecycle.
+// Includes both real churns AND failed trialists — use isRealChurn /
+// isFailedTrialist for dashboard semantics (per Futurestay Data Guide 3.0).
 function isFormerCustomer(c: HubSpotContact): boolean {
   return c.account_lifecycle === "former.customer";
 }
 
-// Limited access customer (currently paying, limited tier)
+// Limited Access: cancelled paid/free sub but retains dashboard access
+// for direct bookings. Per Data Guide: "Considered a Customer" in reporting.
 function isLimitedAccess(c: HubSpotContact): boolean {
   return c.account_lifecycle === "Customer/Limited Access";
+}
+
+// Did this contact ever reach Customer lifecycle stage?
+// Presence of hs_v2_date_entered_customer is HubSpot's canonical signal.
+function everBecameCustomer(c: HubSpotContact): boolean {
+  if (!c.hs_v2_date_entered_customer) return false;
+  const d = new Date(c.hs_v2_date_entered_customer);
+  return !isNaN(d.getTime());
+}
+
+// Quick Cancel: entered Customer stage but cancelled within 2 days.
+// Per product rule: these are NOT real conversions — treat as Failed Trialist.
+const QUICK_CANCEL_THRESHOLD_DAYS = 2;
+
+function isQuickCancel(c: HubSpotContact): boolean {
+  if (!c.hs_v2_date_entered_customer || !c.hs_v2_date_exited_customer) return false;
+  const entered = new Date(c.hs_v2_date_entered_customer).getTime();
+  const exited = new Date(c.hs_v2_date_exited_customer).getTime();
+  if (isNaN(entered) || isNaN(exited)) return false;
+  const diffDays = (exited - entered) / (1000 * 60 * 60 * 24);
+  return diffDays >= 0 && diffDays < QUICK_CANCEL_THRESHOLD_DAYS;
+}
+
+// Real Churn (Data Guide): was a real Customer, now cancelled.
+// Excludes failed trialists and quick cancels.
+function isRealChurn(c: HubSpotContact): boolean {
+  return isFormerCustomer(c) && everBecameCustomer(c) && !isQuickCancel(c);
+}
+
+// Failed Trialist (Data Guide): Trialist who cancelled BEFORE becoming a real
+// customer. NOT counted as churn. In HubSpot this surfaces as former.customer
+// either because (a) they never entered customer stage, or (b) they entered
+// and cancelled within 2 days (per product rule).
+function isFailedTrialist(c: HubSpotContact): boolean {
+  if (!isFormerCustomer(c)) return false;
+  if (!everBecameCustomer(c)) return true;
+  return isQuickCancel(c);
 }
 
 // ---- Date-based trial/customer detection (using HubSpot lifecycle dates) ----
@@ -212,7 +252,10 @@ function computeFunnel(qualified: HubSpotContact[], allSignups: HubSpotContact[]
   const trialCount = qualified.filter(everTrialed).length;
   const inTrialCount = qualified.filter(isInTrial).length;
   const customerCount = qualified.filter(isCustomer).length;
-  const formerCustomerCount = qualified.filter(isFormerCustomer).length;
+  // Funnel "Churned" = real churns only (per Data Guide 3.0).
+  // Failed trialists are shown as their own branch off Trial Started.
+  const churnedCount = qualified.filter(isRealChurn).length;
+  const failedTrialistCount = qualified.filter(isFailedTrialist).length;
 
   // Note: launchCount removed from funnel display per product request
   void launchCount;
@@ -222,8 +265,9 @@ function computeFunnel(qualified: HubSpotContact[], allSignups: HubSpotContact[]
     ["Created Properties", propsCount],
     ["Trial Started", trialCount],
     ["In Trial", inTrialCount],
+    ["Failed Trialist", failedTrialistCount],
     ["Customer", customerCount],
-    ["Former Customer", formerCustomerCount],
+    ["Churned", churnedCount],
   ];
 
   const funnel: FunnelStage[] = [];
@@ -237,12 +281,13 @@ function computeFunnel(qualified: HubSpotContact[], allSignups: HubSpotContact[]
     if (i === 0) {
       funnel.push({ name, count, lost: null, dropoff: null, stepConv: null });
     } else {
-      // In Trial and Customer branch off Trial Started (parallel, not sequential)
-      // Former Customer branches off Customer
+      // Branching per Futurestay Data Guide 3.0:
+      //   Trial Started → {In Trial, Failed Trialist, Customer}  (parallel outcomes)
+      //   Customer → Churned  (sequential; only real churns here)
       let prevIdx = i - 1;
-      if (name === "In Trial" || name === "Customer") {
+      if (name === "In Trial" || name === "Customer" || name === "Failed Trialist") {
         prevIdx = mainStages.findIndex(([n]) => n === "Trial Started");
-      } else if (name === "Former Customer") {
+      } else if (name === "Churned") {
         prevIdx = mainStages.findIndex(([n]) => n === "Customer");
       }
       const prev = mainStages[prevIdx][1];
@@ -272,10 +317,12 @@ function computeKPIs(
     return td && td >= start && td <= end;
   }).length;
 
-  // Customers = entered customer during this period (hs_v2_date_entered_customer or fallback)
+  // Customers = entered customer during this period AND not a quick cancel (<2 days).
+  // Per Data Guide + product rule: cancellations within 2 days aren't real conversions.
   const totalCustomers = allContacts.filter((c) => {
     const cd = getCustomerEnteredDate(c);
-    return cd && cd >= start && cd <= end;
+    if (!cd || cd < start || cd > end) return false;
+    return !isQuickCancel(c);
   }).length;
 
   // In Trial = entered trial during this period AND still currently in trial
@@ -364,14 +411,20 @@ function computeKPIs(
     pct: previous > 0 ? ((current - previous) / previous) * 100 : (current > 0 ? 100 : 0),
   });
 
-  // Former customers & limited access — from qualified signup cohort
-  const totalFormerCustomers = qualifiedSignups.filter(isFormerCustomer).length;
+  // Exit paths (cohort-based, from qualified signups in this period).
+  // Per Data Guide 3.0: distinguish real Churns from Failed Trialists.
+  const totalChurned = qualifiedSignups.filter(isRealChurn).length;
+  const totalFailedTrialists = qualifiedSignups.filter(isFailedTrialist).length;
   const totalLimitedAccess = qualifiedSignups.filter(isLimitedAccess).length;
-  // Churn rate uses cohort-based customer count (signups from this period who became paying),
-  // not the period-based totalCustomers (which counts conversions regardless of signup date).
+  // totalFormerCustomers retained for backwards compat = raw former.customer count
+  // (= churned + failed trialists). UI prefers the split fields above.
+  const totalFormerCustomers = totalChurned + totalFailedTrialists;
+  // Churn rate (Data Guide): real churns / (active customers + real churns).
+  // Failed trialists excluded — "Failed Trialists are not considered a Churn".
+  // Limited Access already included in isCustomer (counted as Customer per Guide).
   const cohortActiveCustomers = qualifiedSignups.filter(isCustomer).length;
-  const cohortEverPaid = cohortActiveCustomers + totalFormerCustomers;
-  const churnRate = cohortEverPaid > 0 ? (totalFormerCustomers / cohortEverPaid) * 100 : 0;
+  const cohortEverPaid = cohortActiveCustomers + totalChurned;
+  const churnRate = cohortEverPaid > 0 ? (totalChurned / cohortEverPaid) * 100 : 0;
 
   return {
     totalSignups: totalQualifiedSignups, // headline "Qualified Signups"
@@ -380,6 +433,8 @@ function computeKPIs(
     totalInTrial,
     totalCustomers,
     totalFormerCustomers,
+    totalChurned,
+    totalFailedTrialists,
     totalLimitedAccess,
     trialRate: totalQualifiedSignups > 0 ? (totalTrials / totalQualifiedSignups) * 100 : 0,
     customerRate: totalQualifiedSignups > 0 ? (totalCustomers / totalQualifiedSignups) * 100 : 0,
@@ -411,9 +466,14 @@ function computeCohort(contacts: HubSpotContact[]): CohortData {
   const launch = contacts.filter(clickedLaunch).length;
   const trials = contacts.filter(everTrialed).length;
   const inTrial = contacts.filter(isInTrial).length;
+  // Customers = current "customer" OR "Customer/Limited Access" — both count
+  // per Data Guide 3.0. isCustomer already matches CUSTOMER_LIFECYCLES.
   const customers = contacts.filter(isCustomer).length;
-  const formerCustomers = contacts.filter(isFormerCustomer).length;
+  const churned = contacts.filter(isRealChurn).length;
+  const failedTrialists = contacts.filter(isFailedTrialist).length;
   const limitedAccess = contacts.filter(isLimitedAccess).length;
+  // formerCustomers kept as churned + failed for backwards compat.
+  const formerCustomers = churned + failedTrialists;
 
   return {
     signups: n,
@@ -424,6 +484,8 @@ function computeCohort(contacts: HubSpotContact[]): CohortData {
     inTrial,
     customers,
     formerCustomers,
+    churned,
+    failedTrialists,
     limitedAccess,
     authRate: n > 0 ? (auth / n) * 100 : 0,
     propsRate: n > 0 ? (props / n) * 100 : 0,
@@ -432,7 +494,12 @@ function computeCohort(contacts: HubSpotContact[]): CohortData {
     inTrialRate: n > 0 ? (inTrial / n) * 100 : 0,
     customerRate: n > 0 ? (customers / n) * 100 : 0,
     formerCustomerRate: n > 0 ? (formerCustomers / n) * 100 : 0,
+    churnedRate: n > 0 ? (churned / n) * 100 : 0,
+    failedTrialistRate: n > 0 ? (failedTrialists / n) * 100 : 0,
     limitedAccessRate: n > 0 ? (limitedAccess / n) * 100 : 0,
+    // Trial → Customer conversion (Data Guide): of those who started a trial,
+    // what % became a real customer? Excludes failed trialists and quick cancels
+    // naturally because `customers` uses current customer lifecycle.
     trialToCustomerRate: trials > 0 ? (customers / trials) * 100 : 0,
   };
 }
@@ -585,16 +652,25 @@ function computeReps(
 function computeTrialOutcomes(qualifiedSignups: HubSpotContact[]) {
   const trialists = qualifiedSignups.filter(everTrialed);
   const inTrial = trialists.filter(isInTrial).length;
-  const customer = trialists.filter((c) => c.account_lifecycle === "customer").length;
-  const formerCustomer = trialists.filter(isFormerCustomer).length;
+  // Customer = paid customer, excluding quick cancels (<2 day rule).
+  const customer = trialists.filter(
+    (c) => c.account_lifecycle === "customer" && !isQuickCancel(c)
+  ).length;
+  // Limited Access = still a Customer per Data Guide, shown separately for detail.
   const limitedAccess = trialists.filter(isLimitedAccess).length;
-  const reverted = trialists.length - inTrial - customer - formerCustomer - limitedAccess;
+  // Churned = real churn (was customer >=2 days, now cancelled).
+  const churned = trialists.filter(isRealChurn).length;
+  // Failed Trialist = cancelled before becoming real customer (incl. quick cancels).
+  const failedTrialist = trialists.filter(isFailedTrialist).length;
+  const reverted =
+    trialists.length - inTrial - customer - limitedAccess - churned - failedTrialist;
   return {
     total: trialists.length,
     inTrial,
     customer,
-    formerCustomer,
     limitedAccess,
+    churned,
+    failedTrialist,
     reverted: Math.max(0, reverted),
   };
 }

@@ -23,21 +23,28 @@ const SEGMENTS: {
     label: "Became Customer",
     color: "bg-[#6EE7B7]",
     dot: "bg-[#6EE7B7]",
-    description: "Paying customers",
+    description: "Real paid customer (≥2 days)",
   },
   {
     key: "limitedAccess",
     label: "Limited Access",
     color: "bg-[#60A5FA]",
     dot: "bg-[#60A5FA]",
-    description: "Customer / Limited tier",
+    description: "Cancelled but keeps bookings access",
   },
   {
-    key: "formerCustomer",
+    key: "churned",
     label: "Churned",
     color: "bg-[#F87171]",
     dot: "bg-[#F87171]",
-    description: "Paid then cancelled",
+    description: "Was customer ≥2 days then cancelled",
+  },
+  {
+    key: "failedTrialist",
+    label: "Failed Trialist",
+    color: "bg-[#A78BFA]",
+    dot: "bg-[#A78BFA]",
+    description: "Cancelled trial before real conversion",
   },
   {
     key: "reverted",
@@ -85,7 +92,7 @@ export default function TrialOutcomesCard({ outcomes }: { outcomes: TrialOutcome
         </div>
 
         {/* Legend with counts */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
           {SEGMENTS.map((seg) => {
             const count = outcomes[seg.key];
             const pct = total > 0 ? (count / total) * 100 : 0;

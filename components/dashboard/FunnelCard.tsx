@@ -7,7 +7,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { FunnelStage } from "@/lib/types";
 
-const COLORS = ["#A78BFA", "#8B5CF6", "#6EE7B7", "#34D399", "#FB923C", "#60A5FA", "#F87171"];
+const COLORS = ["#A78BFA", "#8B5CF6", "#6EE7B7", "#34D399", "#FB923C", "#C084FC", "#60A5FA", "#F87171"];
 
 export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
   const dqRow = funnel.find((f) => f.name === "AirbnbDQ");
@@ -39,9 +39,11 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
                   ? "☆ In Trial"
                   : stage.name === "Customer"
                     ? "★★ Customer"
-                    : stage.name === "Former Customer"
-                      ? "⚠ Former Customer"
-                      : stage.name;
+                    : stage.name === "Failed Trialist"
+                      ? "⊘ Failed Trialist"
+                      : stage.name === "Churned"
+                        ? "⚠ Churned"
+                        : stage.name;
             const isLast = i === mainFunnel.length - 1;
 
             return (
@@ -98,7 +100,8 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
                   {stage.name === "Trial Started" ? "★ " + stage.name
                     : stage.name === "In Trial" ? "☆ " + stage.name
                     : stage.name === "Customer" ? "★★ " + stage.name
-                    : stage.name === "Former Customer" ? "⚠ " + stage.name
+                    : stage.name === "Failed Trialist" ? "⊘ " + stage.name
+                    : stage.name === "Churned" ? "⚠ " + stage.name
                     : stage.name}
                 </TableCell>
                 <TableCell className="text-right font-mono text-[13px] tabular-nums text-white">{stage.count.toLocaleString()}</TableCell>

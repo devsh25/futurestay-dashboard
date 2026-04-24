@@ -27,7 +27,8 @@ export default function CohortCard({ cohort }: { cohort: CohortData; period: str
     { name: "★ Trial Started", count: cohort.trials, rate: cohort.trialRate },
     { name: "☆ In Trial", count: cohort.inTrial, rate: cohort.inTrialRate },
     { name: "★★ Customer", count: cohort.customers, rate: cohort.customerRate },
-    { name: "⚠ Former Customer (churned)", count: cohort.formerCustomers, rate: cohort.formerCustomerRate },
+    { name: "⊘ Failed Trialist", count: cohort.failedTrialists, rate: cohort.failedTrialistRate },
+    { name: "⚠ Churned (real)", count: cohort.churned, rate: cohort.churnedRate },
   ];
 
   return (

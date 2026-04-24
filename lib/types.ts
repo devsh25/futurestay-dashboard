@@ -93,13 +93,15 @@ export interface KPIs {
   totalRawSignups: number;   // All signups including DQ'd — used only for DQ rate
   totalTrials: number;
   totalInTrial: number;
-  totalCustomers: number;
-  totalFormerCustomers: number;   // churned paying customers
-  totalLimitedAccess: number;     // limited tier paying customers
+  totalCustomers: number;         // Real conversions (excludes <2-day quick cancels)
+  totalFormerCustomers: number;   // Raw former.customer count (= churned + failed)
+  totalChurned: number;           // Real churns (Data Guide: was customer ≥2 days, now cancelled)
+  totalFailedTrialists: number;   // Trialists who cancelled before real conversion
+  totalLimitedAccess: number;     // Still counted as Customer per Data Guide
   trialRate: number;         // Qualified Signup → Trial
   customerRate: number;      // Qualified Signup → Customer
   trialToPayRate: number;
-  churnRate: number;         // Former / (Customer + Former + Limited) — % of ever-paid who churned
+  churnRate: number;         // Churned / (Active Customers + Churned) — excludes failed trialists
   dqRate: number;
   sparkline: SparklineSeries;
   deltas: {
@@ -113,9 +115,10 @@ export interface KPIs {
 export interface TrialOutcomes {
   total: number;            // total people who entered trial (cohort)
   inTrial: number;          // currently Trialist
-  customer: number;         // currently customer
-  formerCustomer: number;   // churned
-  limitedAccess: number;    // Customer/Limited Access
+  customer: number;         // became real paid customer (excl. quick cancels)
+  limitedAccess: number;    // Customer/Limited Access (counts as Customer per Guide)
+  churned: number;          // real churn: was customer ≥2 days, now cancelled
+  failedTrialist: number;   // cancelled trial before real conversion (or <2-day cancel)
   reverted: number;         // rare: reverted to signup/other
 }
 
@@ -144,8 +147,10 @@ export interface CohortData {
   clickedLaunch: number;
   trials: number;
   inTrial: number;
-  customers: number;
-  formerCustomers: number;
+  customers: number;           // Customer + Limited Access (per Data Guide)
+  formerCustomers: number;     // Raw: churned + failed trialists (compat)
+  churned: number;             // Real churns only
+  failedTrialists: number;     // Trialists who cancelled before real conversion
   limitedAccess: number;
   authRate: number;
   propsRate: number;
@@ -153,7 +158,9 @@ export interface CohortData {
   trialRate: number;
   inTrialRate: number;
   customerRate: number;
-  formerCustomerRate: number;  // % of qualified signups
+  formerCustomerRate: number;
+  churnedRate: number;         // % of qualified signups who became a real churn
+  failedTrialistRate: number;  // % of qualified signups who failed trial
   limitedAccessRate: number;
   trialToCustomerRate: number;
 }
