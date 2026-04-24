@@ -12,6 +12,13 @@ const CONTACT_PROPERTIES = [
   "trial__start_date",
   "subscription_status",
   "subscription_type",
+  "plan_name",
+  // These legacy "don't use" fields hold the only reliable plan_type data
+  // across FS Connect / Amplify / Flex / Limited — required to distinguish
+  // paid customers (Amplify, Flex) from free FS Connect.
+  "don_t_use____plan_type",
+  "don_t_use_____old_plan_type",
+  "limited_access_previous_plan",
   "first_touch_utm_campaign",
   "first_touch_utm_source",
   "first_touch_utm_medium",
@@ -136,6 +143,10 @@ export async function fetchAllContacts(): Promise<HubSpotContact[]> {
         trial__start_date: p.trial__start_date || null,
         subscription_status: p.subscription_status || null,
         subscription_type: p.subscription_type || null,
+        plan_name: p.plan_name || null,
+        plan_type_legacy: p["don_t_use____plan_type"] || null,
+        plan_type_old: p["don_t_use_____old_plan_type"] || null,
+        limited_access_previous_plan: p.limited_access_previous_plan || null,
         first_touch_utm_campaign: p.first_touch_utm_campaign || null,
         first_touch_utm_source: p.first_touch_utm_source || null,
         first_touch_utm_medium: p.first_touch_utm_medium || null,

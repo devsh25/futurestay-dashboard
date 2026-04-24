@@ -154,12 +154,47 @@ const TRIAL_LIFECYCLES = ["Trialist", "customer", "former.customer", "Customer/L
 const CUSTOMER_LIFECYCLES = ["customer", "Customer/Limited Access"];
 const EVER_PAID_LIFECYCLES = ["customer", "former.customer", "Customer/Limited Access"];
 
+// ---- Paid plan detection ----
+// Per Data Guide 3.0 + product rule: a Customer is someone on a *paid*
+// plan (Amplify or Flex). FS Connect ("Connect") is free and NOT counted
+// as a Customer in the dashboard.
+
+const PAID_PLANS = new Set(["amplify", "flex"]);
+
+function effectivePlan(c: HubSpotContact): string | null {
+  // plan_name is the canonical enum but only ~30% populated.
+  // don_t_use____plan_type is the legacy field with the most complete data
+  // (still used by the Chargebee → HubSpot workflows as of 2026-04).
+  return (
+    c.plan_name ||
+    c.plan_type_legacy ||
+    c.plan_type_old ||
+    null
+  );
+}
+
+// Has (or had) a paid Amplify/Flex plan attached. For Limited Access users,
+// we check limited_access_previous_plan — an LA user who previously paid is
+// still counted as a Customer (per Data Guide: "considered a customer").
+function hadPaidPlan(c: HubSpotContact): boolean {
+  const plan = (effectivePlan(c) || "").trim().toLowerCase();
+  if (PAID_PLANS.has(plan)) return true;
+  const laPrev = (c.limited_access_previous_plan || "").toLowerCase();
+  if (!laPrev) return false;
+  // LA previous plan format: "Futurestay-Amplify-USD-Yearly", "Flex Monthly", etc.
+  return laPrev.includes("amplify") || laPrev.includes("flex");
+}
+
 function everTrialed(c: HubSpotContact): boolean {
   return TRIAL_LIFECYCLES.includes(c.account_lifecycle || "");
 }
 
+// Customer = in customer/LA lifecycle AND has paid plan AND not a quick cancel.
+// Excludes FS Connect (free) and quick-cancelled paid subs per product rule.
 function isCustomer(c: HubSpotContact): boolean {
-  return CUSTOMER_LIFECYCLES.includes(c.account_lifecycle || "");
+  if (!CUSTOMER_LIFECYCLES.includes(c.account_lifecycle || "")) return false;
+  if (isQuickCancel(c)) return false;
+  return hadPaidPlan(c);
 }
 
 // Currently in trial = account_lifecycle === "Trialist"
@@ -203,20 +238,25 @@ function isQuickCancel(c: HubSpotContact): boolean {
   return diffDays >= 0 && diffDays < QUICK_CANCEL_THRESHOLD_DAYS;
 }
 
-// Real Churn (Data Guide): was a real Customer, now cancelled.
-// Excludes failed trialists and quick cancels.
+// Real Churn (Data Guide): was a paid Customer (Amplify/Flex), now cancelled.
+// Excludes failed trialists, quick cancels, and FS Connect (free) churns.
 function isRealChurn(c: HubSpotContact): boolean {
-  return isFormerCustomer(c) && everBecameCustomer(c) && !isQuickCancel(c);
+  if (!isFormerCustomer(c)) return false;
+  if (!everBecameCustomer(c)) return false;
+  if (isQuickCancel(c)) return false;
+  return hadPaidPlan(c);
 }
 
 // Failed Trialist (Data Guide): Trialist who cancelled BEFORE becoming a real
-// customer. NOT counted as churn. In HubSpot this surfaces as former.customer
-// either because (a) they never entered customer stage, or (b) they entered
-// and cancelled within 2 days (per product rule).
+// paid customer. NOT counted as churn. In HubSpot this surfaces as
+// former.customer either because (a) they never entered customer stage,
+// (b) they entered and cancelled within 2 days (product rule), or (c) they
+// "converted" to FS Connect (free) — also excluded per paid-customer rule.
 function isFailedTrialist(c: HubSpotContact): boolean {
   if (!isFormerCustomer(c)) return false;
   if (!everBecameCustomer(c)) return true;
-  return isQuickCancel(c);
+  if (isQuickCancel(c)) return true;
+  return !hadPaidPlan(c);
 }
 
 // ---- Date-based trial/customer detection (using HubSpot lifecycle dates) ----

@@ -9,6 +9,10 @@ export interface HubSpotContact {
   trial__start_date: string | null;
   subscription_status: string | null;
   subscription_type: string | null;
+  plan_name: string | null;                    // canonical enum {Amplify, Flex} — sparse
+  plan_type_legacy: string | null;             // from don_t_use____plan_type — most complete
+  plan_type_old: string | null;                // from don_t_use_____old_plan_type
+  limited_access_previous_plan: string | null; // e.g., "Futurestay-Amplify-USD-Yearly"
   first_touch_utm_campaign: string | null;
   first_touch_utm_source: string | null;
   first_touch_utm_medium: string | null;
