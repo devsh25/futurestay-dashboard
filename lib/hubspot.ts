@@ -10,6 +10,9 @@ const CONTACT_PROPERTIES = [
   "user_properties_created",
   "user_clicked_launch_property",
   "trial__start_date",
+  // Chargebee's authoritative trial end date. Preferred over a hardcoded
+  // trial length because it honors extensions, failed renewals, etc.
+  "cb_subcst_trial_end",
   "subscription_status",
   "subscription_type",
   "plan_name",
@@ -141,6 +144,7 @@ export async function fetchAllContacts(): Promise<HubSpotContact[]> {
         user_properties_created: p.user_properties_created || null,
         user_clicked_launch_property: p.user_clicked_launch_property || null,
         trial__start_date: p.trial__start_date || null,
+        cb_subcst_trial_end: p.cb_subcst_trial_end || null,
         subscription_status: p.subscription_status || null,
         subscription_type: p.subscription_type || null,
         plan_name: p.plan_name || null,

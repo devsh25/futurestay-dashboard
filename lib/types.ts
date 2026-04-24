@@ -7,6 +7,7 @@ export interface HubSpotContact {
   user_properties_created: string | null;
   user_clicked_launch_property: string | null;
   trial__start_date: string | null;
+  cb_subcst_trial_end: string | null; // Chargebee trial end — authoritative
   subscription_status: string | null;
   subscription_type: string | null;
   plan_name: string | null;                    // canonical enum {Amplify, Flex} — sparse

@@ -197,11 +197,34 @@ function isCustomer(c: HubSpotContact): boolean {
   return hadPaidPlan(c);
 }
 
-// Currently in trial = account_lifecycle === "Trialist"
-// This is HubSpot's definitive signal. We don't infer from dates
-// because it creates phantom in-trial contacts.
+// Trial length policy fallback (Futurestay trial = 14d). Used only when
+// Chargebee's authoritative trial-end field is missing.
+const TRIAL_LENGTH_DAYS = 14;
+
+// Currently in trial. Problem: HubSpot's account_lifecycle=Trialist goes
+// stale — we've observed trials from Feb/March still marked Trialist in
+// late April because the Chargebee → HubSpot workflow didn't flip the
+// lifecycle on expiry.
+//
+// Signal priority:
+//   1. account_lifecycle must be "Trialist" (required)
+//   2. cb_subcst_trial_end — Chargebee's authoritative trial end date.
+//      Created 2026-04-15 so only trials started after that have it;
+//      future date = active, past date = stale.
+//   3. Fallback (no Chargebee date): trial age <= 14 days.
 function isInTrial(c: HubSpotContact): boolean {
-  return c.account_lifecycle === "Trialist";
+  if (c.account_lifecycle !== "Trialist") return false;
+  const now = Date.now();
+
+  if (c.cb_subcst_trial_end) {
+    const end = new Date(c.cb_subcst_trial_end).getTime();
+    if (!isNaN(end)) return end > now;
+  }
+
+  const td = getTrialEnteredDate(c);
+  if (!td) return true; // trust lifecycle when we have no date to check
+  const ageDays = (now - td.getTime()) / (1000 * 60 * 60 * 24);
+  return ageDays <= TRIAL_LENGTH_DAYS;
 }
 
 // Raw: any contact currently in former.customer lifecycle.
