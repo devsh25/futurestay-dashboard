@@ -33,7 +33,8 @@ interface FilterBarProps {
 const PERIOD_OPTIONS: { value: PeriodFilter; label: string }[] = [
   { value: "last7d", label: "Last 7 days" },
   { value: "last30d", label: "Last 30 days" },
-  { value: "thisWeek", label: "This week" },
+  { value: "thisWeek", label: "This week (Mon–Sun)" },
+  { value: "lastWeek", label: "Last week (Mon–Sun)" },
   { value: "thisMonth", label: "This month" },
   { value: "thisQuarter", label: "This quarter" },
   { value: "allTime", label: "Since Jan 2026" },

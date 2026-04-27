@@ -5,7 +5,8 @@ import { PeriodFilter } from "@/lib/types";
 const PERIOD_LABELS: Record<PeriodFilter, string> = {
   last7d: "Last 7 days",
   last30d: "Last 30 days",
-  thisWeek: "This week",
+  thisWeek: "This week (Mon–Sun)",
+  lastWeek: "Last week (Mon–Sun)",
   thisMonth: "This month",
   thisQuarter: "This quarter",
   allTime: "Since Jan 2026",

@@ -32,10 +32,23 @@ function getDateRange(period: PeriodFilter): { start: Date; end: Date } {
       return { start, end };
     }
     case "thisWeek": {
+      // Monday–Sunday week. JS getDay() returns Sun=0..Sat=6; we want Mon=0.
+      const dow = (now.getDay() + 6) % 7; // Mon→0, Sun→6
       const start = new Date(now);
-      start.setDate(start.getDate() - start.getDay());
+      start.setDate(start.getDate() - dow);
       start.setHours(0, 0, 0, 0);
       return { start, end };
+    }
+    case "lastWeek": {
+      // Previous Monday → previous Sunday.
+      const dow = (now.getDay() + 6) % 7;
+      const start = new Date(now);
+      start.setDate(start.getDate() - dow - 7);
+      start.setHours(0, 0, 0, 0);
+      const lwEnd = new Date(start);
+      lwEnd.setDate(start.getDate() + 6);
+      lwEnd.setHours(23, 59, 59, 999);
+      return { start, end: lwEnd };
     }
     case "thisMonth": {
       const start = new Date(now.getFullYear(), now.getMonth(), 1);

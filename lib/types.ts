@@ -223,6 +223,7 @@ export type PeriodFilter =
   | "last7d"
   | "last30d"
   | "thisWeek"
+  | "lastWeek"
   | "thisMonth"
   | "thisQuarter"
   | "allTime"
