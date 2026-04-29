@@ -136,10 +136,8 @@ export default function Dashboard() {
                 description="How qualified signups progress through stages, and where they come from"
                 iconColor="#6EE7B7"
               />
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                <FunnelCard funnel={data.funnel} />
-                <CampaignCard campaigns={data.campaigns} />
-              </div>
+              <FunnelCard funnel={data.funnel} />
+              <CampaignCard campaigns={data.campaigns} />
 
               <MetaSpendCard
                 period={period}
