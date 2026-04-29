@@ -9,6 +9,7 @@ const CONTACT_PROPERTIES = [
   "airbnbdqreason",
   "user_properties_created",
   "user_clicked_launch_property",
+  "property_ready_to_launch",
   "trial__start_date",
   // Chargebee's authoritative trial end date. Preferred over a hardcoded
   // trial length because it honors extensions, failed renewals, etc.
@@ -147,6 +148,7 @@ export async function fetchAllContacts(): Promise<HubSpotContact[]> {
         airbnbdqreason: p.airbnbdqreason || null,
         user_properties_created: p.user_properties_created || null,
         user_clicked_launch_property: p.user_clicked_launch_property || null,
+        property_ready_to_launch: p.property_ready_to_launch || null,
         trial__start_date: p.trial__start_date || null,
         cb_subcst_trial_end: p.cb_subcst_trial_end || null,
         subscription_status: p.subscription_status || null,

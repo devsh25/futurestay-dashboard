@@ -6,6 +6,7 @@ export interface HubSpotContact {
   airbnbdqreason: string | null;
   user_properties_created: string | null;
   user_clicked_launch_property: string | null;
+  property_ready_to_launch: string | null;  // "true" / "false" / null
   trial__start_date: string | null;
   cb_subcst_trial_end: string | null; // Chargebee trial end — authoritative
   subscription_status: string | null;
@@ -102,6 +103,7 @@ export interface KPIs {
   totalRawSignups: number;   // All signups including DQ'd — used only for DQ rate
   totalTrials: number;
   totalInTrial: number;
+  totalReadyToLaunch: number;     // contacts with property_ready_to_launch=true
   totalCustomers: number;         // Real conversions (excludes <2-day quick cancels)
   totalFormerCustomers: number;   // Raw former.customer count (= churned + failed)
   totalChurned: number;           // Real churns (Data Guide: was customer ≥2 days, now cancelled)
@@ -154,6 +156,7 @@ export interface CohortData {
   authorized: number;
   createdProperties: number;
   clickedLaunch: number;
+  readyToLaunch: number;       // Property marked ready to launch
   trials: number;
   inTrial: number;
   customers: number;           // Customer + Limited Access (per Data Guide)
@@ -164,6 +167,7 @@ export interface CohortData {
   authRate: number;
   propsRate: number;
   launchRate: number;
+  readyToLaunchRate: number;
   trialRate: number;
   inTrialRate: number;
   customerRate: number;
@@ -200,6 +204,7 @@ export interface CampaignAnalysisRow {
   signups: number;            // lifecycle reached "signup" or beyond
   qualifiedSignups: number;   // signups - airbnb DQ
   airbnbConnected: number;    // auth status COMPLETED/REVOKED
+  readyToLaunch: number;      // property_ready_to_launch = "true"
 
   airbnbDqRate: number;       // %
   salesDqRate: number | null; // % (call only)

@@ -120,8 +120,13 @@ export default function KPICards({ kpis, cohort }: { kpis: KPIs; cohort: CohortD
         />
       </div>
 
-      {/* Row 2: Cohort conversion rates + Churn + DQ */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      {/* Row 2: Cohort conversion rates + Ready to Launch + Churn + DQ */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+        <RateCard
+          label="QS → Ready to Launch"
+          value={cohort.readyToLaunchRate}
+          color={cohort.readyToLaunchRate > 20 ? "green" : cohort.readyToLaunchRate > 10 ? "amber" : "red"}
+        />
         <RateCard
           label="Qualified Signup → Trial"
           value={cohort.trialRate}

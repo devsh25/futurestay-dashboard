@@ -17,7 +17,7 @@ type Node = {
 
 // SVG geometry — viewBox so it scales with container width.
 const VB_W = 1200;
-const VB_H = 860;
+const VB_H = 920;
 const NODE_W = 280;
 const NODE_H = 76;
 
@@ -28,15 +28,16 @@ const CENTER = VB_W / 2;
 // Customer further drops to Churned.
 const NODES: Node[] = [
   { key: "Qualified Signups",     label: "Qualified Signups",   cx: CENTER, cy: 60,  color: "#A78BFA" },
-  { key: "Authorized Airbnb",     label: "Authorized Airbnb",   cx: CENTER, cy: 180, color: "#8B5CF6", parent: "Qualified Signups" },
-  { key: "Created Properties",    label: "Created Properties",  cx: CENTER, cy: 300, color: "#34D399", parent: "Authorized Airbnb" },
-  { key: "Trial Started",         label: "Trial Started",       cx: CENTER, cy: 440, color: "#6EE7B7", parent: "Created Properties", icon: "★" },
+  { key: "Authorized Airbnb",     label: "Authorized Airbnb",   cx: CENTER, cy: 170, color: "#8B5CF6", parent: "Qualified Signups" },
+  { key: "Created Properties",    label: "Created Properties",  cx: CENTER, cy: 280, color: "#34D399", parent: "Authorized Airbnb" },
+  { key: "Ready to Launch",       label: "Ready to Launch",     cx: CENTER, cy: 390, color: "#FBBF24", parent: "Created Properties", icon: "🚀" },
+  { key: "Trial Started",         label: "Trial Started",       cx: CENTER, cy: 510, color: "#6EE7B7", parent: "Ready to Launch", icon: "★" },
   // Branches — horizontal spread at the same Y
-  { key: "In Trial",              label: "In Trial",            cx: 280,    cy: 600, color: "#FB923C", parent: "Trial Started", icon: "☆", subtle: false },
-  { key: "Failed Trialist",       label: "Failed Trialist",     cx: 620,    cy: 600, color: "#A78BFA", parent: "Trial Started", icon: "⊘", subtle: false },
-  { key: "Customer",              label: "Customer",            cx: 960,    cy: 600, color: "#6EE7B7", parent: "Trial Started", icon: "★★", subtle: false },
+  { key: "In Trial",              label: "In Trial",            cx: 280,    cy: 670, color: "#FB923C", parent: "Trial Started", icon: "☆", subtle: false },
+  { key: "Failed Trialist",       label: "Failed Trialist",     cx: 620,    cy: 670, color: "#A78BFA", parent: "Trial Started", icon: "⊘", subtle: false },
+  { key: "Customer",              label: "Customer",            cx: 960,    cy: 670, color: "#6EE7B7", parent: "Trial Started", icon: "★★", subtle: false },
   // Customer drops to Churned
-  { key: "Churned",               label: "Churned",             cx: 960,    cy: 760, color: "#F87171", parent: "Customer", icon: "⚠", subtle: false },
+  { key: "Churned",               label: "Churned",             cx: 960,    cy: 820, color: "#F87171", parent: "Customer", icon: "⚠", subtle: false },
 ];
 
 export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
@@ -117,7 +118,7 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
           viewBox={`0 0 ${VB_W} ${VB_H}`}
           className="w-full"
           preserveAspectRatio="xMidYMid meet"
-          style={{ maxHeight: 900, display: "block" }}
+          style={{ maxHeight: 960, display: "block" }}
         >
           <defs>
             {paths.map((p) => (

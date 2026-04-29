@@ -60,6 +60,7 @@ function CampaignRow({ r }: { r: CampaignAnalysisRow }) {
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#E5E5EB]">{fmtNum(r.signups)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-white font-semibold">{fmtNum(r.qualifiedSignups)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#60A5FA]">{fmtNum(r.airbnbConnected)}</TableCell>
+      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#FBBF24]">{fmtNum(r.readyToLaunch)}</TableCell>
       <TableCell className={`text-right font-mono text-[12px] tabular-nums ${dqColor(r.airbnbDqRate)}`}>{fmtPct(r.airbnbDqRate)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#8A8A94]">{fmtPct(r.salesDqRate)}</TableCell>
       <TableCell className={`text-right font-mono text-[12px] tabular-nums ${r.noShowRate !== null && r.noShowRate >= 30 ? "text-[#F87171]" : "text-[#8A8A94]"}`}>{fmtPct(r.noShowRate)}</TableCell>
@@ -157,6 +158,7 @@ export default function CampaignAnalysisCard({
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Signups</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Qual Sgnp</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Airbnb Conn</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">🚀 Ready</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">A-DQ %</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Sales DQ %</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">No-show %</TableHead>

@@ -163,6 +163,13 @@ function clickedLaunch(c: HubSpotContact): boolean {
   return c.user_clicked_launch_property === "yes";
 }
 
+// Property is fully set up and the user marked it Ready to Launch.
+// More definitive signal than "Clicked Launch" — captures the final
+// pre-trial setup step.
+function isReadyToLaunch(c: HubSpotContact): boolean {
+  return (c.property_ready_to_launch || "").toLowerCase() === "true";
+}
+
 const TRIAL_LIFECYCLES = ["Trialist", "customer", "former.customer", "Customer/Limited Access"];
 const CUSTOMER_LIFECYCLES = ["customer", "Customer/Limited Access"];
 const EVER_PAID_LIFECYCLES = ["customer", "former.customer", "Customer/Limited Access"];
@@ -325,6 +332,7 @@ function computeFunnel(qualified: HubSpotContact[], allSignups: HubSpotContact[]
   const authCount = qualified.filter(isAuth).length;
   const propsCount = qualified.filter(createdProps).length;
   const launchCount = qualified.filter(clickedLaunch).length;
+  const readyCount = qualified.filter(isReadyToLaunch).length;
   const trialCount = qualified.filter(everTrialed).length;
   const inTrialCount = qualified.filter(isInTrial).length;
   const customerCount = qualified.filter(isCustomer).length;
@@ -339,6 +347,7 @@ function computeFunnel(qualified: HubSpotContact[], allSignups: HubSpotContact[]
     ["Qualified Signups", qualifiedTotal],
     ["Authorized Airbnb", authCount],
     ["Created Properties", propsCount],
+    ["Ready to Launch", readyCount],
     ["Trial Started", trialCount],
     ["In Trial", inTrialCount],
     ["Failed Trialist", failedTrialistCount],
@@ -487,6 +496,10 @@ function computeKPIs(
     pct: previous > 0 ? ((current - previous) / previous) * 100 : (current > 0 ? 100 : 0),
   });
 
+  // Ready to Launch — cohort-based count of qualified signups whose
+  // property has been marked ready (mid-funnel activation signal).
+  const totalReadyToLaunch = qualifiedSignups.filter(isReadyToLaunch).length;
+
   // Exit paths (cohort-based, from qualified signups in this period).
   // Per Data Guide 3.0: distinguish real Churns from Failed Trialists.
   const totalChurned = qualifiedSignups.filter(isRealChurn).length;
@@ -507,6 +520,7 @@ function computeKPIs(
     totalRawSignups: totalSignups,
     totalTrials,
     totalInTrial,
+    totalReadyToLaunch,
     totalCustomers,
     totalFormerCustomers,
     totalChurned,
@@ -540,6 +554,7 @@ function computeCohort(contacts: HubSpotContact[]): CohortData {
   const auth = contacts.filter(isAuth).length;
   const props = contacts.filter(createdProps).length;
   const launch = contacts.filter(clickedLaunch).length;
+  const ready = contacts.filter(isReadyToLaunch).length;
   const trials = contacts.filter(everTrialed).length;
   const inTrial = contacts.filter(isInTrial).length;
   // Customers = current "customer" OR "Customer/Limited Access" — both count
@@ -556,6 +571,7 @@ function computeCohort(contacts: HubSpotContact[]): CohortData {
     authorized: auth,
     createdProperties: props,
     clickedLaunch: launch,
+    readyToLaunch: ready,
     trials,
     inTrial,
     customers,
@@ -566,6 +582,7 @@ function computeCohort(contacts: HubSpotContact[]): CohortData {
     authRate: n > 0 ? (auth / n) * 100 : 0,
     propsRate: n > 0 ? (props / n) * 100 : 0,
     launchRate: n > 0 ? (launch / n) * 100 : 0,
+    readyToLaunchRate: n > 0 ? (ready / n) * 100 : 0,
     trialRate: n > 0 ? (trials / n) * 100 : 0,
     inTrialRate: n > 0 ? (inTrial / n) * 100 : 0,
     customerRate: n > 0 ? (customers / n) * 100 : 0,

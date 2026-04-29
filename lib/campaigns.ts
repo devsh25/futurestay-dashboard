@@ -134,6 +134,7 @@ export async function computeCampaignAnalysis(
     signups: number;
     airbnbDq: number;
     auth: number;
+    ready: number;
     meeting: number;
     trial: number;
     cust: number;
@@ -142,7 +143,7 @@ export async function computeCampaignAnalysis(
     salesDq: number;
   };
   const empty = (): Agg => ({
-    leads: 0, signups: 0, airbnbDq: 0, auth: 0, meeting: 0,
+    leads: 0, signups: 0, airbnbDq: 0, auth: 0, ready: 0, meeting: 0,
     trial: 0, cust: 0, interested: 0, noShow: 0, salesDq: 0,
   });
   const agg: Record<string, Agg> = {};
@@ -176,6 +177,7 @@ export async function computeCampaignAnalysis(
     if (SIGNUP_LIFECYCLES.has(c.account_lifecycle || "")) a.signups += 1;
     if ((c.airbnbdqreason || "").trim()) a.airbnbDq += 1;
     if (c.airbnb_authorization_status === "COMPLETED" || c.airbnb_authorization_status === "REVOKED") a.auth += 1;
+    if ((c.property_ready_to_launch || "").toLowerCase() === "true") a.ready += 1;
     if (c.engagements_last_meeting_booked) a.meeting += 1;
     if (c.hs_v2_date_entered_opportunity || c.trial__start_date) a.trial += 1;
     if (c.hs_v2_date_entered_customer && hadPaidPlan(c) && !isQuickCancel(c)) a.cust += 1;
@@ -205,6 +207,7 @@ export async function computeCampaignAnalysis(
       signups: a.signups,
       qualifiedSignups: a.signups - a.airbnbDq,
       airbnbConnected: a.auth,
+      readyToLaunch: a.ready,
       airbnbDqRate: pct(a.airbnbDq, a.leads),
       salesDqRate: isCall ? pct(a.salesDq, a.leads) : null,
       noShowRate: isCall ? pct(a.noShow, a.leads) : null,
