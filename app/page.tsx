@@ -12,6 +12,7 @@ import DQChartCard from "@/components/dashboard/DQChartCard";
 import CohortCard from "@/components/dashboard/CohortCard";
 import TrialOutcomesCard from "@/components/dashboard/TrialOutcomesCard";
 import MetaSpendCard from "@/components/dashboard/MetaSpendCard";
+import CampaignAnalysisCard from "@/components/dashboard/CampaignAnalysisCard";
 import SectionHeading, { Icons } from "@/components/dashboard/SectionHeading";
 import ActiveFilterChips from "@/components/ActiveFilterChips";
 
@@ -141,6 +142,12 @@ export default function Dashboard() {
               </div>
 
               <MetaSpendCard
+                period={period}
+                customStart={customStart}
+                customEnd={customEnd}
+              />
+
+              <CampaignAnalysisCard
                 period={period}
                 customStart={customStart}
                 customEnd={customEnd}

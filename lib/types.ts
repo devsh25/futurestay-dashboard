@@ -18,6 +18,10 @@ export interface HubSpotContact {
   first_touch_utm_source: string | null;
   first_touch_utm_medium: string | null;
   first_touch_utm_term: string | null;
+  hs_analytics_first_url: string | null;
+  hs_analytics_source_data_2: string | null;
+  engagements_last_meeting_booked: string | null;
+  sales_call_outcome: string | null;
   hubspot_owner_id: string | null;
   country: string | null;
   city: string | null;
@@ -181,6 +185,39 @@ export interface DashboardData {
   trialOutcomes: TrialOutcomes;
   period: string;
   totalContacts: number;
+}
+
+// ---- Campaign Analysis (the 6-campaign Meta + HubSpot join) ----
+
+export interface CampaignAnalysisRow {
+  campaign: string;
+  type: "call" | "self";
+  spend: number;
+  optSignal: string;          // "meetings" | "signups" | "airbnb_connected"
+
+  leads: number;              // form submissions on landing page
+  meetingsBooked: number | null;  // call only
+  signups: number;            // lifecycle reached "signup" or beyond
+  qualifiedSignups: number;   // signups - airbnb DQ
+  airbnbConnected: number;    // auth status COMPLETED/REVOKED
+
+  airbnbDqRate: number;       // %
+  salesDqRate: number | null; // % (call only)
+  noShowRate: number | null;  // % (call only)
+  interestedRate: number | null; // % (call only)
+  formToMeetingRate: number | null; // % (call only)
+
+  costPerMeeting: number | null;  // call only
+  trials: number;
+  costPerTrial: number | null;
+  customers: number;
+  costPerCustomer: number | null;
+}
+
+export interface CampaignAnalysisData {
+  rows: CampaignAnalysisRow[];
+  since: string;  // YYYY-MM-DD
+  until: string;  // YYYY-MM-DD
 }
 
 // ---- Meta Ads ----
