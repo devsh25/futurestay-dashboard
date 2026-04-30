@@ -70,12 +70,20 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
     d: string;
     strokeWidth: number;
     color: string;
-    gradId: string;
+    pathId: string;
     from: Node;
     to: Node;
     kind: "horizontal" | "branch" | "vertical";
   };
   const paths: PathInfo[] = [];
+
+  // Uniform stroke width across every connector — the labels (–60%, 38%,
+  // etc.) carry the proportion information, so the lines themselves don't
+  // need to grow/shrink. Keeps the diagram readable regardless of cohort
+  // shape and ensures small branches like Trial Started → Customer stay
+  // visible even when only a small % converted.
+  const STROKE_W = 18;
+
   for (const n of NODES) {
     if (!n.parent) continue;
     const parent = NODES.find((p) => p.key === n.parent);
@@ -83,14 +91,6 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
     const stage = byName[n.key];
     const parentStage = byName[parent.key];
     if (!stage || !parentStage) continue;
-
-    const proportion = Math.min(1, stage.count / Math.max(1, parentStage.count));
-    // Wider strokes for outcome branches, slimmer for linear connectors.
-    // Non-linear paths (branches + verticals) need a healthy minimum so the
-    // Trial→Customer drop and Customer→Churned drop stay visible even when
-    // the proportion is small (Customer is often <20% of Trial Started).
-    const isLinear = n.cy === parent.cy;
-    const strokeWidth = Math.max(isLinear ? 8 : 14, proportion * (isLinear ? 50 : 70));
 
     let d = "";
     let kind: PathInfo["kind"] = "horizontal";
@@ -116,9 +116,9 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
 
     paths.push({
       d,
-      strokeWidth,
+      strokeWidth: STROKE_W,
       color: n.color,
-      gradId: `fgrad-${n.key.replace(/\s+/g, "_")}`,
+      pathId: `fpath-${n.key.replace(/\s+/g, "_")}`,
       from: parent,
       to: n,
       kind,
@@ -151,19 +151,24 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
             style={{ display: "block", aspectRatio: `${VB_W} / ${VB_H}`, maxWidth: "100%" }}
           >
             <defs>
+              {/* Hidden path geometry — referenced by both the visible stroke
+                  and the animated particle motion. Defining once here avoids
+                  duplicating the d-attribute and keeps animation in sync with
+                  the rendered line. */}
               {paths.map((p) => (
-                <linearGradient
-                  key={p.gradId}
-                  id={p.gradId}
-                  x1="0"
-                  y1="0"
-                  x2={p.kind === "horizontal" ? "1" : "0"}
-                  y2={p.kind === "horizontal" ? "0" : "1"}
-                >
-                  <stop offset="0%" stopColor={p.color} stopOpacity="0.45" />
-                  <stop offset="100%" stopColor={p.color} stopOpacity="0.95" />
-                </linearGradient>
+                <path key={`${p.pathId}-def`} id={p.pathId} d={p.d} fill="none" />
               ))}
+
+              {/* Soft glow filter for the moving particle so it reads as
+                  "energy flowing through the funnel" against the dark bg. */}
+              <filter id="particleGlow" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur stdDeviation="3" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+
               <linearGradient id="branchBand" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#1F1F28" stopOpacity="0" />
                 <stop offset="50%" stopColor="#1F1F28" stopOpacity="0.5" />
@@ -183,7 +188,7 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
             <rect x={20} y={310} width={VB_W - 40} height={310} fill="url(#branchBand)" rx={20} />
 
             {/* Flow paths */}
-            {paths.map((p) => {
+            {paths.map((p, idx) => {
               const isBranch = BRANCH_KEYS.has(p.to.key);
               const parentCount = byName[p.from.key]?.count ?? 0;
               const childCount = byName[p.to.key]?.count ?? 0;
@@ -208,15 +213,52 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
                   }
                 }
               }
+              // Stagger animation start so multiple particles don't all
+              // depart at the exact same instant — feels more organic.
+              const animDuration = p.kind === "horizontal" ? 3.2 : 2.6;
+              const animDelay = ((idx * 0.4) % 1.2).toFixed(2);
               return (
-                <g key={`path-${p.gradId}`}>
-                  <path
-                    d={p.d}
-                    stroke={`url(#${p.gradId})`}
+                <g key={`path-${p.pathId}`}>
+                  {/* Visible connector — solid color with reduced opacity so
+                      the animated particle reads on top of it. */}
+                  <use
+                    href={`#${p.pathId}`}
+                    stroke={p.color}
+                    strokeOpacity={0.55}
                     strokeWidth={p.strokeWidth}
                     fill="none"
                     strokeLinecap="round"
                   />
+
+                  {/* Animated particle: a small circle that traces the path
+                      end-to-end. Uses SVG <animateMotion> with mpath so the
+                      motion follows whatever curve the path defines (works
+                      identically for horizontal lines, branches, and
+                      vertical drops). */}
+                  <circle r={5} fill={p.color} filter="url(#particleGlow)">
+                    <animateMotion
+                      dur={`${animDuration}s`}
+                      begin={`${animDelay}s`}
+                      repeatCount="indefinite"
+                      rotate="auto"
+                      keyPoints="0;1"
+                      keyTimes="0;1"
+                    >
+                      <mpath href={`#${p.pathId}`} />
+                    </animateMotion>
+                  </circle>
+                  {/* Trailing softer particle for a tail effect. */}
+                  <circle r={3} fill={p.color} fillOpacity={0.5}>
+                    <animateMotion
+                      dur={`${animDuration}s`}
+                      begin={`${(parseFloat(animDelay) - 0.2).toFixed(2)}s`}
+                      repeatCount="indefinite"
+                      rotate="auto"
+                    >
+                      <mpath href={`#${p.pathId}`} />
+                    </animateMotion>
+                  </circle>
+
                   {labelText &&
                     (() => {
                       let midX = 0;
