@@ -24,6 +24,10 @@ export default function RepCard({ reps }: { reps: RepRow[] }) {
     <Card className="bg-[#15151A] border border-[#1F1F28] rounded-2xl shadow-none">
       <CardHeader className="pb-3">
         <CardTitle className="text-[15px] font-semibold text-white tracking-tight">Rep Scorecard</CardTitle>
+        <p className="text-[13px] text-[#8A8A94] mt-1.5 leading-relaxed">
+          <span className="text-[#A78BFA] font-medium">Cohort-based.</span>{" "}
+          Contacts assigned to each rep (via <code className="text-[#C9C9D1]">hubspot_owner_id</code>) whose <code className="text-[#C9C9D1]">createdate</code> falls in the selected window. Trial / customer rates count outcomes from that cohort.
+        </p>
       </CardHeader>
       <CardContent>
         <Table>

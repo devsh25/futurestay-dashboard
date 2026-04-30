@@ -88,6 +88,10 @@ function RateCard({
 export default function KPICards({ kpis, cohort }: { kpis: KPIs; cohort: CohortData }) {
   return (
     <div className="space-y-5">
+      <p className="text-[13px] text-[#8A8A94] leading-relaxed">
+        <span className="text-[#A78BFA] font-medium">Cohort-based.</span>{" "}
+        Top row: counts of contacts whose <code className="text-[#C9C9D1]">createdate</code> falls in the window. Sparkline = daily trend; delta vs same-length prior period. Bottom row: cohort conversion rates from Qualified Signup → each stage. Excludes WIX/HOPPER partner referrals.
+      </p>
       {/* Row 1: Core health numbers with sparklines + trend deltas */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KPIMainCard

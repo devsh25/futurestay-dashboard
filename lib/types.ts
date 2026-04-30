@@ -223,6 +223,8 @@ export interface CampaignAnalysisRow {
   costPerTrial: number | null;
   customers: number;
   costPerCustomer: number | null;
+  qsToTrialRate: number | null;     // Qualified Signups → Trial %
+  qsToCustomerRate: number | null;  // Qualified Signups → Customer %
 }
 
 export interface CampaignAnalysisData {

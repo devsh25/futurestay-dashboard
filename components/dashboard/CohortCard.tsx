@@ -41,9 +41,13 @@ export default function CohortCard({ cohort }: { cohort: CohortData; period: str
             Qualified signups from this period
           </Badge>
         </CardTitle>
+        <p className="text-[13px] text-[#8A8A94] mt-1.5 leading-relaxed">
+          <span className="text-[#A78BFA] font-medium">Cohort-based.</span>{" "}
+          Of qualified signups whose <code className="text-[#C9C9D1]">createdate</code> falls in the window, % that reached each downstream stage. Preserves causal attribution from signup to outcome.
+        </p>
       </CardHeader>
       <CardContent>
-        <p className="text-[12px] text-[#8A8A94] mb-3">
+        <p className="text-[13px] text-[#8A8A94] mb-3">
           Of {cohort.signups.toLocaleString()} qualified signups (Airbnb DQ excluded), what % reached each stage?
         </p>
         <Table>

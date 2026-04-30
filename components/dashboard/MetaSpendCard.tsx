@@ -90,6 +90,10 @@ export default function MetaSpendCard({
             Live from Meta Marketing API
           </Badge>
         </CardTitle>
+        <p className="text-[13px] text-[#8A8A94] mt-1.5 leading-relaxed">
+          <span className="text-[#60A5FA] font-medium">Period-based.</span>{" "}
+          Spend, impressions, clicks, CTR, CPC pulled from Meta Marketing API for the selected window. Independent of HubSpot — purely platform metrics.
+        </p>
       </CardHeader>
       <CardContent>
         {loading && !data && (

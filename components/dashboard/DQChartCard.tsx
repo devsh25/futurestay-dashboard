@@ -25,6 +25,10 @@ export default function DQChartCard({ data }: { data: DQWeekly[] }) {
     <Card className="bg-[#15151A] border border-[#1F1F28] rounded-2xl shadow-none">
       <CardHeader className="pb-3">
         <CardTitle className="text-[15px] font-semibold text-white tracking-tight">Airbnb DQ Reasons (Weekly)</CardTitle>
+        <p className="text-[13px] text-[#8A8A94] mt-1.5 leading-relaxed">
+          <span className="text-[#A78BFA] font-medium">Period-based, weekly.</span>{" "}
+          Counts of <code className="text-[#C9C9D1]">airbnbdqreason</code> values bucketed by signup week. Includes only DQ&apos;d contacts (auto-disqualified at the Airbnb step).
+        </p>
       </CardHeader>
       <CardContent>
         {!data.length ? (

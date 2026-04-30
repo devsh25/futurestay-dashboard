@@ -71,8 +71,10 @@ function CampaignRow({ r }: { r: CampaignAnalysisRow }) {
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#E5E5EB]">{fmtMoney(r.costPerMeeting)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#E5E5EB]">{fmtNum(r.trials)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#E5E5EB]">{fmtMoney(r.costPerTrial)}</TableCell>
+      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#A78BFA]">{fmtPct(r.qsToTrialRate)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-white font-semibold">{fmtNum(r.customers)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-white font-semibold">{fmtMoney(r.costPerCustomer)}</TableCell>
+      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#6EE7B7]">{fmtPct(r.qsToCustomerRate)}</TableCell>
     </TableRow>
   );
 }
@@ -128,6 +130,10 @@ export default function CampaignAnalysisCard({
             6 Meta campaigns × HubSpot funnel
           </Badge>
         </CardTitle>
+        <p className="text-[13px] text-[#8A8A94] mt-1.5 leading-relaxed">
+          <span className="text-[#A78BFA] font-medium">Cohort-based.</span>{" "}
+          Spend (Meta API) joined to HubSpot contacts whose <code className="text-[#C9C9D1]">createdate</code> is in the window AND who attribute to the campaign via <code className="text-[#C9C9D1]">first_touch_utm_campaign</code> ∪ <code className="text-[#C9C9D1]">hs_analytics_source_data_2</code> ∪ landing-page URL fallback. QS → T and QS → C are conversion rates from <span className="text-white">Qualified Signups</span> (signups − Airbnb DQ) to Trial / Customer for that cohort.
+        </p>
       </CardHeader>
       <CardContent className="pt-4">
         {loading && !data && (
@@ -171,8 +177,10 @@ export default function CampaignAnalysisCard({
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">$/Mtg</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Trials</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">$/Trial</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">QS → T</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Cust</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">$/Cust</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">QS → C</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

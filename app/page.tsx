@@ -5,7 +5,6 @@ import { DashboardData, PeriodFilter } from "@/lib/types";
 import FilterBar from "@/components/FilterBar";
 import KPICards from "@/components/dashboard/KPICards";
 import FunnelCard from "@/components/dashboard/FunnelCard";
-import CampaignCard from "@/components/dashboard/CampaignCard";
 import GeoCard from "@/components/dashboard/GeoCard";
 import RepCard from "@/components/dashboard/RepCard";
 import DQChartCard from "@/components/dashboard/DQChartCard";
@@ -20,13 +19,30 @@ export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [period, setPeriod] = useState<PeriodFilter>("allTime");
-  const [customStart, setCustomStart] = useState("2026-01-01");
-  const [customEnd, setCustomEnd] = useState(
-    new Date().toISOString().slice(0, 10)
-  );
+  // Default custom range: Feb 1, 2026 → T−14d.
+  // T−14d enforces the cohort-maturity rule (Futurestay's median signup→customer
+  // is ~14 days, so anything fresher than that has unmatured conversion data).
+  const today = new Date();
+  const tMinus14 = new Date(today);
+  tMinus14.setDate(tMinus14.getDate() - 14);
+  const tMinus14Iso = tMinus14.toISOString().slice(0, 10);
+
+  const [period, setPeriod] = useState<PeriodFilter>("custom");
+  const [customStart, setCustomStart] = useState("2026-02-01");
+  const [customEnd, setCustomEnd] = useState(tMinus14Iso);
   const [countries, setCountries] = useState<string[]>([]);
   const [channels, setChannels] = useState<string[]>([]);
+
+  // Cohort-maturity warning: end date inside the last 14 days means trial
+  // and customer counts for recent signups haven't fully materialized.
+  const isMaturityRisky = (() => {
+    if (period !== "custom") return false;
+    const end = new Date(customEnd + "T00:00:00Z");
+    const cutoff = new Date(today);
+    cutoff.setUTCHours(0, 0, 0, 0);
+    cutoff.setUTCDate(cutoff.getUTCDate() - 14);
+    return end > cutoff;
+  })();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -111,6 +127,20 @@ export default function Dashboard() {
         >
           {data && (
             <>
+              {isMaturityRisky && (
+                <div className="bg-[#2A1F0F] border border-[#F59E0B]/30 rounded-xl p-4 text-[#FCD34D] flex items-start gap-3">
+                  <span className="text-lg leading-none mt-0.5">⚠</span>
+                  <div className="flex-1">
+                    <p className="font-semibold text-[13px] text-[#FCD34D]">
+                      Cohort still maturing
+                    </p>
+                    <p className="text-[12px] mt-1 text-[#FBBF24]/90 leading-relaxed">
+                      Your end date <span className="font-mono">{customEnd}</span> is within the last 14 days. Trial and Customer counts for recent signups will be undercounted because the median signup-to-customer time is ~14 days. Set the end date to <button onClick={() => setCustomEnd(tMinus14Iso)} className="underline hover:text-white font-mono">{tMinus14Iso}</button> for fully-matured numbers.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <ActiveFilterChips
                 period={period}
                 customStart={customStart}
@@ -137,7 +167,6 @@ export default function Dashboard() {
                 iconColor="#6EE7B7"
               />
               <FunnelCard funnel={data.funnel} />
-              <CampaignCard campaigns={data.campaigns} />
 
               <MetaSpendCard
                 period={period}

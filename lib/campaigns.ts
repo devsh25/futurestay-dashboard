@@ -393,12 +393,17 @@ export async function computeCampaignAnalysis(
     launchByBucket[def.key] = new Date(`${def.launch}T00:00:00.000Z`);
   }
 
+  // Cohort-based aggregation: every metric is counted for contacts whose
+  // createdate falls in the window. This preserves the causal link between
+  // campaign spend and outcomes for that cohort. Note: recent leads (within
+  // ~14 days of the cohort end) may not have matured to customer yet —
+  // the dashboard surfaces a maturity warning when that's the case.
   for (const c of contacts) {
     // Standard exclusions
     const ref = (c.referral_source || "").toUpperCase().trim();
     if (ref === "WIX" || ref === "HOPPER") continue;
 
-    // Date range
+    // Date range (cohort: filter by createdate)
     const created = parseDate(c.createdate);
     if (!created || created < start || created > end) continue;
 
@@ -464,6 +469,10 @@ export async function computeCampaignAnalysis(
       costPerTrial: cpa(a.trial),
       customers: a.cust,
       costPerCustomer: cpa(a.cust),
+      // QS conversion rates: of Qualified Signups (signups − Airbnb DQ),
+      // what % progressed to trial / customer? Cohort-based.
+      qsToTrialRate: (a.signups - a.airbnbDq) > 0 ? (a.trial / (a.signups - a.airbnbDq)) * 100 : null,
+      qsToCustomerRate: (a.signups - a.airbnbDq) > 0 ? (a.cust / (a.signups - a.airbnbDq)) * 100 : null,
     };
   });
 

@@ -32,24 +32,29 @@ const CHURN_Y = 660;
 // Linear x positions: 150, 430, 710, 990, 1270 (280 apart, with right margin)
 const LIN_X = [150, 430, 710, 990, 1270];
 
+// 3-color palette designed for dark backgrounds:
+//   VIOLET — linear in-flight stages (signup, auth, props, ready, trial, in-trial)
+//   MINT   — positive outcome (Customer)
+//   CORAL  — negative outcomes (Failed Trialist, Churned)
+const C_INFLIGHT = "#A78BFA";  // violet
+const C_POSITIVE = "#6EE7B7";  // mint
+const C_NEGATIVE = "#F87171";  // coral
+
 const NODES: Node[] = [
-  // Linear conversion path (left → right)
-  { key: "Qualified Signups",  label: "Qualified Signups",  cx: LIN_X[0], cy: TOP_Y, color: "#A78BFA" },
-  { key: "Authorized Airbnb",  label: "Authorized Airbnb",  cx: LIN_X[1], cy: TOP_Y, color: "#8B5CF6", parent: "Qualified Signups" },
-  { key: "Created Properties", label: "Created Properties", cx: LIN_X[2], cy: TOP_Y, color: "#34D399", parent: "Authorized Airbnb" },
-  { key: "Ready to Launch",    label: "Ready to Launch",    cx: LIN_X[3], cy: TOP_Y, color: "#FBBF24", parent: "Created Properties", icon: "🚀" },
-  { key: "Trial Started",      label: "Trial Started",      cx: LIN_X[4], cy: TOP_Y, color: "#6EE7B7", parent: "Ready to Launch", icon: "★" },
+  // Linear conversion path (left → right) — all violet
+  { key: "Qualified Signups",  label: "Qualified Signups",  cx: LIN_X[0], cy: TOP_Y, color: C_INFLIGHT },
+  { key: "Authorized Airbnb",  label: "Authorized Airbnb",  cx: LIN_X[1], cy: TOP_Y, color: C_INFLIGHT, parent: "Qualified Signups" },
+  { key: "Created Properties", label: "Created Properties", cx: LIN_X[2], cy: TOP_Y, color: C_INFLIGHT, parent: "Authorized Airbnb" },
+  { key: "Ready to Launch",    label: "Ready to Launch",    cx: LIN_X[3], cy: TOP_Y, color: C_INFLIGHT, parent: "Created Properties", icon: "🚀" },
+  { key: "Trial Started",      label: "Trial Started",      cx: LIN_X[4], cy: TOP_Y, color: C_INFLIGHT, parent: "Ready to Launch", icon: "★" },
 
   // Branches off Trial Started.
-  //   Customer is directly below Trial Started (vertical line — looks like
-  //   the natural continuation of the funnel).
-  //   In Trial + Failed Trialist fan to the left as alternate outcomes.
-  { key: "Failed Trialist",    label: "Failed Trialist",    cx: 350,  cy: BRANCH_Y, color: "#A78BFA", parent: "Trial Started", icon: "⊘", parentExitX: LIN_X[4] - NODE_W / 2 + 30 },
-  { key: "In Trial",           label: "In Trial",           cx: 810,  cy: BRANCH_Y, color: "#FB923C", parent: "Trial Started", icon: "☆", parentExitX: LIN_X[4] - 60 },
-  { key: "Customer",           label: "Customer",           cx: LIN_X[4], cy: BRANCH_Y, color: "#6EE7B7", parent: "Trial Started", icon: "★★" },
+  { key: "Failed Trialist",    label: "Failed Trialist",    cx: 350,      cy: BRANCH_Y, color: C_NEGATIVE, parent: "Trial Started", icon: "⊘", parentExitX: LIN_X[4] - NODE_W / 2 + 30 },
+  { key: "In Trial",           label: "In Trial",           cx: 810,      cy: BRANCH_Y, color: C_INFLIGHT, parent: "Trial Started", icon: "☆", parentExitX: LIN_X[4] - 60 },
+  { key: "Customer",           label: "Customer",           cx: LIN_X[4], cy: BRANCH_Y, color: C_POSITIVE, parent: "Trial Started", icon: "★★" },
 
   // Customer → Churned (vertical drop)
-  { key: "Churned",            label: "Churned",            cx: LIN_X[4], cy: CHURN_Y, color: "#F87171", parent: "Customer", icon: "⚠" },
+  { key: "Churned",            label: "Churned",            cx: LIN_X[4], cy: CHURN_Y,  color: C_NEGATIVE, parent: "Customer", icon: "⚠" },
 ];
 
 const BRANCH_KEYS = new Set(["In Trial", "Failed Trialist", "Customer"]);
@@ -80,9 +85,12 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
     if (!stage || !parentStage) continue;
 
     const proportion = Math.min(1, stage.count / Math.max(1, parentStage.count));
-    // Wider strokes for outcome branches, slimmer for linear connectors
+    // Wider strokes for outcome branches, slimmer for linear connectors.
+    // Non-linear paths (branches + verticals) need a healthy minimum so the
+    // Trial→Customer drop and Customer→Churned drop stay visible even when
+    // the proportion is small (Customer is often <20% of Trial Started).
     const isLinear = n.cy === parent.cy;
-    const strokeWidth = Math.max(isLinear ? 8 : 5, proportion * (isLinear ? 50 : 60));
+    const strokeWidth = Math.max(isLinear ? 8 : 14, proportion * (isLinear ? 50 : 70));
 
     let d = "";
     let kind: PathInfo["kind"] = "horizontal";
@@ -131,8 +139,9 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
       </CardHeader>
 
       <CardContent className="pt-6">
-        <p className="text-[13px] text-[#8A8A94] mb-3">
-          Linear conversion path top → Trial Started, then 3 outcomes branch downward (Customer can further churn).
+        <p className="text-[14px] text-[#A8A8B2] mb-4 leading-relaxed">
+          <span className="text-[#A78BFA] font-medium">Cohort-based.</span>{" "}
+          Of qualified signups whose <code className="text-[#C9C9D1] text-[13px]">createdate</code> falls in the window, what % reached each stage. Linear path top → Trial Started, then 3 outcomes branch downward (Customer can further churn).
         </p>
 
         <svg
@@ -151,8 +160,8 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
                   x2={p.kind === "horizontal" ? "1" : "0"}
                   y2={p.kind === "horizontal" ? "0" : "1"}
                 >
-                  <stop offset="0%" stopColor={p.color} stopOpacity="0.25" />
-                  <stop offset="100%" stopColor={p.color} stopOpacity="0.85" />
+                  <stop offset="0%" stopColor={p.color} stopOpacity="0.45" />
+                  <stop offset="100%" stopColor={p.color} stopOpacity="0.95" />
                 </linearGradient>
               ))}
               <linearGradient id="branchBand" x1="0" y1="0" x2="0" y2="1">
@@ -329,27 +338,25 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
             })}
           </svg>
 
-        {/* Legend */}
-        <div className="mt-5 pt-4 border-t border-[#1F1F28] grid grid-cols-2 md:grid-cols-5 gap-3 text-[11px]">
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-[#FBBF24]" />
-            <span className="text-[#8A8A94]">Ready = property setup complete</span>
+        {/* Legend — 3-color palette: violet=in-flight, mint=positive, coral=negative */}
+        <div className="mt-6 pt-5 border-t border-[#1F1F28] grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-[14px] leading-snug">
+          <div className="flex items-start gap-2.5">
+            <span className="mt-1.5 h-2.5 w-2.5 rounded-full bg-[#A78BFA] shrink-0" />
+            <span className="text-[#C9C9D1]">
+              <span className="text-white font-medium">In-flight</span> = stages still progressing (Auth → Properties → Ready → Trial → In Trial)
+            </span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-[#FB923C]" />
-            <span className="text-[#8A8A94]">In Trial = still active</span>
+          <div className="flex items-start gap-2.5">
+            <span className="mt-1.5 h-2.5 w-2.5 rounded-full bg-[#6EE7B7] shrink-0" />
+            <span className="text-[#C9C9D1]">
+              <span className="text-white font-medium">Customer</span> = real paid customer (Amplify/Flex, ≥2 days)
+            </span>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-[#A78BFA]" />
-            <span className="text-[#8A8A94]">Failed = cancelled before converting</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-[#6EE7B7]" />
-            <span className="text-[#8A8A94]">Customer = real paid (Amplify/Flex)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-[#F87171]" />
-            <span className="text-[#8A8A94]">Churned = cancelled after ≥2 days</span>
+          <div className="flex items-start gap-2.5">
+            <span className="mt-1.5 h-2.5 w-2.5 rounded-full bg-[#F87171] shrink-0" />
+            <span className="text-[#C9C9D1]">
+              <span className="text-white font-medium">Failed / Churned</span> = cancelled before converting, or after ≥2 days as customer
+            </span>
           </div>
         </div>
       </CardContent>

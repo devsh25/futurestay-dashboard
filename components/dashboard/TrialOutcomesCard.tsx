@@ -106,6 +106,10 @@ export default function TrialOutcomesCard({ outcomes }: { outcomes: TrialOutcome
             Where trialists ended up
           </Badge>
         </CardTitle>
+        <p className="text-[13px] text-[#8A8A94] mt-2 leading-relaxed">
+          <span className="text-[#A78BFA] font-medium">Cohort-based.</span>{" "}
+          Of contacts who entered Trialist (<code className="text-[#C9C9D1]">trial__start_date</code> populated) within the window, what happened next: still in trial, became real Customer (Amplify/Flex ≥ 2 days), failed before converting, or churned.
+        </p>
       </CardHeader>
 
       <CardContent className="pt-6">

@@ -17,6 +17,10 @@ export default function GeoCard({ geo }: { geo: GeoRow[] }) {
     <Card className="bg-[#15151A] border border-[#1F1F28] rounded-2xl shadow-none">
       <CardHeader className="pb-3">
         <CardTitle className="text-[15px] font-semibold text-white tracking-tight">Country & City Analysis</CardTitle>
+        <p className="text-[13px] text-[#8A8A94] mt-1.5 leading-relaxed">
+          <span className="text-[#A78BFA] font-medium">Cohort-based.</span>{" "}
+          Signups bucketed by HubSpot <code className="text-[#C9C9D1]">country</code> (falls back to <code className="text-[#C9C9D1]">ip_country</code>). Trial / customer counts are outcomes for contacts whose <code className="text-[#C9C9D1]">createdate</code> falls in the window.
+        </p>
       </CardHeader>
       <CardContent>
         <Table>
