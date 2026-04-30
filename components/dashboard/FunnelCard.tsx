@@ -49,12 +49,12 @@ const X_FAILED = X_TRIAL - 270;   // 760
 const X_INTRIAL = X_TRIAL;        // 1030 — directly under Trial Started
 const X_CUSTOMER = X_TRIAL + 270; // 1300
 
-// Restricted palette — blue spectrum + neutrals only. No red/green/coral
+// Restricted palette — blue spectrum + white only. No red/green/coral
 // in decorative elements. Status colors (delta pills) keep green/red
 // because they're tiny and universally recognised.
 const C_INFLIGHT = "#1E6FFF";   // electric blue — primary
 const C_POSITIVE = "#60A5FA";   // light blue — Customer (positive arrival)
-const C_NEUTRAL = "#475569";    // slate — Failed Trialist / Churned (off-path)
+const C_NEUTRAL = "#FFFFFF";    // white — Failed Trialist / Churned (off-path)
 
 const NODES: Node[] = [
   // Linear spine
@@ -490,7 +490,7 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
             </span>
           </div>
           <div className="flex items-start gap-2.5">
-            <span className="mt-1.5 h-2.5 w-2.5 rounded-full bg-[#475569] shrink-0" />
+            <span className="mt-1.5 h-2.5 w-2.5 rounded-full bg-white shrink-0" />
             <span className="text-[#C9D1DC]">
               <span className="text-white font-medium">Off-path</span> = Failed Trialist or Churned (left the funnel)
             </span>

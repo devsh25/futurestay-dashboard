@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { DashboardData, PeriodFilter } from "@/lib/types";
 import FilterBar from "@/components/FilterBar";
 import KPICards from "@/components/dashboard/KPICards";
+import AllTimeChart from "@/components/dashboard/AllTimeChart";
 import FunnelCard from "@/components/dashboard/FunnelCard";
 import GeoCard from "@/components/dashboard/GeoCard";
 import RepCard from "@/components/dashboard/RepCard";
@@ -164,6 +165,10 @@ export default function Dashboard() {
               />
               <KPICards kpis={data.kpis} cohort={data.cohort} />
 
+              {/* Headline timeseries — independent of period filter,
+                  shows daily milestone counts since first signup. */}
+              <AllTimeChart />
+
               <SectionHeading
                 icon={Icons.Funnel}
                 title="Funnel & Campaign Performance"
@@ -172,13 +177,17 @@ export default function Dashboard() {
               />
               <FunnelCard funnel={data.funnel} />
 
-              <MetaSpendCard
+              <CampaignAnalysisCard
                 period={period}
                 customStart={customStart}
                 customEnd={customEnd}
               />
 
-              <CampaignAnalysisCard
+              {/* Meta Ads card lives at the end of the funnel section so
+                  the spend numbers sit next to the campaign performance
+                  table they relate to, rather than splitting the funnel
+                  story in half. */}
+              <MetaSpendCard
                 period={period}
                 customStart={customStart}
                 customEnd={customEnd}

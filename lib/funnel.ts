@@ -854,3 +854,119 @@ export function processDashboardData(
     totalContacts: qualifiedSignups.length,
   };
 }
+
+// ---- All-time daily timeseries (for the headline line chart) ----
+//
+// Buckets every contact into the day of the relevant event (createdate
+// for activation milestones; trial / customer entry dates for the
+// downstream lifecycle stages) and produces parallel arrays the chart
+// can render directly.
+//
+// Bucketing rules per metric:
+//   - signups:        createdate (Airbnb DQ excluded)
+//   - airbnbConnects: createdate (HubSpot doesn't expose an auth-event
+//                     timestamp; same-day proxy is correct for ≥95% of
+//                     users since auth happens immediately after signup)
+//   - readyToLaunch:  createdate (no event-date field exists)
+//   - trials:         hs_v2_date_entered_opportunity (real trial start)
+//   - customers:      hs_v2_date_entered_customer (real customer start)
+//
+// The trials/customers buckets therefore reflect WHEN those people
+// became trials/customers, not when they signed up — which is what a
+// time-series chart should show.
+export interface TimeSeries {
+  days: string[];
+  signups: number[];
+  airbnbConnects: number[];
+  readyToLaunch: number[];
+  trials: number[];
+  customers: number[];
+}
+
+export function computeTimeSeries(contacts: HubSpotContact[]): TimeSeries {
+  const clean = excludePartnerSources(contacts);
+
+  // Find earliest event date across any metric — that's where the
+  // x-axis should start.
+  let minTs = Infinity;
+  let maxTs = -Infinity;
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const todayTs = today.getTime();
+
+  function consider(d: string | null) {
+    if (!d) return;
+    const dt = new Date(d);
+    if (isNaN(dt.getTime())) return;
+    const t = dt.getTime();
+    if (t < minTs) minTs = t;
+    if (t > maxTs) maxTs = t;
+  }
+
+  for (const c of clean) {
+    if (!hasDQ(c)) consider(c.createdate);
+    if (everTrialed(c)) consider(c.trial__start_date || c.hs_v2_date_entered_opportunity);
+    if (isCustomer(c)) consider(c.hs_v2_date_entered_customer);
+  }
+
+  if (!isFinite(minTs)) {
+    return { days: [], signups: [], airbnbConnects: [], readyToLaunch: [], trials: [], customers: [] };
+  }
+
+  // Snap min to start of day, cap max at today.
+  const startMs = new Date(new Date(minTs).toISOString().slice(0, 10) + "T00:00:00Z").getTime();
+  const endMs = Math.min(todayTs, maxTs);
+  const dayMs = 86_400_000;
+  const dayCount = Math.floor((endMs - startMs) / dayMs) + 1;
+
+  const days: string[] = [];
+  const signups: number[] = new Array(dayCount).fill(0);
+  const airbnbConnects: number[] = new Array(dayCount).fill(0);
+  const readyToLaunch: number[] = new Array(dayCount).fill(0);
+  const trials: number[] = new Array(dayCount).fill(0);
+  const customers: number[] = new Array(dayCount).fill(0);
+
+  for (let i = 0; i < dayCount; i++) {
+    days.push(new Date(startMs + i * dayMs).toISOString().slice(0, 10));
+  }
+
+  function bucketIndex(d: string | null): number {
+    if (!d) return -1;
+    const t = new Date(d).getTime();
+    if (isNaN(t)) return -1;
+    const dayStart = new Date(new Date(t).toISOString().slice(0, 10) + "T00:00:00Z").getTime();
+    const idx = Math.floor((dayStart - startMs) / dayMs);
+    return idx >= 0 && idx < dayCount ? idx : -1;
+  }
+
+  for (const c of clean) {
+    // Qualified signups
+    if (!hasDQ(c)) {
+      const i = bucketIndex(c.createdate);
+      if (i >= 0) signups[i]++;
+    }
+    // Airbnb connects
+    if (isAuth(c)) {
+      const i = bucketIndex(c.createdate);
+      if (i >= 0) airbnbConnects[i]++;
+    }
+    // Ready to launch
+    if (isReadyToLaunch(c)) {
+      const i = bucketIndex(c.createdate);
+      if (i >= 0) readyToLaunch[i]++;
+    }
+    // Trials — by actual trial start date so the line reflects when
+    // people became trialists, not when they signed up.
+    if (everTrialed(c)) {
+      const i = bucketIndex(c.trial__start_date || c.hs_v2_date_entered_opportunity);
+      if (i >= 0) trials[i]++;
+    }
+    // Customers — by actual customer entry date.
+    if (isCustomer(c)) {
+      const i = bucketIndex(c.hs_v2_date_entered_customer);
+      if (i >= 0) customers[i]++;
+    }
+  }
+
+  return { days, signups, airbnbConnects, readyToLaunch, trials, customers };
+}
