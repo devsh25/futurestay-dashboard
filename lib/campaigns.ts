@@ -131,8 +131,15 @@ function classifyNote(body: string): Outcome {
   // Skip post-conversion audit templates and outreach SMS templates
   if (text.includes("new customer audit") || text.includes("id verify status") || text.includes("property audit result")) return null;
   if (text.includes("this is joe from futurestay") || text.includes("this is chris from futurestay") || text.includes("this is jeremiah")) return null;
-  // No-show signals
-  const noShowKeys = ["no show", "no-show", "noshow", "didn't show", "did not show", "ghosted", "never showed", "missed the call", "missed call", "did not attend", "didn't attend"];
+  // No-show signals.
+  // "vm" / "voicemail" / "left vm" / "lvm" all mean the rep called and
+  // nobody picked up — same outcome class as a no-show. Match on word
+  // boundary so we don't false-positive on things like "rvm" inside
+  // longer tokens. Also catch the common "n/s" shorthand reps use.
+  const text2 = ` ${text} `;  // pad so word-boundary regex catches edge tokens
+  const vmRegex = /(^|[^a-z])(vm|lvm|l\/vm|n\/s|n\.s\.)([^a-z]|$)/;
+  if (vmRegex.test(text2)) return "no_show";
+  const noShowKeys = ["no show", "no-show", "noshow", "didn't show", "did not show", "ghosted", "never showed", "missed the call", "missed call", "did not attend", "didn't attend", "voicemail", "voice mail", "left voicemail", "left a voicemail", "left a vm", "left vm", "no answer", "no-answer", "didn't pick up", "did not pick up", "did not answer", "didn't answer"];
   if (noShowKeys.some((k) => text.includes(k))) return "no_show";
   // DQ
   const dqKeys = ["disqualif", "not a fit", "invalid number", "wrong number", "fake number", "spam", "fraud", "not potential", "unsupport", "no str", "no english", "do not call", "mistakenly signed", "signed up by mistake", "booked because she thought", "no airbnb", "language barrier", "wants to attend a class"];

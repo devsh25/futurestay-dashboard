@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { MetaInsightsData, PeriodFilter } from "@/lib/types";
 
 function fmtMoney(n: number): string {
@@ -107,110 +106,93 @@ export default function MetaSpendCard({
         )}
         {data && (
           <>
-            <div className="grid grid-cols-3 md:grid-cols-6 gap-3 pb-4 border-b border-[#1F2937]">
-              <Stat label="Spend" value={fmtMoney(data.summary.spend)} sub={`${data.since} → ${data.until}`} />
-              <Stat label="Impressions" value={fmtNum(data.summary.impressions)} />
-              <Stat label="Clicks" value={fmtNum(data.summary.clicks)} />
-              <Stat label="CTR" value={`${data.summary.ctr.toFixed(2)}%`} />
-              <Stat label="CPC" value={fmtMoney(data.summary.cpc)} />
-              <Stat label="CPM" value={fmtMoney(data.summary.cpm)} />
-            </div>
-
-            {/* Daily spend */}
-            {data.daily.length > 0 && (
-              <div className="mt-4">
-                <p className="text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold mb-2">
-                  Daily Spend
-                </p>
-                <div className="h-40">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={data.daily} margin={{ top: 4, right: 0, bottom: 0, left: -10 }}>
-                      <XAxis
-                        dataKey="date"
-                        tick={{ fontSize: 9, fill: "#8B92A3" }}
-                        axisLine={{ stroke: "#1F2937" }}
-                        tickLine={false}
-                        tickFormatter={(v: string) => {
-                          const [, m, d] = v.split("-");
-                          return `${parseInt(m)}/${parseInt(d)}`;
-                        }}
-                        minTickGap={20}
-                      />
-                      <YAxis
-                        tick={{ fontSize: 9, fill: "#5B6478" }}
-                        axisLine={false}
-                        tickLine={false}
-                        tickFormatter={(v: number) => (v >= 1000 ? `$${(v / 1000).toFixed(1)}K` : `$${v}`)}
-                      />
-                      <Tooltip
-                        cursor={{ fill: "rgba(96, 165, 250, 0.08)" }}
-                        contentStyle={{
-                          backgroundColor: "#0E1422",
-                          borderRadius: 10,
-                          border: "1px solid #1F2937",
-                          fontSize: 12,
-                          boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
-                          padding: "8px 12px",
-                          color: "#FFFFFF",
-                        }}
-                        labelStyle={{ color: "#FFFFFF" }}
-                        itemStyle={{ color: "#60A5FA" }}
-                        formatter={(value) => {
-                          const n = typeof value === "number" ? value : parseFloat(String(value ?? 0));
-                          return [fmtMoney(isNaN(n) ? 0 : n), "Spend"];
-                        }}
-                      />
-                      <Bar dataKey="spend" fill="#60A5FA" radius={[3, 3, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+            {/* Headline strip — totals across all campaigns.
+                Subscriptions (= Airbnb Connect event) and Results (=
+                optimization signal: meeting for call, signup for self) */}
+            {(() => {
+              const totalSubs = data.campaigns.reduce((s, c) => s + c.subscriptions, 0);
+              const totalResults = data.campaigns.reduce((s, c) => s + c.resultValue, 0);
+              const blendedCps = totalSubs > 0 ? data.summary.spend / totalSubs : 0;
+              const blendedCpr = totalResults > 0 ? data.summary.spend / totalResults : 0;
+              return (
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 pb-4 border-b border-[#1F2937]">
+                  <Stat label="Amount Spent" value={fmtMoney(data.summary.spend)} sub={`${data.since} → ${data.until}`} />
+                  <Stat label="Airbnb Connects" value={fmtNum(totalSubs)} sub="Subscribe event" />
+                  <Stat label="Cost / Connect" value={blendedCps > 0 ? fmtMoney(blendedCps) : "—"} />
+                  <Stat label="Results" value={fmtNum(totalResults)} sub="optimization signal" />
+                  <Stat label="Cost / Result" value={blendedCpr > 0 ? fmtMoney(blendedCpr) : "—"} />
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
-            {/* Campaigns table */}
+            {/* Campaigns table — columns match Meta UI exactly:
+                  Campaign | Subscriptions | $/Sub | Results | $/Result | Spend
+                The Result column shows the campaign's optimization
+                signal (Website Contacts / Leads / Subscribes / Completed
+                Reg) since Meta reports a different event type per
+                campaign objective. */}
             <div className="mt-4">
               <p className="text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold mb-2">
-                Top Campaigns ({data.summary.campaignCount})
+                Per-Campaign Performance ({data.summary.campaignCount})
               </p>
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-[#1F2937] hover:bg-transparent">
-                    <TableHead className="text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Campaign</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Spend</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Impr.</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Clicks</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">CTR</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">CPC</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data.campaigns.slice(0, 15).map((c) => (
-                    <TableRow key={c.id || c.name} className="border-[#1F2937] hover:bg-[#0E1422] transition-colors">
-                      <TableCell className="font-medium text-[12px] text-white max-w-[380px] truncate" title={c.name}>
-                        {shortCampaign(c.name)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-[12px] tabular-nums text-white">
-                        {fmtMoney(c.spend)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">
-                        {fmtNum(c.impressions)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">
-                        {fmtNum(c.clicks)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#8B92A3]">
-                        {c.ctr.toFixed(2)}%
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#8B92A3]">
-                        {fmtMoney(c.cpc)}
-                      </TableCell>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-[#1F2937] hover:bg-transparent">
+                      <TableHead className="text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Campaign</TableHead>
+                      <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Airbnb Connects</TableHead>
+                      <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Cost / Connect</TableHead>
+                      <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Results</TableHead>
+                      <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Cost / Result</TableHead>
+                      <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Amount Spent</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {data.campaigns.slice(0, 15).map((c) => (
+                      <TableRow key={c.id || c.name} className="border-[#1F2937] hover:bg-[#0E1422] transition-colors">
+                        <TableCell className="font-medium text-[12px] text-white max-w-[380px] truncate" title={c.name}>
+                          {shortCampaign(c.name)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-[12px] tabular-nums text-white">
+                          {fmtNum(c.subscriptions)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">
+                          {c.costPerSub > 0 ? fmtMoney(c.costPerSub) : "—"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex flex-col items-end leading-tight">
+                            <span className="font-mono text-[12px] tabular-nums text-white">{fmtNum(c.resultValue)}</span>
+                            <span className="text-[10px] text-[#5B6478]">{c.resultLabel || "—"}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">
+                          {c.resultCost > 0 ? fmtMoney(c.resultCost) : "—"}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-[12px] tabular-nums text-white font-semibold">
+                          {fmtMoney(c.spend)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
               {data.campaigns.length === 0 && (
                 <p className="text-[12px] text-[#8B92A3] py-4 text-center">No campaigns with spend in this period.</p>
               )}
+            </div>
+
+            {/* Event mapping + reconciliation note */}
+            <div className="mt-4 pt-3 border-t border-[#1F2937] space-y-2">
+              <p className="text-[11px] text-[#8B92A3] leading-relaxed">
+                <span className="text-[#60A5FA] font-medium">Meta event ⇢ funnel meaning:</span>{" "}
+                <span className="font-mono text-[#C9D1DC]">Subscribe</span> ⇢ Airbnb Connected ·{" "}
+                <span className="font-mono text-[#C9D1DC]">Lead / Contact</span> ⇢ Meeting Booked (call campaigns) ·{" "}
+                <span className="font-mono text-[#C9D1DC]">Complete Registration</span> ⇢ Signup (self-serve campaigns).
+              </p>
+              <p className="text-[11px] text-[#8B92A3] leading-relaxed">
+                <span className="text-[#60A5FA] font-medium">vs Campaign Analysis:</span>{" "}
+                Meta numbers won&apos;t bit-match the cohort-based table above — Meta uses click-through + view-through within its own attribution window, while Campaign Analysis counts HubSpot contacts whose <span className="font-mono text-[#C9D1DC]">createdate</span> falls in the same window. Plus Meta deduplicates per-user while HubSpot can have multiple events per contact. Same-window numbers are typically within ±15%; call campaigns drift more because of the UTM-mapping bug (Meta sees the lead, HubSpot loses the campaign attribution).
+              </p>
             </div>
           </>
         )}

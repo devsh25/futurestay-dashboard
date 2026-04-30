@@ -244,6 +244,17 @@ export interface MetaCampaignRow {
   ctr: number;   // %, Meta returns this directly
   cpc: number;   // $, Meta returns this directly
   reach: number;
+  /** Custom-event count (Meta "Subscriptions" column). Same definition
+   *  across every campaign so it's directly comparable. */
+  subscriptions: number;
+  costPerSub: number;
+  /** The campaign's optimization signal — varies per campaign. Maps to
+   *  Meta's "Results" column. resultType is the raw action_type, label
+   *  is the human-readable form ("Website Contacts" etc.). */
+  resultType: string | null;
+  resultLabel: string | null;
+  resultValue: number;
+  resultCost: number;
 }
 
 export interface MetaDailyPoint {
