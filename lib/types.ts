@@ -209,9 +209,6 @@ export interface CampaignAnalysisRow {
   readyToLaunch: number;      // property_ready_to_launch = "true"
 
   airbnbDqRate: number;       // %
-  salesDqRate: number | null; // % (call only)
-  noShowRate: number | null;  // % (call only)
-  interestedRate: number | null; // % (call only)
   formToMeetingRate: number | null; // % (call only)
 
   costPerMeeting: number | null;  // call only

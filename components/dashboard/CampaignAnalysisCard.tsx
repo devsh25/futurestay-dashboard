@@ -67,9 +67,6 @@ function CampaignRow({ r }: { r: CampaignAnalysisRow }) {
       <TableCell className={`text-right font-mono text-[12px] tabular-nums ${r.interestedMtgRate !== null && r.interestedMtgRate >= 10 ? "text-[#6EE7B7]" : "text-[#8A8A94]"}`}>{fmtPct(r.interestedMtgRate)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#8A8A94]">{fmtPct(r.notInterestedMtgRate)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#A78BFA]">{fmtPct(r.outcomeCoverage)}</TableCell>
-      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#8A8A94]">{fmtPct(r.salesDqRate)}</TableCell>
-      <TableCell className={`text-right font-mono text-[12px] tabular-nums ${r.noShowRate !== null && r.noShowRate >= 30 ? "text-[#F87171]" : "text-[#8A8A94]"}`}>{fmtPct(r.noShowRate)}</TableCell>
-      <TableCell className={`text-right font-mono text-[12px] tabular-nums ${r.interestedRate !== null && r.interestedRate >= 10 ? "text-[#6EE7B7]" : "text-[#8A8A94]"}`}>{fmtPct(r.interestedRate)}</TableCell>
       <TableCell className={`text-right font-mono text-[12px] tabular-nums ${r.formToMeetingRate !== null && r.formToMeetingRate < 50 ? "text-[#FBBF24]" : "text-[#8A8A94]"}`}>{fmtPct(r.formToMeetingRate)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#E5E5EB]">{fmtMoney(r.costPerMeeting)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#E5E5EB]">{fmtNum(r.trials)}</TableCell>
@@ -170,9 +167,6 @@ export default function CampaignAnalysisCard({
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Int % mtgs</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">NotInt % mtgs</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Coverage % mtgs</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Sales DQ %</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">No-show %</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Int %</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Form→Mtg %</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">$/Mtg</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Trials</TableHead>

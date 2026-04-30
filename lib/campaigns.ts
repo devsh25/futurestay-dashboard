@@ -338,16 +338,6 @@ async function classifyCallContacts(
   return classifications;
 }
 
-function classifyOutcome(o: string | null): "interested" | "no_show" | "sales_dq" | "not_interested" | null {
-  if (!o) return null;
-  const v = o.trim();
-  if (["Meeting Scheduled", "Interested - No Meeting Scheduled", "Closed Sale"].includes(v)) return "interested";
-  if (v === "Not Moving Forward") return "not_interested";
-  if (v === "Did Not Reach" || v === "Did Not Reach Left Message") return "no_show";
-  if (v === "Disqualified" || v === "DQ - Invalid Number") return "sales_dq";
-  return null;
-}
-
 // ---- Main analysis function ----
 
 export async function computeCampaignAnalysis(
@@ -385,9 +375,6 @@ export async function computeCampaignAnalysis(
     meeting: number;
     trial: number;
     cust: number;
-    interested: number;
-    noShow: number;
-    salesDq: number;
     // Outcome classification (call funnels only)
     clsNoShow: number;
     clsInterested: number;
@@ -396,7 +383,7 @@ export async function computeCampaignAnalysis(
   };
   const empty = (): Agg => ({
     leads: 0, signups: 0, airbnbDq: 0, auth: 0, ready: 0, meeting: 0,
-    trial: 0, cust: 0, interested: 0, noShow: 0, salesDq: 0,
+    trial: 0, cust: 0,
     clsNoShow: 0, clsInterested: 0, clsNotInterested: 0, clsDq: 0,
   });
   const agg: Record<string, Agg> = {};
@@ -435,12 +422,8 @@ export async function computeCampaignAnalysis(
     if (c.hs_v2_date_entered_opportunity || c.trial__start_date) a.trial += 1;
     if (c.hs_v2_date_entered_customer && hadPaidPlan(c) && !isQuickCancel(c)) a.cust += 1;
 
-    const o = classifyOutcome(c.sales_call_outcome);
-    if (o === "interested") a.interested += 1;
-    else if (o === "no_show") a.noShow += 1;
-    else if (o === "sales_dq") a.salesDq += 1;
-
-    // Apply derived classification (call funnel only)
+    // Apply derived classification (call funnel only — uses 3-source classifier
+    // from classifyCallContacts: sales_call_outcome ∪ note keywords ∪ Aircall)
     const cls = callClassifications.get(c.id);
     if (cls === "no_show") a.clsNoShow += 1;
     else if (cls === "interested") a.clsInterested += 1;
@@ -469,9 +452,6 @@ export async function computeCampaignAnalysis(
       airbnbConnected: a.auth,
       readyToLaunch: a.ready,
       airbnbDqRate: pct(a.airbnbDq, a.leads),
-      salesDqRate: isCall ? pct(a.salesDq, a.leads) : null,
-      noShowRate: isCall ? pct(a.noShow, a.leads) : null,
-      interestedRate: isCall ? pct(a.interested, a.leads) : null,
       formToMeetingRate: isCall ? pct(a.meeting, a.leads) : null,
       costPerMeeting: isCall ? cpa(a.meeting) : null,
       // Outcome rates expressed as % of meetings booked (the right denom for call campaigns)
