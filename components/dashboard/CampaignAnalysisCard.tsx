@@ -62,6 +62,11 @@ function CampaignRow({ r }: { r: CampaignAnalysisRow }) {
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#60A5FA]">{fmtNum(r.airbnbConnected)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#FBBF24]">{fmtNum(r.readyToLaunch)}</TableCell>
       <TableCell className={`text-right font-mono text-[12px] tabular-nums ${dqColor(r.airbnbDqRate)}`}>{fmtPct(r.airbnbDqRate)}</TableCell>
+      <TableCell className={`text-right font-mono text-[12px] tabular-nums ${r.noShowMtgRate !== null && r.noShowMtgRate >= 30 ? "text-[#F87171]" : "text-[#8A8A94]"}`}>{fmtPct(r.noShowMtgRate)}</TableCell>
+      <TableCell className={`text-right font-mono text-[12px] tabular-nums ${r.dqMtgRate !== null && r.dqMtgRate >= 10 ? "text-[#FBBF24]" : "text-[#8A8A94]"}`}>{fmtPct(r.dqMtgRate)}</TableCell>
+      <TableCell className={`text-right font-mono text-[12px] tabular-nums ${r.interestedMtgRate !== null && r.interestedMtgRate >= 10 ? "text-[#6EE7B7]" : "text-[#8A8A94]"}`}>{fmtPct(r.interestedMtgRate)}</TableCell>
+      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#8A8A94]">{fmtPct(r.notInterestedMtgRate)}</TableCell>
+      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#A78BFA]">{fmtPct(r.outcomeCoverage)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#8A8A94]">{fmtPct(r.salesDqRate)}</TableCell>
       <TableCell className={`text-right font-mono text-[12px] tabular-nums ${r.noShowRate !== null && r.noShowRate >= 30 ? "text-[#F87171]" : "text-[#8A8A94]"}`}>{fmtPct(r.noShowRate)}</TableCell>
       <TableCell className={`text-right font-mono text-[12px] tabular-nums ${r.interestedRate !== null && r.interestedRate >= 10 ? "text-[#6EE7B7]" : "text-[#8A8A94]"}`}>{fmtPct(r.interestedRate)}</TableCell>
@@ -160,6 +165,11 @@ export default function CampaignAnalysisCard({
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Airbnb Conn</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">🚀 Ready</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">A-DQ %</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">No-show % mtgs</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">DQ % mtgs</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Int % mtgs</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">NotInt % mtgs</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Coverage % mtgs</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Sales DQ %</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">No-show %</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Int %</TableHead>
@@ -181,6 +191,7 @@ export default function CampaignAnalysisCard({
               <span><span className="text-[#6EE7B7] font-semibold">self</span> = Meta optimizes for signups or airbnb_connected</span>
               <span>Qual Sgnp = Signups − Airbnb DQ</span>
               <span>Customers = real paid (Amplify/Flex), excl. &lt;2-day cancels</span>
+              <span>Outcome % = derived from sales_call_outcome ∪ note keywords ∪ Aircall after-meeting no-answer</span>
             </div>
           </>
         )}

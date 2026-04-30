@@ -4,6 +4,18 @@
 import { HubSpotContact, CampaignAnalysisRow, CampaignAnalysisData } from "./types";
 import { fetchMetaInsights } from "./meta";
 
+// HubSpot Notes API token reused from env
+const HUBSPOT_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN!;
+const HS_BASE = "https://api.hubapi.com";
+
+// Aircall outcome enum values (from HubSpot enumeration property)
+const AIRCALL_NO_ANSWER = new Set([
+  "9d9162e7-6cf3-4944-bf63-4dff82258764",  // Busy
+  "73a0d17f-1163-4015-bdd5-ec830791da20",  // No answer
+  "17b47fee-58de-441e-a44c-c6300d46f273",  // Wrong number
+  "b2cf5968-551e-4856-9783-52b3da59a7d0",  // Left voicemail
+]);
+
 const SIGNUP_LIFECYCLES = new Set([
   "signup",
   "Trialist",
@@ -96,6 +108,236 @@ function isQuickCancel(c: HubSpotContact): boolean {
   return (x.getTime() - e.getTime()) / 86_400_000 < 2;
 }
 
+// ---- Outcome classification (call campaigns only) ----
+
+type Outcome = "no_show" | "interested" | "not_interested" | "dq" | null;
+
+function classifyExplicit(o: string | null): Outcome {
+  if (!o) return null;
+  const v = o.trim();
+  if (v === "Meeting Scheduled" || v === "Interested - No Meeting Scheduled" || v === "Closed Sale") return "interested";
+  if (v === "Not Moving Forward") return "not_interested";
+  if (v === "Did Not Reach" || v === "Did Not Reach Left Message") return "no_show";
+  if (v === "Disqualified" || v === "DQ - Invalid Number") return "dq";
+  return null;
+}
+
+function stripHtml(s: string): string {
+  return s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function classifyNote(body: string): Outcome {
+  const text = stripHtml(body).toLowerCase();
+  // Skip post-conversion audit templates and outreach SMS templates
+  if (text.includes("new customer audit") || text.includes("id verify status") || text.includes("property audit result")) return null;
+  if (text.includes("this is joe from futurestay") || text.includes("this is chris from futurestay") || text.includes("this is jeremiah")) return null;
+  // No-show signals
+  const noShowKeys = ["no show", "no-show", "noshow", "didn't show", "did not show", "ghosted", "never showed", "missed the call", "missed call", "did not attend", "didn't attend"];
+  if (noShowKeys.some((k) => text.includes(k))) return "no_show";
+  // DQ
+  const dqKeys = ["disqualif", "not a fit", "invalid number", "wrong number", "fake number", "spam", "fraud", "not potential", "unsupport", "no str", "no english", "do not call", "mistakenly signed", "signed up by mistake", "booked because she thought", "no airbnb", "language barrier", "wants to attend a class"];
+  if (dqKeys.some((k) => text.includes(k))) return "dq";
+  // Closed/Interested
+  if (text.includes("closed sale") || text.includes("closed-won") || text.includes("closed won") || text.includes("converted to amplify") || text.includes("converted to flex")) return "interested";
+  const intKeys = ["interested", "next meeting", "follow up", "follow-up", "demo scheduled", "scheduled another", "2nd meeting", "second meeting", "will trial", "going to sign", "wants to start", "setting up", "set up call", "will sign up"];
+  if (intKeys.some((k) => text.includes(k))) return "interested";
+  const niKeys = ["not interested", "not moving forward", "declined", "passed", "too expensive", "not the right time", "not a priority", "not for them"];
+  if (niKeys.some((k) => text.includes(k))) return "not_interested";
+  return null;
+}
+
+function classifyAircall(c: HubSpotContact, meetingStart: Date | null): Outcome {
+  if (!meetingStart) return null;
+  const ac = parseDate(c.aircall_last_call_at);
+  if (!ac || ac < meetingStart) return null;
+  const id = c.last_aircall_call_outcome || "";
+  if (AIRCALL_NO_ANSWER.has(id)) return "no_show";
+  return null;
+}
+
+// ---- HubSpot Notes fetcher (for call-funnel contacts) ----
+
+async function hsFetch<T = unknown>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${HS_BASE}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${HUBSPOT_TOKEN}`,
+      "Content-Type": "application/json",
+      ...(init?.headers as Record<string, string> | undefined),
+    },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`HubSpot ${res.status}: ${text.slice(0, 200)}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+function chunked<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+async function fetchNotesForContacts(contactIds: string[]): Promise<Map<string, string[]>> {
+  const result = new Map<string, string[]>();
+  if (contactIds.length === 0) return result;
+  for (const chunk of chunked(contactIds, 100)) {
+    const body = { inputs: chunk.map((id) => ({ id })) };
+    type Resp = { results?: Array<{ from: { id: string }; to: Array<{ id: string }> }> };
+    try {
+      const d = await hsFetch<Resp>("/crm/v3/associations/contacts/notes/batch/read", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      for (const row of d.results ?? []) {
+        result.set(row.from.id, row.to.map((t) => t.id));
+      }
+    } catch {
+      // Non-fatal: skip this chunk
+    }
+  }
+  return result;
+}
+
+async function fetchNoteBodies(noteIds: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (noteIds.length === 0) return out;
+  for (const chunk of chunked(noteIds, 100)) {
+    const body = { inputs: chunk.map((id) => ({ id })), properties: ["hs_note_body"] };
+    type Resp = { results?: Array<{ id: string; properties: { hs_note_body?: string } }> };
+    try {
+      const d = await hsFetch<Resp>("/crm/v3/objects/notes/batch/read", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      for (const row of d.results ?? []) {
+        out.set(row.id, row.properties?.hs_note_body || "");
+      }
+    } catch {
+      // skip
+    }
+  }
+  return out;
+}
+
+// Classify all call-funnel contacts who had meetings in window using
+// 3-source priority chain.
+async function classifyCallContacts(
+  contacts: HubSpotContact[],
+  startMs: number,
+  endMs: number,
+): Promise<Map<string, Outcome>> {
+  // 1) Fetch meetings within window
+  type Meeting = { id: string; properties: { hs_meeting_start_time?: string } };
+  const meetings: Meeting[] = [];
+  let after: string | undefined;
+  for (let i = 0; i < 40; i++) {
+    const body: Record<string, unknown> = {
+      filterGroups: [{
+        filters: [
+          { propertyName: "hs_meeting_start_time", operator: "GTE", value: String(startMs) },
+          { propertyName: "hs_meeting_start_time", operator: "LTE", value: String(endMs) },
+        ],
+      }],
+      properties: ["hs_meeting_start_time"],
+      limit: 100,
+      ...(after ? { after } : {}),
+    };
+    type Resp = { results?: Meeting[]; paging?: { next?: { after?: string } } };
+    let d: Resp;
+    try {
+      d = await hsFetch<Resp>("/crm/v3/objects/meetings/search", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+    } catch {
+      break;
+    }
+    meetings.push(...(d.results ?? []));
+    after = d.paging?.next?.after;
+    if (!after) break;
+  }
+
+  if (meetings.length === 0) return new Map();
+
+  // 2) Associations meeting → contact
+  const m2c = new Map<string, string>();
+  for (const chunk of chunked(meetings, 100)) {
+    const body = { inputs: chunk.map((m) => ({ id: m.id })) };
+    type Resp = { results?: Array<{ from: { id: string }; to: Array<{ id: string }> }> };
+    try {
+      const d = await hsFetch<Resp>("/crm/v3/associations/meetings/contacts/batch/read", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      for (const row of d.results ?? []) {
+        const cs = row.to ?? [];
+        if (cs.length > 0) m2c.set(row.from.id, cs[0].id);
+      }
+    } catch {
+      // skip
+    }
+  }
+
+  // 3) Build set of call-funnel contacts (with their latest meeting time)
+  const contactById = new Map<string, HubSpotContact>();
+  for (const c of contacts) contactById.set(c.id, c);
+  // Some contacts may have been created outside the window — fetch their props if missing
+  // For now we only classify contacts already in the contacts array (those in window).
+  // Meetings outside window are silently ignored if their contact isn't here.
+
+  const callContactMeeting = new Map<string, Date>();
+  for (const m of meetings) {
+    const cid = m2c.get(m.id);
+    if (!cid) continue;
+    const c = contactById.get(cid);
+    if (!c) continue;
+    const ref = (c.referral_source || "").toUpperCase().trim();
+    if (ref === "WIX" || ref === "HOPPER") continue;
+    if ((c.airbnbdqreason || "").trim()) continue;
+    const url = (c.hs_analytics_first_url || "").toLowerCase();
+    const isCall = ["optimization-call", "direct-booking-sales", "website-call", "direct-booking-call", "/sales"]
+      .some((k) => url.includes(k));
+    if (!isCall) continue;
+    const held = parseDate(m.properties?.hs_meeting_start_time || null);
+    if (!held) continue;
+    const existing = callContactMeeting.get(cid);
+    if (!existing || held > existing) callContactMeeting.set(cid, held);
+  }
+
+  if (callContactMeeting.size === 0) return new Map();
+
+  // 4) Fetch notes
+  const noteAssoc = await fetchNotesForContacts(Array.from(callContactMeeting.keys()));
+  const allNoteIds = new Set<string>();
+  for (const ids of noteAssoc.values()) for (const nid of ids) allNoteIds.add(nid);
+  const noteBodies = await fetchNoteBodies(Array.from(allNoteIds));
+
+  // 5) Classify
+  const classifications = new Map<string, Outcome>();
+  for (const [cid, held] of callContactMeeting) {
+    const c = contactById.get(cid);
+    if (!c) continue;
+
+    let cls: Outcome = classifyExplicit(c.sales_call_outcome);
+    if (!cls) {
+      for (const nid of noteAssoc.get(cid) ?? []) {
+        const m = classifyNote(noteBodies.get(nid) ?? "");
+        if (m) {
+          cls = m;
+          break;
+        }
+      }
+    }
+    if (!cls) cls = classifyAircall(c, held);
+
+    classifications.set(cid, cls);
+  }
+  return classifications;
+}
+
 function classifyOutcome(o: string | null): "interested" | "no_show" | "sales_dq" | "not_interested" | null {
   if (!o) return null;
   const v = o.trim();
@@ -128,6 +370,11 @@ export async function computeCampaignAnalysis(
     spendByBucket[bk] = (spendByBucket[bk] || 0) + c.spend;
   }
 
+  // Classify call-funnel contacts via sales_call_outcome → notes → aircall
+  const startMs = new Date(`${since}T00:00:00.000Z`).getTime();
+  const endMs = new Date(`${until}T23:59:59.999Z`).getTime();
+  const callClassifications = await classifyCallContacts(contacts, startMs, endMs);
+
   // Aggregate HubSpot contacts per bucket
   type Agg = {
     leads: number;
@@ -141,10 +388,16 @@ export async function computeCampaignAnalysis(
     interested: number;
     noShow: number;
     salesDq: number;
+    // Outcome classification (call funnels only)
+    clsNoShow: number;
+    clsInterested: number;
+    clsNotInterested: number;
+    clsDq: number;
   };
   const empty = (): Agg => ({
     leads: 0, signups: 0, airbnbDq: 0, auth: 0, ready: 0, meeting: 0,
     trial: 0, cust: 0, interested: 0, noShow: 0, salesDq: 0,
+    clsNoShow: 0, clsInterested: 0, clsNotInterested: 0, clsDq: 0,
   });
   const agg: Record<string, Agg> = {};
 
@@ -186,6 +439,13 @@ export async function computeCampaignAnalysis(
     if (o === "interested") a.interested += 1;
     else if (o === "no_show") a.noShow += 1;
     else if (o === "sales_dq") a.salesDq += 1;
+
+    // Apply derived classification (call funnel only)
+    const cls = callClassifications.get(c.id);
+    if (cls === "no_show") a.clsNoShow += 1;
+    else if (cls === "interested") a.clsInterested += 1;
+    else if (cls === "not_interested") a.clsNotInterested += 1;
+    else if (cls === "dq") a.clsDq += 1;
   }
 
   // Build rows in defined campaign order
@@ -214,6 +474,12 @@ export async function computeCampaignAnalysis(
       interestedRate: isCall ? pct(a.interested, a.leads) : null,
       formToMeetingRate: isCall ? pct(a.meeting, a.leads) : null,
       costPerMeeting: isCall ? cpa(a.meeting) : null,
+      // Outcome rates expressed as % of meetings booked (the right denom for call campaigns)
+      noShowMtgRate: isCall ? pct(a.clsNoShow, a.meeting) : null,
+      dqMtgRate: isCall ? pct(a.clsDq, a.meeting) : null,
+      interestedMtgRate: isCall ? pct(a.clsInterested, a.meeting) : null,
+      notInterestedMtgRate: isCall ? pct(a.clsNotInterested, a.meeting) : null,
+      outcomeCoverage: isCall ? pct(a.clsNoShow + a.clsInterested + a.clsNotInterested + a.clsDq, a.meeting) : null,
       trials: a.trial,
       costPerTrial: cpa(a.trial),
       customers: a.cust,

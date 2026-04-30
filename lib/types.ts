@@ -23,6 +23,8 @@ export interface HubSpotContact {
   hs_analytics_source_data_2: string | null;
   engagements_last_meeting_booked: string | null;
   sales_call_outcome: string | null;
+  aircall_last_call_at: string | null;
+  last_aircall_call_outcome: string | null;
   hubspot_owner_id: string | null;
   country: string | null;
   city: string | null;
@@ -213,6 +215,13 @@ export interface CampaignAnalysisRow {
   formToMeetingRate: number | null; // % (call only)
 
   costPerMeeting: number | null;  // call only
+  // Outcome classification (call only) — derived from sales_call_outcome,
+  // notes keyword matching, and Aircall after-meeting no-answer signals
+  noShowMtgRate: number | null;       // % of meetings that were no-shows
+  dqMtgRate: number | null;           // % of meetings disqualified
+  interestedMtgRate: number | null;   // % of meetings tagged interested
+  notInterestedMtgRate: number | null;
+  outcomeCoverage: number | null;     // % of meetings with any classification
   trials: number;
   costPerTrial: number | null;
   customers: number;
