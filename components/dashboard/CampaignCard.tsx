@@ -16,7 +16,7 @@ function getCampaignType(campaign: string): "Airbnb" | "Direct Booking" | "Other
 }
 
 const TYPE_STYLES = {
-  Airbnb: "bg-[#2A1F0F] text-[#FBBF24] border-[#FBBF24]/20",
+  Airbnb: "bg-[#2A1F0F] text-[#8B92A3] border-[#FBBF24]/20",
   "Direct Booking": "bg-[#1A1F2A] text-[#60A5FA] border-[#60A5FA]/20",
   Other: "bg-[#1F2937] text-[#8B92A3] border-[#1F2937]",
 };
@@ -84,13 +84,13 @@ export default function CampaignCard({ campaigns }: { campaigns: CampaignRow[] }
                     </TableCell>
                     <TableCell className="max-w-[200px] truncate text-[13px] text-white">{row.campaign}</TableCell>
                     <TableCell className="text-center">
-                      <Badge variant="outline" className={`text-[10px] font-medium ${row.source.includes("facebook") ? "border-[#60A5FA]/30 text-[#60A5FA] bg-[#1A1F2A]" : "border-[#6EE7B7]/30 text-[#6EE7B7] bg-[#0F2A1F]"}`}>
+                      <Badge variant="outline" className={`text-[10px] font-medium ${row.source.includes("facebook") ? "border-[#60A5FA]/30 text-[#60A5FA] bg-[#1A1F2A]" : "border-[#60A5FA]/30 text-[#60A5FA] bg-[#0F1E2E]"}`}>
                         {row.source.includes("facebook") ? "FB" : row.source.includes("google") ? "Google" : row.source}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right font-mono text-[13px] tabular-nums text-white">{row.signups}</TableCell>
                     <TableCell className="text-right font-mono text-[13px] tabular-nums text-white">{row.trials}</TableCell>
-                    <TableCell className="text-right font-mono text-[13px] tabular-nums text-[#FBBF24]">{row.inTrial}</TableCell>
+                    <TableCell className="text-right font-mono text-[13px] tabular-nums text-[#8B92A3]">{row.inTrial}</TableCell>
                     <TableCell className="text-right font-mono text-[13px] tabular-nums text-white">{row.customers}</TableCell>
                     <TableCell className="text-right font-mono text-[13px] tabular-nums text-[#8B92A3]">{row.signupToTrial.toFixed(1)}%</TableCell>
                     <TableCell className="text-right font-mono text-[13px] tabular-nums text-[#8B92A3]">{stc.toFixed(1)}%</TableCell>

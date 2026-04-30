@@ -6,12 +6,17 @@ import { Badge } from "@/components/ui/badge";
 import { CohortData } from "@/lib/types";
 
 function RateBadge({ value, thresholds }: { value: number; thresholds: [number, number] }) {
+  // Reduced to a 2-tone scale on the blue spectrum: white text for
+  // healthy, muted slate for low. Drops the old amber middle and red
+  // bottom — saturated status colours on every cohort row was visual
+  // noise. Threshold[1] still carries the "low" signal, just in a
+  // calmer way.
   const color =
     value > thresholds[0]
-      ? "text-[#6EE7B7] bg-[#0F2A1F] border-[#6EE7B7]/20"
+      ? "text-white bg-[#1A2235] border-[#1F2937]"
       : value > thresholds[1]
-        ? "text-[#FBBF24] bg-[#2A1F0F] border-[#FBBF24]/20"
-        : "text-[#F87171] bg-[#2A0F13] border-[#F87171]/20";
+        ? "text-[#60A5FA] bg-[#0F1E2E] border-[#1F2937]"
+        : "text-[#5B6478] bg-[#11182B] border-[#1F2937]";
   return (
     <Badge variant="outline" className={`font-mono text-[11px] tabular-nums ${color}`}>
       {value.toFixed(1)}%
@@ -93,11 +98,11 @@ export default function CohortCard({ cohort }: { cohort: CohortData; period: str
         <div className="mt-4 pt-3 border-t border-[#1F2937] grid grid-cols-3 gap-3">
           <div className="text-center">
             <p className="text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">QS-to-T</p>
-            <p className="text-2xl font-bold text-[#6EE7B7] tabular-nums mt-1">{cohort.trialRate.toFixed(1)}%</p>
+            <p className="text-2xl font-bold text-[#60A5FA] tabular-nums mt-1">{cohort.trialRate.toFixed(1)}%</p>
           </div>
           <div className="text-center">
             <p className="text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">T-to-C</p>
-            <p className="text-2xl font-bold text-[#6EE7B7] tabular-nums mt-1">{cohort.trialToCustomerRate.toFixed(1)}%</p>
+            <p className="text-2xl font-bold text-[#60A5FA] tabular-nums mt-1">{cohort.trialToCustomerRate.toFixed(1)}%</p>
           </div>
           <div className="text-center">
             <p className="text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">QS-to-C</p>

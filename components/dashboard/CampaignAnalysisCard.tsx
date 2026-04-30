@@ -26,7 +26,7 @@ function fmtNum(n: number | null): string {
 
 const TYPE_BADGE = {
   call: { bg: "bg-[#1E6FFF]/15", text: "text-[#1E6FFF]", border: "border-[#1E6FFF]/30" },
-  self: { bg: "bg-[#6EE7B7]/15", text: "text-[#6EE7B7]", border: "border-[#6EE7B7]/30" },
+  self: { bg: "bg-[#60A5FA]/15", text: "text-[#60A5FA]", border: "border-[#60A5FA]/30" },
 } as const;
 
 const OPT_LABEL: Record<string, string> = {
@@ -37,7 +37,7 @@ const OPT_LABEL: Record<string, string> = {
 
 function dqColor(rate: number) {
   if (rate >= 20) return "text-[#F87171]";
-  if (rate >= 10) return "text-[#FBBF24]";
+  if (rate >= 10) return "text-[#8B92A3]";
   return "text-[#8B92A3]";
 }
 
@@ -60,21 +60,21 @@ function CampaignRow({ r }: { r: CampaignAnalysisRow }) {
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">{fmtNum(r.signups)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-white font-semibold">{fmtNum(r.qualifiedSignups)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#60A5FA]">{fmtNum(r.airbnbConnected)}</TableCell>
-      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#FBBF24]">{fmtNum(r.readyToLaunch)}</TableCell>
+      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#8B92A3]">{fmtNum(r.readyToLaunch)}</TableCell>
       <TableCell className={`text-right font-mono text-[12px] tabular-nums ${dqColor(r.airbnbDqRate)}`}>{fmtPct(r.airbnbDqRate)}</TableCell>
       <TableCell className={`text-right font-mono text-[12px] tabular-nums ${r.noShowMtgRate !== null && r.noShowMtgRate >= 30 ? "text-[#F87171]" : "text-[#8B92A3]"}`}>{fmtPct(r.noShowMtgRate)}</TableCell>
-      <TableCell className={`text-right font-mono text-[12px] tabular-nums ${r.dqMtgRate !== null && r.dqMtgRate >= 10 ? "text-[#FBBF24]" : "text-[#8B92A3]"}`}>{fmtPct(r.dqMtgRate)}</TableCell>
-      <TableCell className={`text-right font-mono text-[12px] tabular-nums ${r.interestedMtgRate !== null && r.interestedMtgRate >= 10 ? "text-[#6EE7B7]" : "text-[#8B92A3]"}`}>{fmtPct(r.interestedMtgRate)}</TableCell>
+      <TableCell className={`text-right font-mono text-[12px] tabular-nums ${r.dqMtgRate !== null && r.dqMtgRate >= 10 ? "text-[#8B92A3]" : "text-[#8B92A3]"}`}>{fmtPct(r.dqMtgRate)}</TableCell>
+      <TableCell className={`text-right font-mono text-[12px] tabular-nums ${r.interestedMtgRate !== null && r.interestedMtgRate >= 10 ? "text-[#60A5FA]" : "text-[#8B92A3]"}`}>{fmtPct(r.interestedMtgRate)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#8B92A3]">{fmtPct(r.notInterestedMtgRate)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#1E6FFF]">{fmtPct(r.outcomeCoverage)}</TableCell>
-      <TableCell className={`text-right font-mono text-[12px] tabular-nums ${r.formToMeetingRate !== null && r.formToMeetingRate < 50 ? "text-[#FBBF24]" : "text-[#8B92A3]"}`}>{fmtPct(r.formToMeetingRate)}</TableCell>
+      <TableCell className={`text-right font-mono text-[12px] tabular-nums ${r.formToMeetingRate !== null && r.formToMeetingRate < 50 ? "text-[#8B92A3]" : "text-[#8B92A3]"}`}>{fmtPct(r.formToMeetingRate)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">{fmtMoney(r.costPerMeeting)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">{fmtNum(r.trials)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">{fmtMoney(r.costPerTrial)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#1E6FFF]">{fmtPct(r.qsToTrialRate)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-white font-semibold">{fmtNum(r.customers)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-white font-semibold">{fmtMoney(r.costPerCustomer)}</TableCell>
-      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#6EE7B7]">{fmtPct(r.qsToCustomerRate)}</TableCell>
+      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#60A5FA]">{fmtPct(r.qsToCustomerRate)}</TableCell>
     </TableRow>
   );
 }
@@ -190,7 +190,7 @@ export default function CampaignAnalysisCard({
             </div>
             <div className="mt-4 pt-3 border-t border-[#1F2937] flex flex-wrap gap-x-5 gap-y-1 text-[10px] text-[#5B6478]">
               <span><span className="text-[#1E6FFF] font-semibold">call</span> = Meta optimizes for meetings</span>
-              <span><span className="text-[#6EE7B7] font-semibold">self</span> = Meta optimizes for signups or airbnb_connected</span>
+              <span><span className="text-[#60A5FA] font-semibold">self</span> = Meta optimizes for signups or airbnb_connected</span>
               <span>Qual Sgnp = Signups − Airbnb DQ</span>
               <span>Customers = real paid (Amplify/Flex), excl. &lt;2-day cancels</span>
               <span>Outcome % = derived from sales_call_outcome ∪ note keywords ∪ Aircall after-meeting no-answer</span>

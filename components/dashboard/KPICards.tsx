@@ -31,14 +31,12 @@ function TrendBadge({ delta }: { delta: TrendDelta }) {
  */
 function KPICell({
   label,
-  icon,
   value,
   delta,
   sparklineData,
   sparklineColor,
 }: {
   label: string;
-  icon?: string;
   value: number;
   delta: TrendDelta;
   sparklineData: number[];
@@ -53,10 +51,7 @@ function KPICell({
         <TrendBadge delta={delta} />
       </div>
       <div className="flex items-center justify-between gap-3">
-        <p className="text-[13px] text-[#8B92A3] font-medium flex items-center gap-1.5">
-          {icon && <span className="text-[14px] leading-none">{icon}</span>}
-          {label}
-        </p>
+        <p className="text-[13px] text-[#8B92A3] font-medium">{label}</p>
         <Sparkline data={sparklineData} color={sparklineColor} width={64} height={24} />
       </div>
     </div>
@@ -72,10 +67,15 @@ function RateCard({
   value: number;
   color: "good" | "warn" | "bad";
 }) {
+  // Rate cards used to use green/amber/red. Pulled back to blue-spectrum
+  // tones — readers still see relative health (bright blue = good, light
+  // blue = mid, muted = poor) without three saturated hues fighting on
+  // the same row. Status pills in the hero KPI row already carry the
+  // green/red signal where it matters.
   const styles = {
-    good: "text-[#10B981]",
-    warn: "text-[#F59E0B]",
-    bad: "text-[#EF4444]",
+    good: "text-white",
+    warn: "text-[#60A5FA]",
+    bad: "text-[#5B6478]",
   }[color];
 
   return (
@@ -115,9 +115,11 @@ export default function KPICards({
           signature look of the Dashbrd X moodboard. */}
       <div className="bg-[#11182B] border border-[#1F2937] rounded-2xl overflow-hidden">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-[#1F2937]">
+          {/* All sparklines use the same blue tone — keeps the divided
+              row looking like one cohesive band rather than 4 different
+              colour stories. The numbers themselves carry the meaning. */}
           <KPICell
             label="Qualified Signups"
-            icon="📊"
             value={kpis.totalSignups}
             delta={kpis.deltas.signups}
             sparklineData={kpis.sparkline.signups}
@@ -125,23 +127,20 @@ export default function KPICards({
           />
           <KPICell
             label="Total Trials"
-            icon="★"
             value={kpis.totalTrials}
             delta={kpis.deltas.trials}
             sparklineData={kpis.sparkline.trials}
-            sparklineColor="#10B981"
+            sparklineColor="#1E6FFF"
           />
           <KPICell
             label="In Trial"
-            icon="☆"
             value={kpis.totalInTrial}
             delta={kpis.deltas.inTrial}
             sparklineData={kpis.sparkline.inTrial}
-            sparklineColor="#60A5FA"
+            sparklineColor="#1E6FFF"
           />
           <KPICell
             label="Total Customers"
-            icon="★★"
             value={kpis.totalCustomers}
             delta={kpis.deltas.customers}
             sparklineData={kpis.sparkline.customers}

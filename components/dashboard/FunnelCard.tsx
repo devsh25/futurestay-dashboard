@@ -18,72 +18,68 @@ type Node = {
   parentExitX?: number; // override the exit x on the parent (for fan branches)
 };
 
-// Wide canvas: spine runs left→right with a parallel pair (Auth / Properties)
-// branching off Qualified Signups and merging back at Ready to Launch.
-// Then trial outcomes branch downward from Trial Started.
+// Single linear spine: QS → Auth → Ready → Trial Started, then 3 outcomes
+// drop straight down from Trial Started. Created Properties was removed
+// because Authorized Airbnb already covers the property-creation path
+// (auth auto-imports listings). The handful of users who manually create
+// properties without auth are a tiny minority not worth their own stage.
 const VB_W = 1500;
-const VB_H = 850;
+const VB_H = 800;
 const NODE_W = 230;
 const NODE_H = 132;
 
-// Spine y for QS, Ready, Trial — all on a horizontal line.
-const SPINE_Y = 200;
-// Parallel pair sits above/below the spine at the same x.
-const AUTH_Y = 80;
-const PROPS_Y = 320;
-// Trial outcomes row.
-const BRANCH_Y = 580;
+const SPINE_Y = 180;
+// Trial outcomes row — directly below Trial Started, all 3 dropping down.
+const BRANCH_Y = 540;
 // Churned drops below Customer.
-const CHURN_Y = 760;
+const CHURN_Y = 720;
 
-// Spine x positions. Auth/Properties share the second slot.
-//   QS → [Auth/Props] → Ready → Trial
-const X_QS = 150;
-const X_PARALLEL = 600;   // Auth (top) + Properties (bottom)
-const X_READY = 1000;
-const X_TRIAL = 1300;     // Trial Started (kept far right so branches have room)
+// Spine x — 4 stages evenly across the canvas, with right-side margin
+// large enough to fit Customer (the rightmost outcome).
+const X_QS = 130;
+const X_AUTH = 430;
+const X_READY = 730;
+const X_TRIAL = 1030;
 
-const C_INFLIGHT = "#1E6FFF";  // electric blue
-const C_POSITIVE = "#6EE7B7";  // mint
-const C_NEGATIVE = "#F87171";  // coral
+// Outcome cluster — 3 boxes spread either side of Trial Started, all at
+// the same y, all dropping DOWN from Trial Started's bottom edge. Spacing
+// of 270 keeps boxes from overlapping (NODE_W = 230) and dy/dx > 1 so the
+// connectors render as vertical-style Beziers rather than horizontal.
+const X_FAILED = X_TRIAL - 270;   // 760
+const X_INTRIAL = X_TRIAL;        // 1030 — directly under Trial Started
+const X_CUSTOMER = X_TRIAL + 270; // 1300
+
+// Restricted palette — blue spectrum + neutrals only. No red/green/coral
+// in decorative elements. Status colors (delta pills) keep green/red
+// because they're tiny and universally recognised.
+const C_INFLIGHT = "#1E6FFF";   // electric blue — primary
+const C_POSITIVE = "#60A5FA";   // light blue — Customer (positive arrival)
+const C_NEUTRAL = "#475569";    // slate — Failed Trialist / Churned (off-path)
 
 const NODES: Node[] = [
-  // Spine entry
-  { key: "Qualified Signups",  label: "Qualified Signups",  cx: X_QS,       cy: SPINE_Y, color: C_INFLIGHT },
+  // Linear spine
+  { key: "Qualified Signups",  label: "Qualified Signups",  cx: X_QS,         cy: SPINE_Y, color: C_INFLIGHT },
+  { key: "Authorized Airbnb",  label: "Authorized Airbnb",  cx: X_AUTH,       cy: SPINE_Y, color: C_INFLIGHT, parent: "Qualified Signups" },
+  { key: "Ready to Launch",    label: "Ready to Launch",    cx: X_READY,      cy: SPINE_Y, color: C_INFLIGHT, parent: "Authorized Airbnb", icon: "🚀" },
+  { key: "Trial Started",      label: "Trial Started",      cx: X_TRIAL,      cy: SPINE_Y, color: C_INFLIGHT, parent: "Ready to Launch", icon: "★" },
 
-  // Parallel activation steps — siblings of Qualified Signups.
-  // Auth and Created Properties are independent paths to setup. Some
-  // users authorize Airbnb (which auto-imports listings); others
-  // manually create properties. They are NOT sequential — that's why
-  // Created Properties can be > Authorized Airbnb in the data.
-  { key: "Authorized Airbnb",  label: "Authorized Airbnb",  cx: X_PARALLEL, cy: AUTH_Y,  color: C_INFLIGHT, parent: "Qualified Signups" },
-  { key: "Created Properties", label: "Created Properties", cx: X_PARALLEL, cy: PROPS_Y, color: C_INFLIGHT, parent: "Qualified Signups" },
-
-  // Merge: Ready to Launch is fed by both parallel activation paths.
-  { key: "Ready to Launch",    label: "Ready to Launch",    cx: X_READY,    cy: SPINE_Y, color: C_INFLIGHT, parent: "Authorized Airbnb", extraParent: "Created Properties", icon: "🚀" },
-
-  // Spine continues
-  { key: "Trial Started",      label: "Trial Started",      cx: X_TRIAL,    cy: SPINE_Y, color: C_INFLIGHT, parent: "Ready to Launch", icon: "★" },
-
-  // Trial outcomes branch off Trial Started.
-  { key: "Failed Trialist",    label: "Failed Trialist",    cx: 380,        cy: BRANCH_Y, color: C_NEGATIVE, parent: "Trial Started", icon: "⊘", parentExitX: X_TRIAL - NODE_W / 2 + 30 },
-  { key: "In Trial",           label: "In Trial",           cx: 840,        cy: BRANCH_Y, color: C_INFLIGHT, parent: "Trial Started", icon: "☆", parentExitX: X_TRIAL - 60 },
-  { key: "Customer",           label: "Customer",           cx: X_TRIAL,    cy: BRANCH_Y, color: C_POSITIVE, parent: "Trial Started", icon: "★★" },
+  // Trial outcomes — all drop DOWN from Trial Started. Failed and
+  // Customer fan slightly outward; In Trial drops straight down.
+  { key: "Failed Trialist",    label: "Failed Trialist",    cx: X_FAILED,     cy: BRANCH_Y, color: C_NEUTRAL,  parent: "Trial Started", icon: "⊘" },
+  { key: "In Trial",           label: "In Trial",           cx: X_INTRIAL,    cy: BRANCH_Y, color: C_INFLIGHT, parent: "Trial Started", icon: "☆" },
+  { key: "Customer",           label: "Customer",           cx: X_CUSTOMER,   cy: BRANCH_Y, color: C_POSITIVE, parent: "Trial Started", icon: "★★" },
 
   // Customer → Churned (vertical drop)
-  { key: "Churned",            label: "Churned",            cx: X_TRIAL,    cy: CHURN_Y,  color: C_NEGATIVE, parent: "Customer", icon: "⚠" },
+  { key: "Churned",            label: "Churned",            cx: X_CUSTOMER,   cy: CHURN_Y,  color: C_NEUTRAL, parent: "Customer", icon: "⚠" },
 ];
 
 const BRANCH_KEYS = new Set(["In Trial", "Failed Trialist", "Customer"]);
 
 // Nodes whose label should show "% of parent" rather than "−X% lost".
-// Used for: parallel activation siblings off Qualified Signups (Auth /
-// Created Properties), the Trial Started outcomes (In Trial / Failed /
-// Customer), and Churned. For everything else (Ready → Trial) we show
-// the loss % so the user can see drop-off through the spine.
+// Used for: the Trial Started outcomes (In Trial / Failed / Customer)
+// where the 3 shares should sum to ~100%, and Churned. Everything else
+// (spine progression: QS → Auth → Ready → Trial) shows the loss %.
 const SHARE_LABEL_KEYS = new Set([
-  "Authorized Airbnb",
-  "Created Properties",
   "In Trial",
   "Failed Trialist",
   "Customer",
@@ -207,7 +203,7 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
         <CardTitle className="flex items-center justify-between text-[17px] font-semibold text-white tracking-tight">
           <span>Funnel Analysis</span>
           {dqRow && (
-            <Badge className="bg-[#2A0F13] text-[#F87171] border-[#EF4444]/20 text-[11px] font-medium">
+            <Badge className="bg-[#1A2235] text-[#8B92A3] border-[#1F2937] text-[11px] font-medium">
               AirbnbDQ: {dqRow.count.toLocaleString()} ({dqRow.dropoff?.toFixed(1)}%)
             </Badge>
           )}
@@ -217,7 +213,7 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
       <CardContent className="pt-6">
         <p className="text-[14px] text-[#A8A8B2] mb-4 leading-relaxed">
           <span className="text-[#1E6FFF] font-medium">Cohort-based.</span>{" "}
-          Of qualified signups whose <code className="text-[#C9D1DC] text-[13px]">createdate</code> falls in the window, what % reached each stage. <span className="text-white font-medium">Authorized Airbnb</span> and <span className="text-white font-medium">Created Properties</span> are <span className="text-[#1E6FFF]">parallel activation paths</span> — most users authorize Airbnb (which auto-imports listings), some create properties manually. Both feed into Ready to Launch. Then 3 outcomes branch off Trial Started (Customer can further churn).
+          Of qualified signups whose <code className="text-[#C9D1DC] text-[13px]">createdate</code> falls in the window, what % reached each stage. Authorizing Airbnb auto-imports listings (the path most users take). 3 outcomes drop from Trial Started (In Trial = still active, Customer = real paid, Failed = cancelled before converting). Customer can further churn.
         </p>
 
         <svg
@@ -254,14 +250,11 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
 
             {/* Section labels */}
             <text x={50} y={30} fill="#5B6478" fontSize={11} fontWeight={700} letterSpacing="2.5">
-              ACTIVATION PATHS (PARALLEL) →
+              CONVERSION SPINE →
             </text>
-            <text x={50} y={490} fill="#5B6478" fontSize={11} fontWeight={700} letterSpacing="2.5">
+            <text x={50} y={BRANCH_Y - NODE_H / 2 - 20} fill="#5B6478" fontSize={11} fontWeight={700} letterSpacing="2.5">
               ↓ OUTCOMES OF TRIAL STARTED
             </text>
-
-            {/* Subtle merge-zone band behind Auth/Properties → Ready */}
-            <rect x={X_PARALLEL - NODE_W / 2 - 10} y={AUTH_Y - NODE_H / 2 - 10} width={X_READY - X_PARALLEL + 20} height={PROPS_Y - AUTH_Y + NODE_H + 20} fill="#1E6FFF" fillOpacity={0.03} rx={20} />
 
             {/* Subtle band behind trial outcomes branch zone */}
             <rect x={20} y={BRANCH_Y - NODE_H / 2 - 30} width={VB_W - 40} height={CHURN_Y - BRANCH_Y + NODE_H + 60} fill="url(#branchBand)" rx={20} />
@@ -288,13 +281,14 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
                   const lost = parentCount - childCount;
                   const pct = (lost / parentCount) * 100;
                   if (Math.abs(pct) >= 1) {
-                    if (pct >= 0) {
-                      labelText = `−${pct.toFixed(0)}%`;
-                      labelColor = pct > 50 ? "#F87171" : "#9CA3AF";
-                    } else {
-                      labelText = `+${Math.abs(pct).toFixed(0)}%`;
-                      labelColor = "#6EE7B7";
-                    }
+                    // Drop-off labels stay neutral. The number itself is
+                    // the signal — colour-coding it red when "high" added
+                    // visual noise without clarifying intent. Same neutral
+                    // gray for both directions.
+                    labelText = pct >= 0
+                      ? `−${pct.toFixed(0)}%`
+                      : `+${Math.abs(pct).toFixed(0)}%`;
+                    labelColor = "#8B92A3";
                   }
                 }
               }
@@ -481,24 +475,24 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
             })}
           </svg>
 
-        {/* Legend — 3-color palette: violet=in-flight, mint=positive, coral=negative */}
+        {/* Legend — restricted blue-spectrum palette */}
         <div className="mt-6 pt-5 border-t border-[#1F2937] grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-[14px] leading-snug">
           <div className="flex items-start gap-2.5">
             <span className="mt-1.5 h-2.5 w-2.5 rounded-full bg-[#1E6FFF] shrink-0" />
-            <span className="text-[#C9C9D1]">
-              <span className="text-white font-medium">In-flight</span> = stages still progressing (Auth → Properties → Ready → Trial → In Trial)
+            <span className="text-[#C9D1DC]">
+              <span className="text-white font-medium">In-flight</span> = stages still progressing (Auth → Ready → Trial → In Trial)
             </span>
           </div>
           <div className="flex items-start gap-2.5">
-            <span className="mt-1.5 h-2.5 w-2.5 rounded-full bg-[#6EE7B7] shrink-0" />
-            <span className="text-[#C9C9D1]">
+            <span className="mt-1.5 h-2.5 w-2.5 rounded-full bg-[#60A5FA] shrink-0" />
+            <span className="text-[#C9D1DC]">
               <span className="text-white font-medium">Customer</span> = real paid customer (Amplify/Flex, ≥2 days)
             </span>
           </div>
           <div className="flex items-start gap-2.5">
-            <span className="mt-1.5 h-2.5 w-2.5 rounded-full bg-[#F87171] shrink-0" />
-            <span className="text-[#C9C9D1]">
-              <span className="text-white font-medium">Failed / Churned</span> = cancelled before converting, or after ≥2 days as customer
+            <span className="mt-1.5 h-2.5 w-2.5 rounded-full bg-[#475569] shrink-0" />
+            <span className="text-[#C9D1DC]">
+              <span className="text-white font-medium">Off-path</span> = Failed Trialist or Churned (left the funnel)
             </span>
           </div>
         </div>

@@ -49,7 +49,7 @@ export default function GeoCard({ geo }: { geo: GeoRow[] }) {
                   <TableCell className="text-right font-mono text-[13px] tabular-nums text-[#C9D1DC]">{row.createdProperties}</TableCell>
                   <TableCell className="text-right font-mono text-[13px] tabular-nums text-[#C9D1DC]">{row.clickedLaunch}</TableCell>
                   <TableCell className="text-right font-mono text-[13px] tabular-nums text-[#C9D1DC]">{row.trials}</TableCell>
-                  <TableCell className="text-right font-mono text-[13px] tabular-nums text-[#FBBF24]">{row.inTrial}</TableCell>
+                  <TableCell className="text-right font-mono text-[13px] tabular-nums text-[#8B92A3]">{row.inTrial}</TableCell>
                   <TableCell className="text-right font-mono text-[13px] tabular-nums text-white">{row.customers}</TableCell>
                   <TableCell className="text-right font-mono text-[13px] tabular-nums font-semibold text-[#1E6FFF]">{pct(row.customers, row.signups)}</TableCell>
                   <TableCell className="text-right font-mono text-[13px] tabular-nums text-[#8B92A3]">{pct(row.trials, row.signups)}</TableCell>
@@ -64,7 +64,7 @@ export default function GeoCard({ geo }: { geo: GeoRow[] }) {
                       <TableCell className="text-right text-[12px] text-[#5B6478]">—</TableCell>
                       <TableCell className="text-right text-[12px] text-[#5B6478]">—</TableCell>
                       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#8B92A3]">{city.trials}</TableCell>
-                      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#FBBF24]">{city.inTrial}</TableCell>
+                      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#8B92A3]">{city.inTrial}</TableCell>
                       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#8B92A3]">{city.customers}</TableCell>
                       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#8B92A3]">{pct(city.customers, city.signups)}</TableCell>
                       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#8B92A3]">{pct(city.trials, city.signups)}</TableCell>

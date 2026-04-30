@@ -6,12 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { RepRow } from "@/lib/types";
 
 function RateBadge({ value, thresholds }: { value: number; thresholds: [number, number] }) {
+  // Same 2-tone restraint as CohortCard. Healthy = white text on subtle
+  // bg; mid = light blue; low = muted slate. No amber, no red.
   const color =
     value > thresholds[0]
-      ? "text-[#6EE7B7] bg-[#0F2A1F] border-[#6EE7B7]/20"
+      ? "text-white bg-[#1A2235] border-[#1F2937]"
       : value > thresholds[1]
-        ? "text-[#FBBF24] bg-[#2A1F0F] border-[#FBBF24]/20"
-        : "text-[#F87171] bg-[#2A0F13] border-[#F87171]/20";
+        ? "text-[#60A5FA] bg-[#0F1E2E] border-[#1F2937]"
+        : "text-[#5B6478] bg-[#11182B] border-[#1F2937]";
   return (
     <Badge variant="outline" className={`font-mono text-[11px] tabular-nums ${color}`}>
       {value.toFixed(1)}%
@@ -46,7 +48,7 @@ export default function RepCard({ reps }: { reps: RepRow[] }) {
                 <TableCell className="font-medium text-[13px] text-white">{row.rep}</TableCell>
                 <TableCell className="text-right font-mono text-[13px] tabular-nums text-white">{row.contacts}</TableCell>
                 <TableCell className="text-right font-mono text-[13px] tabular-nums text-white">{row.trials}</TableCell>
-                <TableCell className="text-right font-mono text-[13px] tabular-nums text-[#FBBF24]">{row.inTrial}</TableCell>
+                <TableCell className="text-right font-mono text-[13px] tabular-nums text-[#8B92A3]">{row.inTrial}</TableCell>
                 <TableCell className="text-right font-mono text-[13px] tabular-nums text-white">{row.customers}</TableCell>
                 <TableCell className="text-right">
                   <RateBadge value={row.signupToTrial} thresholds={[10, 5]} />

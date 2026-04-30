@@ -9,7 +9,6 @@ import GeoCard from "@/components/dashboard/GeoCard";
 import RepCard from "@/components/dashboard/RepCard";
 import DQChartCard from "@/components/dashboard/DQChartCard";
 import CohortCard from "@/components/dashboard/CohortCard";
-import TrialOutcomesCard from "@/components/dashboard/TrialOutcomesCard";
 import MetaSpendCard from "@/components/dashboard/MetaSpendCard";
 import CampaignAnalysisCard from "@/components/dashboard/CampaignAnalysisCard";
 import SectionHeading, { Icons } from "@/components/dashboard/SectionHeading";
@@ -118,9 +117,9 @@ export default function Dashboard() {
       {/* Content */}
       <main className="max-w-[1440px] mx-auto px-6 lg:px-8 py-6 lg:py-8">
         {error && (
-          <div className="bg-[#2D1B21] border border-[#EF4444]/30 rounded-xl p-4 text-[#FCA5A5] mb-5">
-            <p className="font-semibold text-sm">Error loading data</p>
-            <p className="text-xs mt-1 text-[#F87171]">{error}</p>
+          <div className="bg-[#11182B] border border-[#1F2937] rounded-xl p-4 text-[#C9D1DC] mb-5">
+            <p className="font-semibold text-sm text-white">Error loading data</p>
+            <p className="text-xs mt-1 text-[#8B92A3]">{error}</p>
           </div>
         )}
 
@@ -131,14 +130,16 @@ export default function Dashboard() {
           {data && (
             <>
               {isMaturityRisky && (
-                <div className="bg-[#2A1F0F] border border-[#F59E0B]/30 rounded-xl p-4 text-[#FCD34D] flex items-start gap-3">
-                  <span className="text-lg leading-none mt-0.5">⚠</span>
+                <div className="bg-[#11182B] border border-[#1F2937] rounded-xl p-4 flex items-start gap-3">
+                  <span className="text-[#60A5FA] text-lg leading-none mt-0.5">ⓘ</span>
                   <div className="flex-1">
-                    <p className="font-semibold text-[13px] text-[#FCD34D]">
+                    <p className="font-semibold text-[13px] text-white">
                       Cohort still maturing
                     </p>
-                    <p className="text-[12px] mt-1 text-[#FBBF24]/90 leading-relaxed">
-                      Your end date <span className="font-mono">{customEnd}</span> is within the last 14 days. Trial and Customer counts for recent signups will be undercounted because the median signup-to-customer time is ~14 days. Set the end date to <button onClick={() => setCustomEnd(tMinus14Iso)} className="underline hover:text-white font-mono">{tMinus14Iso}</button> for fully-matured numbers.
+                    <p className="text-[12px] mt-1 text-[#8B92A3] leading-relaxed">
+                      Your end date <span className="font-mono text-[#C9D1DC]">{customEnd}</span> is within the last 14 days. Trial and Customer counts for recent signups will be undercounted because the median signup-to-customer time is ~14 days. Set the end date to{" "}
+                      <button onClick={() => setCustomEnd(tMinus14Iso)} className="text-[#60A5FA] hover:text-white underline font-mono transition-colors">{tMinus14Iso}</button>{" "}
+                      for fully-matured numbers.
                     </p>
                   </div>
                 </div>
@@ -159,7 +160,7 @@ export default function Dashboard() {
                 icon={Icons.Gauge}
                 title="Overview"
                 description="Headline metrics with 14-day trend vs prior period"
-                iconColor="#1E6FFF"
+                iconColor="#60A5FA"
               />
               <KPICards kpis={data.kpis} cohort={data.cohort} />
 
@@ -167,7 +168,7 @@ export default function Dashboard() {
                 icon={Icons.Funnel}
                 title="Funnel & Campaign Performance"
                 description="How qualified signups progress through stages, and where they come from"
-                iconColor="#6EE7B7"
+                iconColor="#1E6FFF"
               />
               <FunnelCard funnel={data.funnel} />
 
@@ -187,7 +188,7 @@ export default function Dashboard() {
                 icon={Icons.Shield}
                 title="Quality & Team"
                 description="DQ reasons by week and sales rep performance"
-                iconColor="#FB923C"
+                iconColor="#93C5FD"
               />
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 <DQChartCard data={data.dqWeekly} />
@@ -197,10 +198,9 @@ export default function Dashboard() {
               <SectionHeading
                 icon={Icons.Globe}
                 title="Cohort & Geography"
-                description="Signup cohort progression, trial outcomes, and country/city breakdown"
+                description="Signup cohort progression and country/city breakdown"
                 iconColor="#60A5FA"
               />
-              <TrialOutcomesCard outcomes={data.trialOutcomes} />
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 <CohortCard cohort={data.cohort} period={data.period} />
                 <GeoCard geo={data.geo} />
