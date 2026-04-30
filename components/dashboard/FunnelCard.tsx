@@ -12,52 +12,83 @@ type Node = {
   cy: number;
   color: string;
   parent?: string;
+  /** Optional second incoming parent — used by Ready to Launch which can
+   *  be reached from EITHER Authorized Airbnb OR Created Properties. */
+  extraParent?: string;
   parentExitX?: number; // override the exit x on the parent (for fan branches)
 };
 
-// Wide canvas: linear flow runs left→right at top, branches drop down from
-// Trial Started.
+// Wide canvas: spine runs left→right with a parallel pair (Auth / Properties)
+// branching off Qualified Signups and merging back at Ready to Launch.
+// Then trial outcomes branch downward from Trial Started.
 const VB_W = 1500;
-const VB_H = 770;
+const VB_H = 850;
 const NODE_W = 230;
 const NODE_H = 132;
 
-// Linear top row (y = 90). 5 nodes evenly spaced with ~75px gap each.
-const TOP_Y = 90;
-// Branch row — outcomes drop from Trial Started.
-const BRANCH_Y = 470;
+// Spine y for QS, Ready, Trial — all on a horizontal line.
+const SPINE_Y = 200;
+// Parallel pair sits above/below the spine at the same x.
+const AUTH_Y = 80;
+const PROPS_Y = 320;
+// Trial outcomes row.
+const BRANCH_Y = 580;
 // Churned drops below Customer.
-const CHURN_Y = 660;
+const CHURN_Y = 760;
 
-// Linear x positions: 150, 430, 710, 990, 1270 (280 apart, with right margin)
-const LIN_X = [150, 430, 710, 990, 1270];
+// Spine x positions. Auth/Properties share the second slot.
+//   QS → [Auth/Props] → Ready → Trial
+const X_QS = 150;
+const X_PARALLEL = 600;   // Auth (top) + Properties (bottom)
+const X_READY = 1000;
+const X_TRIAL = 1300;     // Trial Started (kept far right so branches have room)
 
-// 3-color palette designed for dark backgrounds:
-//   VIOLET — linear in-flight stages (signup, auth, props, ready, trial, in-trial)
-//   MINT   — positive outcome (Customer)
-//   CORAL  — negative outcomes (Failed Trialist, Churned)
-const C_INFLIGHT = "#1E6FFF";  // violet
+const C_INFLIGHT = "#1E6FFF";  // electric blue
 const C_POSITIVE = "#6EE7B7";  // mint
 const C_NEGATIVE = "#F87171";  // coral
 
 const NODES: Node[] = [
-  // Linear conversion path (left → right) — all violet
-  { key: "Qualified Signups",  label: "Qualified Signups",  cx: LIN_X[0], cy: TOP_Y, color: C_INFLIGHT },
-  { key: "Authorized Airbnb",  label: "Authorized Airbnb",  cx: LIN_X[1], cy: TOP_Y, color: C_INFLIGHT, parent: "Qualified Signups" },
-  { key: "Created Properties", label: "Created Properties", cx: LIN_X[2], cy: TOP_Y, color: C_INFLIGHT, parent: "Authorized Airbnb" },
-  { key: "Ready to Launch",    label: "Ready to Launch",    cx: LIN_X[3], cy: TOP_Y, color: C_INFLIGHT, parent: "Created Properties", icon: "🚀" },
-  { key: "Trial Started",      label: "Trial Started",      cx: LIN_X[4], cy: TOP_Y, color: C_INFLIGHT, parent: "Ready to Launch", icon: "★" },
+  // Spine entry
+  { key: "Qualified Signups",  label: "Qualified Signups",  cx: X_QS,       cy: SPINE_Y, color: C_INFLIGHT },
 
-  // Branches off Trial Started.
-  { key: "Failed Trialist",    label: "Failed Trialist",    cx: 350,      cy: BRANCH_Y, color: C_NEGATIVE, parent: "Trial Started", icon: "⊘", parentExitX: LIN_X[4] - NODE_W / 2 + 30 },
-  { key: "In Trial",           label: "In Trial",           cx: 810,      cy: BRANCH_Y, color: C_INFLIGHT, parent: "Trial Started", icon: "☆", parentExitX: LIN_X[4] - 60 },
-  { key: "Customer",           label: "Customer",           cx: LIN_X[4], cy: BRANCH_Y, color: C_POSITIVE, parent: "Trial Started", icon: "★★" },
+  // Parallel activation steps — siblings of Qualified Signups.
+  // Auth and Created Properties are independent paths to setup. Some
+  // users authorize Airbnb (which auto-imports listings); others
+  // manually create properties. They are NOT sequential — that's why
+  // Created Properties can be > Authorized Airbnb in the data.
+  { key: "Authorized Airbnb",  label: "Authorized Airbnb",  cx: X_PARALLEL, cy: AUTH_Y,  color: C_INFLIGHT, parent: "Qualified Signups" },
+  { key: "Created Properties", label: "Created Properties", cx: X_PARALLEL, cy: PROPS_Y, color: C_INFLIGHT, parent: "Qualified Signups" },
+
+  // Merge: Ready to Launch is fed by both parallel activation paths.
+  { key: "Ready to Launch",    label: "Ready to Launch",    cx: X_READY,    cy: SPINE_Y, color: C_INFLIGHT, parent: "Authorized Airbnb", extraParent: "Created Properties", icon: "🚀" },
+
+  // Spine continues
+  { key: "Trial Started",      label: "Trial Started",      cx: X_TRIAL,    cy: SPINE_Y, color: C_INFLIGHT, parent: "Ready to Launch", icon: "★" },
+
+  // Trial outcomes branch off Trial Started.
+  { key: "Failed Trialist",    label: "Failed Trialist",    cx: 380,        cy: BRANCH_Y, color: C_NEGATIVE, parent: "Trial Started", icon: "⊘", parentExitX: X_TRIAL - NODE_W / 2 + 30 },
+  { key: "In Trial",           label: "In Trial",           cx: 840,        cy: BRANCH_Y, color: C_INFLIGHT, parent: "Trial Started", icon: "☆", parentExitX: X_TRIAL - 60 },
+  { key: "Customer",           label: "Customer",           cx: X_TRIAL,    cy: BRANCH_Y, color: C_POSITIVE, parent: "Trial Started", icon: "★★" },
 
   // Customer → Churned (vertical drop)
-  { key: "Churned",            label: "Churned",            cx: LIN_X[4], cy: CHURN_Y,  color: C_NEGATIVE, parent: "Customer", icon: "⚠" },
+  { key: "Churned",            label: "Churned",            cx: X_TRIAL,    cy: CHURN_Y,  color: C_NEGATIVE, parent: "Customer", icon: "⚠" },
 ];
 
 const BRANCH_KEYS = new Set(["In Trial", "Failed Trialist", "Customer"]);
+
+// Nodes whose label should show "% of parent" rather than "−X% lost".
+// Used for: parallel activation siblings off Qualified Signups (Auth /
+// Created Properties), the Trial Started outcomes (In Trial / Failed /
+// Customer), and Churned. For everything else (Ready → Trial) we show
+// the loss % so the user can see drop-off through the spine.
+const SHARE_LABEL_KEYS = new Set([
+  "Authorized Airbnb",
+  "Created Properties",
+  "In Trial",
+  "Failed Trialist",
+  "Customer",
+  "Churned",
+]);
 
 export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
   const dqRow = funnel.find((f) => f.name === "AirbnbDQ");
@@ -84,45 +115,90 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
   // visible even when only a small % converted.
   const STROKE_W = 18;
 
+  /** Build the SVG `d` for a connector and classify its shape. Centralised
+   *  so both the primary parent and any `extraParent` (merge) edge use the
+   *  exact same geometry rules. */
+  function buildPath(parent: Node, n: Node): { d: string; kind: PathInfo["kind"] } {
+    if (n.cy === parent.cy) {
+      // Same horizontal — straight line edge-to-edge.
+      const x1 = parent.cx + NODE_W / 2;
+      const x2 = n.cx - NODE_W / 2;
+      return { d: `M ${x1} ${parent.cy} L ${x2} ${n.cy}`, kind: "horizontal" };
+    }
+    if (n.cx === parent.cx) {
+      // Same vertical — straight drop edge-to-edge.
+      const y1 = parent.cy + NODE_H / 2;
+      const y2 = n.cy - NODE_H / 2;
+      return { d: `M ${parent.cx} ${y1} L ${n.cx} ${y2}`, kind: "vertical" };
+    }
+    // Off-axis: draw a smooth Bezier. Exit from the parent's edge (right
+    // edge if parent is left of child, bottom edge if parent is above).
+    const goingDown = n.cy > parent.cy;
+    const goingRight = n.cx > parent.cx;
+    let x1: number, y1: number, x2: number, y2: number, c1x: number, c1y: number, c2x: number, c2y: number;
+    if (Math.abs(n.cy - parent.cy) > Math.abs(n.cx - parent.cx) * 0.6) {
+      // Mostly vertical move (e.g. trial → branch row). Exit from the
+      // parent's bottom edge, enter the child's top edge.
+      x1 = n.parentExitX ?? parent.cx;
+      y1 = parent.cy + (goingDown ? NODE_H / 2 : -NODE_H / 2);
+      x2 = n.cx;
+      y2 = n.cy + (goingDown ? -NODE_H / 2 : NODE_H / 2);
+      const midY = (y1 + y2) / 2;
+      c1x = x1; c1y = midY; c2x = x2; c2y = midY;
+    } else {
+      // Mostly horizontal move (e.g. QS → Auth/Properties). Exit from the
+      // parent's right/left edge, enter the child's left/right edge —
+      // gives a clean side-to-side curve regardless of vertical offset.
+      x1 = parent.cx + (goingRight ? NODE_W / 2 : -NODE_W / 2);
+      y1 = parent.cy;
+      x2 = n.cx + (goingRight ? -NODE_W / 2 : NODE_W / 2);
+      y2 = n.cy;
+      const midX = (x1 + x2) / 2;
+      c1x = midX; c1y = y1; c2x = midX; c2y = y2;
+    }
+    return {
+      d: `M ${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}`,
+      kind: "branch",
+    };
+  }
+
   for (const n of NODES) {
     if (!n.parent) continue;
     const parent = NODES.find((p) => p.key === n.parent);
     if (!parent) continue;
-    const stage = byName[n.key];
-    const parentStage = byName[parent.key];
-    if (!stage || !parentStage) continue;
+    if (!byName[n.key] || !byName[parent.key]) continue;
 
-    let d = "";
-    let kind: PathInfo["kind"] = "horizontal";
-    if (n.cy === parent.cy) {
-      const x1 = parent.cx + NODE_W / 2;
-      const x2 = n.cx - NODE_W / 2;
-      d = `M ${x1} ${parent.cy} L ${x2} ${n.cy}`;
-      kind = "horizontal";
-    } else if (n.cx === parent.cx) {
-      const y1 = parent.cy + NODE_H / 2;
-      const y2 = n.cy - NODE_H / 2;
-      d = `M ${parent.cx} ${y1} L ${n.cx} ${y2}`;
-      kind = "vertical";
-    } else {
-      const x1 = n.parentExitX ?? parent.cx;
-      const y1 = parent.cy + NODE_H / 2;
-      const x2 = n.cx;
-      const y2 = n.cy - NODE_H / 2;
-      const midY = (y1 + y2) / 2;
-      d = `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
-      kind = "branch";
-    }
-
+    const primary = buildPath(parent, n);
     paths.push({
-      d,
+      d: primary.d,
       strokeWidth: STROKE_W,
       color: n.color,
       pathId: `fpath-${n.key.replace(/\s+/g, "_")}`,
       from: parent,
       to: n,
-      kind,
+      kind: primary.kind,
     });
+
+    // Merge-edge support: if this node has a second parent, draw a second
+    // incoming connector. Used by Ready to Launch, which is fed by both
+    // Authorized Airbnb and Created Properties (parallel activation
+    // paths). Prevents the funnel from implying false sequence between
+    // those two stages.
+    if (n.extraParent) {
+      const extra = NODES.find((p) => p.key === n.extraParent);
+      if (extra && byName[extra.key]) {
+        const merge = buildPath(extra, n);
+        paths.push({
+          d: merge.d,
+          strokeWidth: STROKE_W,
+          color: n.color,
+          pathId: `fpath-${n.key.replace(/\s+/g, "_")}-from-${extra.key.replace(/\s+/g, "_")}`,
+          from: extra,
+          to: n,
+          kind: merge.kind,
+        });
+      }
+    }
   }
 
   return (
@@ -141,7 +217,7 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
       <CardContent className="pt-6">
         <p className="text-[14px] text-[#A8A8B2] mb-4 leading-relaxed">
           <span className="text-[#1E6FFF] font-medium">Cohort-based.</span>{" "}
-          Of qualified signups whose <code className="text-[#C9C9D1] text-[13px]">createdate</code> falls in the window, what % reached each stage. Linear path top → Trial Started, then 3 outcomes branch downward (Customer can further churn).
+          Of qualified signups whose <code className="text-[#C9D1DC] text-[13px]">createdate</code> falls in the window, what % reached each stage. <span className="text-white font-medium">Authorized Airbnb</span> and <span className="text-white font-medium">Created Properties</span> are <span className="text-[#1E6FFF]">parallel activation paths</span> — most users authorize Airbnb (which auto-imports listings), some create properties manually. Both feed into Ready to Launch. Then 3 outcomes branch off Trial Started (Customer can further churn).
         </p>
 
         <svg
@@ -177,29 +253,38 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
             </defs>
 
             {/* Section labels */}
-            <text x={50} y={40} fill="#5B6478" fontSize={11} fontWeight={700} letterSpacing="2.5">
-              CONVERSION PATH →
+            <text x={50} y={30} fill="#5B6478" fontSize={11} fontWeight={700} letterSpacing="2.5">
+              ACTIVATION PATHS (PARALLEL) →
             </text>
-            <text x={50} y={290} fill="#5B6478" fontSize={11} fontWeight={700} letterSpacing="2.5">
+            <text x={50} y={490} fill="#5B6478" fontSize={11} fontWeight={700} letterSpacing="2.5">
               ↓ OUTCOMES OF TRIAL STARTED
             </text>
 
-            {/* Subtle band behind branches */}
-            <rect x={20} y={310} width={VB_W - 40} height={310} fill="url(#branchBand)" rx={20} />
+            {/* Subtle merge-zone band behind Auth/Properties → Ready */}
+            <rect x={X_PARALLEL - NODE_W / 2 - 10} y={AUTH_Y - NODE_H / 2 - 10} width={X_READY - X_PARALLEL + 20} height={PROPS_Y - AUTH_Y + NODE_H + 20} fill="#1E6FFF" fillOpacity={0.03} rx={20} />
+
+            {/* Subtle band behind trial outcomes branch zone */}
+            <rect x={20} y={BRANCH_Y - NODE_H / 2 - 30} width={VB_W - 40} height={CHURN_Y - BRANCH_Y + NODE_H + 60} fill="url(#branchBand)" rx={20} />
 
             {/* Flow paths */}
             {paths.map((p, idx) => {
-              const isBranch = BRANCH_KEYS.has(p.to.key);
+              // Merge edges (Auth → Ready, Properties → Ready) are silent —
+              // we don't want to imply a single "% conversion" through them
+              // because Ready is fed by both paths in parallel.
+              const isMergeEdge = p.pathId.includes("-from-");
               const parentCount = byName[p.from.key]?.count ?? 0;
               const childCount = byName[p.to.key]?.count ?? 0;
               let labelText = "";
               let labelColor = "#8B92A3";
-              if (parentCount > 0) {
-                if (isBranch || p.to.key === "Churned") {
+              if (parentCount > 0 && !isMergeEdge) {
+                if (SHARE_LABEL_KEYS.has(p.to.key)) {
+                  // Show share-of-parent (% of QS who reached this milestone,
+                  // % of Trial who became Customer, etc.).
                   const share = (childCount / parentCount) * 100;
                   labelText = `${share.toFixed(0)}%`;
                   labelColor = p.color;
                 } else {
+                  // Spine progression — show drop-off.
                   const lost = parentCount - childCount;
                   const pct = (lost / parentCount) * 100;
                   if (Math.abs(pct) >= 1) {
@@ -213,6 +298,9 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
                   }
                 }
               }
+              // Suppress the BRANCH_KEYS reference for lint — kept for backwards
+              // compatibility / future use elsewhere in the file.
+              void BRANCH_KEYS;
               // Stagger animation start so multiple particles don't all
               // depart at the exact same instant — feels more organic.
               const animDuration = p.kind === "horizontal" ? 3.2 : 2.6;
@@ -270,9 +358,22 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
                         midX = p.from.cx + 60;
                         midY = (p.from.cy + p.to.cy) / 2;
                       } else {
-                        const x1 = p.to.parentExitX ?? p.from.cx;
-                        midX = (x1 + p.to.cx) / 2;
-                        midY = (p.from.cy + NODE_H / 2 + p.to.cy - NODE_H / 2) / 2;
+                        // Bezier branch: place the chip near the curve's
+                        // geometric centre. For mostly-horizontal curves
+                        // (QS → Auth, QS → Properties) this lands cleanly
+                        // on the line; for mostly-vertical curves (Trial
+                        // → outcomes) it lands in the gap above the child.
+                        const mostlyVertical =
+                          Math.abs(p.to.cy - p.from.cy) >
+                          Math.abs(p.to.cx - p.from.cx) * 0.6;
+                        if (mostlyVertical) {
+                          const x1 = p.to.parentExitX ?? p.from.cx;
+                          midX = (x1 + p.to.cx) / 2;
+                          midY = (p.from.cy + NODE_H / 2 + p.to.cy - NODE_H / 2) / 2;
+                        } else {
+                          midX = (p.from.cx + p.to.cx) / 2;
+                          midY = (p.from.cy + p.to.cy) / 2;
+                        }
                       }
                       return (
                         <g>
