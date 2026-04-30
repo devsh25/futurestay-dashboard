@@ -32,18 +32,18 @@ function Chip({
 }) {
   const base =
     variant === "period"
-      ? "bg-[#A78BFA]/15 text-[#C4B5FD] border-[#A78BFA]/25"
-      : "bg-[#15151A] text-[#E5E5EB] border-[#2A2A32]";
+      ? "bg-[#1E6FFF]/15 text-[#93BBFE] border-[#1E6FFF]/25"
+      : "bg-[#11182B] text-[#C9D1DC] border-[#1F2937]";
   return (
     <span
       className={`inline-flex items-center gap-1.5 text-[12px] font-medium rounded-full border px-3 py-1 ${base}`}
     >
-      {prefix && <span className="text-[#8A8A94] font-normal">{prefix}</span>}
+      {prefix && <span className="text-[#8B92A3] font-normal">{prefix}</span>}
       <span>{label}</span>
       {onRemove && (
         <button
           onClick={onRemove}
-          className="ml-0.5 text-[#6B6B75] hover:text-white transition-colors"
+          className="ml-0.5 text-[#5B6478] hover:text-white transition-colors"
           aria-label={`Remove ${label}`}
         >
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -107,7 +107,7 @@ export default function ActiveFilterChips({
             onCountriesChange([]);
             onChannelsChange([]);
           }}
-          className="text-[12px] text-[#8A8A94] hover:text-white underline-offset-2 hover:underline ml-1"
+          className="text-[12px] text-[#8B92A3] hover:text-white underline-offset-2 hover:underline ml-1"
         >
           Clear all
         </button>

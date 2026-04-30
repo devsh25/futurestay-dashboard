@@ -82,11 +82,11 @@ function MultiCheckPopover({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
-        className="inline-flex items-center justify-between h-9 px-3 text-[13px] font-medium min-w-[140px] max-w-[220px] rounded-lg border border-[#2A2A32] bg-[#15151A] text-[#E5E5EB] hover:border-[#A78BFA]/40 hover:text-white transition-colors cursor-pointer"
+        className="inline-flex items-center justify-between h-9 px-4 text-[13px] font-medium min-w-[140px] max-w-[220px] rounded-full border border-[#1F2937] bg-[#11182B] text-[#C9D1DC] hover:border-[#1E6FFF]/50 hover:bg-[#1A2235] hover:text-white transition-colors cursor-pointer"
       >
         <span className="truncate">{displayText}</span>
         <svg
-          className="ml-1 h-4 w-4 shrink-0 opacity-50"
+          className="ml-1.5 h-3.5 w-3.5 shrink-0 opacity-60"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -99,12 +99,12 @@ function MultiCheckPopover({
           />
         </svg>
       </PopoverTrigger>
-      <PopoverContent className="w-[200px] p-2 bg-[#1A1A22] border-[#2A2A32]" align="start">
+      <PopoverContent className="w-[200px] p-2 bg-[#0E1422] border-[#1F2937]" align="start">
         <div className="space-y-1">
           {options.map((opt) => (
             <label
               key={opt.value}
-              className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#252530] cursor-pointer text-sm text-[#E5E5EB]"
+              className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#1A2235] cursor-pointer text-sm text-[#C9D1DC]"
             >
               <Checkbox
                 checked={
@@ -115,9 +115,9 @@ function MultiCheckPopover({
               {opt.label}
             </label>
           ))}
-          <div className="border-t border-[#2A2A32] mt-1 pt-1">
+          <div className="border-t border-[#1F2937] mt-1 pt-1">
             <button
-              className="text-xs text-[#8A8A94] hover:text-white px-2 py-1"
+              className="text-xs text-[#8B92A3] hover:text-white px-2 py-1"
               onClick={() => onChange([])}
             >
               Clear all
@@ -148,12 +148,12 @@ export default function FilterBar({
         value={period}
         onValueChange={(v) => onPeriodChange((v ?? "allTime") as PeriodFilter)}
       >
-        <SelectTrigger className="w-[150px] h-9 bg-[#15151A] border-[#2A2A32] text-[#E5E5EB] hover:border-[#A78BFA]/40">
+        <SelectTrigger className="w-[160px] h-9 px-4 rounded-full bg-[#11182B] border-[#1F2937] text-[#C9D1DC] hover:border-[#1E6FFF]/50 hover:bg-[#1A2235] hover:text-white text-[13px]">
           <SelectValue placeholder="Period" />
         </SelectTrigger>
-        <SelectContent className="bg-[#1A1A22] border-[#2A2A32]">
+        <SelectContent className="bg-[#0E1422] border-[#1F2937] rounded-xl">
           {PERIOD_OPTIONS.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value} className="text-[#E5E5EB] focus:bg-[#252530] focus:text-white">
+            <SelectItem key={opt.value} value={opt.value} className="text-[#C9D1DC] focus:bg-[#1A2235] focus:text-white">
               {opt.label}
             </SelectItem>
           ))}
@@ -166,14 +166,14 @@ export default function FilterBar({
             type="date"
             value={customStart}
             onChange={(e) => onCustomStartChange(e.target.value)}
-            className="h-9 rounded-md border border-[#2A2A32] bg-[#15151A] text-[#E5E5EB] px-2 text-sm [color-scheme:dark]"
+            className="h-9 rounded-full border border-[#1F2937] bg-[#11182B] text-[#C9D1DC] px-3.5 text-[13px] hover:border-[#1E6FFF]/50 hover:bg-[#1A2235] transition-colors [color-scheme:dark]"
           />
-          <span className="text-sm text-[#8A8A94]">to</span>
+          <span className="text-[13px] text-[#5B6478]">to</span>
           <input
             type="date"
             value={customEnd}
             onChange={(e) => onCustomEndChange(e.target.value)}
-            className="h-9 rounded-md border border-[#2A2A32] bg-[#15151A] text-[#E5E5EB] px-2 text-sm [color-scheme:dark]"
+            className="h-9 rounded-full border border-[#1F2937] bg-[#11182B] text-[#C9D1DC] px-3.5 text-[13px] hover:border-[#1E6FFF]/50 hover:bg-[#1A2235] transition-colors [color-scheme:dark]"
           />
         </>
       )}
@@ -195,7 +195,7 @@ export default function FilterBar({
       />
 
       {loading && (
-        <span className="text-sm text-[#A78BFA] animate-pulse">
+        <span className="text-sm text-[#1E6FFF] animate-pulse">
           Loading…
         </span>
       )}

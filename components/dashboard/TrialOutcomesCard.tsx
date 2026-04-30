@@ -65,10 +65,10 @@ const SEGMENTS: Segment[] = [
     key: "failedTrialist",
     label: "Failed Trialist",
     shortLabel: "Failed",
-    hex: "#A78BFA",
-    bgTint: "bg-[#A78BFA]/8",
-    borderTint: "border-[#A78BFA]/30",
-    textTint: "text-[#A78BFA]",
+    hex: "#1E6FFF",
+    bgTint: "bg-[#1E6FFF]/8",
+    borderTint: "border-[#1E6FFF]/30",
+    textTint: "text-[#1E6FFF]",
     description: "Cancelled trial before real conversion",
     icon: "⊘",
   },
@@ -76,9 +76,9 @@ const SEGMENTS: Segment[] = [
     key: "reverted",
     label: "Reverted / Other",
     shortLabel: "Reverted",
-    hex: "#6B6B75",
-    bgTint: "bg-[#6B6B75]/8",
-    borderTint: "border-[#6B6B75]/30",
+    hex: "#5B6478",
+    bgTint: "bg-[#5B6478]/8",
+    borderTint: "border-[#5B6478]/30",
     textTint: "text-[#9CA3AF]",
     description: "Dropped back to signup or unknown",
     icon: "↺",
@@ -98,22 +98,22 @@ export default function TrialOutcomesCard({ outcomes }: { outcomes: TrialOutcome
   const COL_W = VB_W / SEGMENTS.length;
 
   return (
-    <Card className="bg-[#15151A] border border-[#1F1F28] rounded-2xl shadow-none">
-      <CardHeader className="pb-4 border-b border-[#1F1F28]">
+    <Card className="bg-[#11182B] border border-[#1F2937] rounded-2xl shadow-none">
+      <CardHeader className="pb-4 border-b border-[#1F2937]">
         <CardTitle className="flex items-center justify-between text-[17px] font-semibold text-white tracking-tight">
           <span>Trial Outcomes</span>
           <Badge className="bg-[#6EE7B7]/15 text-[#6EE7B7] border-[#6EE7B7]/25 text-[11px] font-medium">
             Where trialists ended up
           </Badge>
         </CardTitle>
-        <p className="text-[13px] text-[#8A8A94] mt-2 leading-relaxed">
-          <span className="text-[#A78BFA] font-medium">Cohort-based.</span>{" "}
+        <p className="text-[13px] text-[#8B92A3] mt-2 leading-relaxed">
+          <span className="text-[#1E6FFF] font-medium">Cohort-based.</span>{" "}
           Of contacts who entered Trialist (<code className="text-[#C9C9D1]">trial__start_date</code> populated) within the window, what happened next: still in trial, became real Customer (Amplify/Flex ≥ 2 days), failed before converting, or churned.
         </p>
       </CardHeader>
 
       <CardContent className="pt-6">
-        <p className="text-[13px] text-[#8A8A94] mb-5">
+        <p className="text-[13px] text-[#8B92A3] mb-5">
           Of{" "}
           <span className="text-white font-semibold">
             {outcomes.total.toLocaleString()}
@@ -123,7 +123,7 @@ export default function TrialOutcomesCard({ outcomes }: { outcomes: TrialOutcome
 
         {/* Stacked overview bar */}
         <div className="mb-7">
-          <div className="h-12 w-full rounded-xl overflow-hidden flex bg-[#1F1F28] border border-[#2A2A32]">
+          <div className="h-12 w-full rounded-xl overflow-hidden flex bg-[#1F2937] border border-[#1F2937]">
             {SEGMENTS.map((seg) => {
               const count = outcomes[seg.key];
               const pct = (count / total) * 100;
@@ -136,7 +136,7 @@ export default function TrialOutcomesCard({ outcomes }: { outcomes: TrialOutcome
                   title={`${seg.label}: ${count} (${pct.toFixed(1)}%)`}
                 >
                   {pct > 6 && (
-                    <span className="text-[11px] font-bold text-[#0A0A0C] tabular-nums">
+                    <span className="text-[11px] font-bold text-[#0A0F1A] tabular-nums">
                       {count}
                     </span>
                   )}
@@ -202,8 +202,8 @@ export default function TrialOutcomesCard({ outcomes }: { outcomes: TrialOutcome
                 width={260}
                 height={68}
                 rx={14}
-                fill="#1F1F28"
-                stroke="#A78BFA"
+                fill="#1F2937"
+                stroke="#1E6FFF"
                 strokeWidth={2}
                 strokeOpacity={0.5}
               />
@@ -211,7 +211,7 @@ export default function TrialOutcomesCard({ outcomes }: { outcomes: TrialOutcome
                 x={TOP_CX}
                 y={TOP_CY - 8}
                 textAnchor="middle"
-                fill="#A78BFA"
+                fill="#1E6FFF"
                 fontSize={11}
                 fontWeight={700}
                 letterSpacing="1.5"
@@ -241,7 +241,7 @@ export default function TrialOutcomesCard({ outcomes }: { outcomes: TrialOutcome
                   cy={BOT_TOP}
                   r={6}
                   fill={seg.hex}
-                  stroke="#15151A"
+                  stroke="#11182B"
                   strokeWidth={2}
                 />
               );
@@ -260,7 +260,7 @@ export default function TrialOutcomesCard({ outcomes }: { outcomes: TrialOutcome
                 >
                   <div className="flex items-center gap-2 mb-2">
                     <span className={`text-base ${seg.textTint}`}>{seg.icon}</span>
-                    <p className="text-[10px] uppercase tracking-wider text-[#E5E5EB] font-bold">
+                    <p className="text-[10px] uppercase tracking-wider text-[#C9D1DC] font-bold">
                       {seg.label}
                     </p>
                   </div>
@@ -272,7 +272,7 @@ export default function TrialOutcomesCard({ outcomes }: { outcomes: TrialOutcome
                       {pct.toFixed(1)}%
                     </span>
                   </div>
-                  <p className="text-[11px] text-[#8A8A94] mt-2 leading-snug">
+                  <p className="text-[11px] text-[#8B92A3] mt-2 leading-snug">
                     {seg.description}
                   </p>
                 </div>

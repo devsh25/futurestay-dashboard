@@ -7,7 +7,7 @@ import { DQWeekly } from "@/lib/types";
 const COLORS = {
   UNSUPPORTED_COUNTRY: "#F87171",
   INCOMPLETE_ADDRESS: "#FBBF24",
-  NO_PUBLISHED_LISTINGS_FOUND: "#A78BFA",
+  NO_PUBLISHED_LISTINGS_FOUND: "#1E6FFF",
   UNPUBLISHED_LISTING: "#60A5FA",
   OTHER: "#4B5563",
 };
@@ -22,52 +22,52 @@ const LABELS: Record<string, string> = {
 
 export default function DQChartCard({ data }: { data: DQWeekly[] }) {
   return (
-    <Card className="bg-[#15151A] border border-[#1F1F28] rounded-2xl shadow-none">
+    <Card className="bg-[#11182B] border border-[#1F2937] rounded-2xl shadow-none">
       <CardHeader className="pb-3">
         <CardTitle className="text-[15px] font-semibold text-white tracking-tight">Airbnb DQ Reasons (Weekly)</CardTitle>
-        <p className="text-[13px] text-[#8A8A94] mt-1.5 leading-relaxed">
-          <span className="text-[#A78BFA] font-medium">Period-based, weekly.</span>{" "}
+        <p className="text-[13px] text-[#8B92A3] mt-1.5 leading-relaxed">
+          <span className="text-[#1E6FFF] font-medium">Period-based, weekly.</span>{" "}
           Counts of <code className="text-[#C9C9D1]">airbnbdqreason</code> values bucketed by signup week. Includes only DQ&apos;d contacts (auto-disqualified at the Airbnb step).
         </p>
       </CardHeader>
       <CardContent>
         {!data.length ? (
-          <p className="text-sm text-[#8A8A94] py-8 text-center">No DQ data for this period.</p>
+          <p className="text-sm text-[#8B92A3] py-8 text-center">No DQ data for this period.</p>
         ) : (
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data} margin={{ top: 10, right: 0, bottom: 0, left: -10 }}>
                 <XAxis
                   dataKey="week"
-                  tick={{ fontSize: 10, fill: "#8A8A94" }}
-                  axisLine={{ stroke: "#2A2A32" }}
+                  tick={{ fontSize: 10, fill: "#8B92A3" }}
+                  axisLine={{ stroke: "#1F2937" }}
                   tickLine={false}
                 />
                 <YAxis
-                  tick={{ fontSize: 10, fill: "#6B6B75" }}
+                  tick={{ fontSize: 10, fill: "#5B6478" }}
                   axisLine={false}
                   tickLine={false}
                 />
                 <Tooltip
                   cursor={{ fill: "rgba(167, 139, 250, 0.08)" }}
                   contentStyle={{
-                    backgroundColor: "#1A1A22",
+                    backgroundColor: "#0E1422",
                     borderRadius: 10,
-                    border: "1px solid #2A2A32",
+                    border: "1px solid #1F2937",
                     fontSize: 12,
                     boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
                     padding: "8px 12px",
                     color: "#FFFFFF",
                   }}
                   labelStyle={{ color: "#FFFFFF" }}
-                  itemStyle={{ color: "#E5E5EB" }}
+                  itemStyle={{ color: "#C9D1DC" }}
                   formatter={(value, name) => [value, LABELS[name as string] || name]}
                 />
                 <Legend
                   iconType="circle"
                   iconSize={8}
                   wrapperStyle={{ paddingTop: 12 }}
-                  formatter={(value) => <span className="text-[10px] text-[#8A8A94]">{LABELS[value] || value}</span>}
+                  formatter={(value) => <span className="text-[10px] text-[#8B92A3]">{LABELS[value] || value}</span>}
                 />
                 <Bar dataKey="UNSUPPORTED_COUNTRY" stackId="a" fill={COLORS.UNSUPPORTED_COUNTRY} />
                 <Bar dataKey="INCOMPLETE_ADDRESS" stackId="a" fill={COLORS.INCOMPLETE_ADDRESS} />

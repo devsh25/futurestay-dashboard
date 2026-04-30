@@ -25,7 +25,7 @@ function fmtNum(n: number | null): string {
 }
 
 const TYPE_BADGE = {
-  call: { bg: "bg-[#A78BFA]/15", text: "text-[#A78BFA]", border: "border-[#A78BFA]/30" },
+  call: { bg: "bg-[#1E6FFF]/15", text: "text-[#1E6FFF]", border: "border-[#1E6FFF]/30" },
   self: { bg: "bg-[#6EE7B7]/15", text: "text-[#6EE7B7]", border: "border-[#6EE7B7]/30" },
 } as const;
 
@@ -38,13 +38,13 @@ const OPT_LABEL: Record<string, string> = {
 function dqColor(rate: number) {
   if (rate >= 20) return "text-[#F87171]";
   if (rate >= 10) return "text-[#FBBF24]";
-  return "text-[#8A8A94]";
+  return "text-[#8B92A3]";
 }
 
 function CampaignRow({ r }: { r: CampaignAnalysisRow }) {
   const tb = TYPE_BADGE[r.type];
   return (
-    <TableRow className="border-[#1F1F28] hover:bg-[#1A1A22] transition-colors">
+    <TableRow className="border-[#1F2937] hover:bg-[#0E1422] transition-colors">
       <TableCell className="font-medium text-[12px] text-white whitespace-nowrap max-w-[260px] truncate" title={r.campaign}>
         {r.campaign}
       </TableCell>
@@ -54,24 +54,24 @@ function CampaignRow({ r }: { r: CampaignAnalysisRow }) {
         </span>
       </TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-white">{fmtMoney(r.spend)}</TableCell>
-      <TableCell className="text-[10px] text-[#8A8A94] whitespace-nowrap">{OPT_LABEL[r.optSignal] || r.optSignal}</TableCell>
+      <TableCell className="text-[10px] text-[#8B92A3] whitespace-nowrap">{OPT_LABEL[r.optSignal] || r.optSignal}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-white">{fmtNum(r.leads)}</TableCell>
-      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#E5E5EB]">{fmtNum(r.meetingsBooked)}</TableCell>
-      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#E5E5EB]">{fmtNum(r.signups)}</TableCell>
+      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">{fmtNum(r.meetingsBooked)}</TableCell>
+      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">{fmtNum(r.signups)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-white font-semibold">{fmtNum(r.qualifiedSignups)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#60A5FA]">{fmtNum(r.airbnbConnected)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#FBBF24]">{fmtNum(r.readyToLaunch)}</TableCell>
       <TableCell className={`text-right font-mono text-[12px] tabular-nums ${dqColor(r.airbnbDqRate)}`}>{fmtPct(r.airbnbDqRate)}</TableCell>
-      <TableCell className={`text-right font-mono text-[12px] tabular-nums ${r.noShowMtgRate !== null && r.noShowMtgRate >= 30 ? "text-[#F87171]" : "text-[#8A8A94]"}`}>{fmtPct(r.noShowMtgRate)}</TableCell>
-      <TableCell className={`text-right font-mono text-[12px] tabular-nums ${r.dqMtgRate !== null && r.dqMtgRate >= 10 ? "text-[#FBBF24]" : "text-[#8A8A94]"}`}>{fmtPct(r.dqMtgRate)}</TableCell>
-      <TableCell className={`text-right font-mono text-[12px] tabular-nums ${r.interestedMtgRate !== null && r.interestedMtgRate >= 10 ? "text-[#6EE7B7]" : "text-[#8A8A94]"}`}>{fmtPct(r.interestedMtgRate)}</TableCell>
-      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#8A8A94]">{fmtPct(r.notInterestedMtgRate)}</TableCell>
-      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#A78BFA]">{fmtPct(r.outcomeCoverage)}</TableCell>
-      <TableCell className={`text-right font-mono text-[12px] tabular-nums ${r.formToMeetingRate !== null && r.formToMeetingRate < 50 ? "text-[#FBBF24]" : "text-[#8A8A94]"}`}>{fmtPct(r.formToMeetingRate)}</TableCell>
-      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#E5E5EB]">{fmtMoney(r.costPerMeeting)}</TableCell>
-      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#E5E5EB]">{fmtNum(r.trials)}</TableCell>
-      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#E5E5EB]">{fmtMoney(r.costPerTrial)}</TableCell>
-      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#A78BFA]">{fmtPct(r.qsToTrialRate)}</TableCell>
+      <TableCell className={`text-right font-mono text-[12px] tabular-nums ${r.noShowMtgRate !== null && r.noShowMtgRate >= 30 ? "text-[#F87171]" : "text-[#8B92A3]"}`}>{fmtPct(r.noShowMtgRate)}</TableCell>
+      <TableCell className={`text-right font-mono text-[12px] tabular-nums ${r.dqMtgRate !== null && r.dqMtgRate >= 10 ? "text-[#FBBF24]" : "text-[#8B92A3]"}`}>{fmtPct(r.dqMtgRate)}</TableCell>
+      <TableCell className={`text-right font-mono text-[12px] tabular-nums ${r.interestedMtgRate !== null && r.interestedMtgRate >= 10 ? "text-[#6EE7B7]" : "text-[#8B92A3]"}`}>{fmtPct(r.interestedMtgRate)}</TableCell>
+      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#8B92A3]">{fmtPct(r.notInterestedMtgRate)}</TableCell>
+      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#1E6FFF]">{fmtPct(r.outcomeCoverage)}</TableCell>
+      <TableCell className={`text-right font-mono text-[12px] tabular-nums ${r.formToMeetingRate !== null && r.formToMeetingRate < 50 ? "text-[#FBBF24]" : "text-[#8B92A3]"}`}>{fmtPct(r.formToMeetingRate)}</TableCell>
+      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">{fmtMoney(r.costPerMeeting)}</TableCell>
+      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">{fmtNum(r.trials)}</TableCell>
+      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">{fmtMoney(r.costPerTrial)}</TableCell>
+      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#1E6FFF]">{fmtPct(r.qsToTrialRate)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-white font-semibold">{fmtNum(r.customers)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-white font-semibold">{fmtMoney(r.costPerCustomer)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#6EE7B7]">{fmtPct(r.qsToCustomerRate)}</TableCell>
@@ -122,22 +122,22 @@ export default function CampaignAnalysisCard({
   }, [period, customStart, customEnd]);
 
   return (
-    <Card className="bg-[#15151A] border border-[#1F1F28] rounded-2xl shadow-none">
-      <CardHeader className="pb-3 border-b border-[#1F1F28]">
+    <Card className="bg-[#11182B] border border-[#1F2937] rounded-2xl shadow-none">
+      <CardHeader className="pb-3 border-b border-[#1F2937]">
         <CardTitle className="flex items-center justify-between text-[15px] font-semibold text-white tracking-tight">
           <span>Campaign Analysis</span>
           <Badge className="bg-[#1877F2]/15 text-[#60A5FA] border-[#1877F2]/25 text-[10px] font-medium">
             6 Meta campaigns × HubSpot funnel
           </Badge>
         </CardTitle>
-        <p className="text-[13px] text-[#8A8A94] mt-1.5 leading-relaxed">
-          <span className="text-[#A78BFA] font-medium">Cohort-based.</span>{" "}
+        <p className="text-[13px] text-[#8B92A3] mt-1.5 leading-relaxed">
+          <span className="text-[#1E6FFF] font-medium">Cohort-based.</span>{" "}
           Spend (Meta API) joined to HubSpot contacts whose <code className="text-[#C9C9D1]">createdate</code> is in the window AND who attribute to the campaign via <code className="text-[#C9C9D1]">first_touch_utm_campaign</code> ∪ <code className="text-[#C9C9D1]">hs_analytics_source_data_2</code> ∪ landing-page URL fallback. QS → T and QS → C are conversion rates from <span className="text-white">Qualified Signups</span> (signups − Airbnb DQ) to Trial / Customer for that cohort.
         </p>
       </CardHeader>
       <CardContent className="pt-4">
         {loading && !data && (
-          <p className="text-[12px] text-[#8A8A94] py-8 text-center">Loading campaign analysis…</p>
+          <p className="text-[12px] text-[#8B92A3] py-8 text-center">Loading campaign analysis…</p>
         )}
         {error && (
           <div className="bg-[#2D1B21] border border-[#EF4444]/30 rounded-xl p-3 text-[#FCA5A5] text-[12px]">
@@ -147,40 +147,40 @@ export default function CampaignAnalysisCard({
         )}
         {data && (
           <>
-            <p className="text-[12px] text-[#8A8A94] mb-3">
+            <p className="text-[12px] text-[#8B92A3] mb-3">
               Window: <span className="text-white font-mono">{data.since}</span> → <span className="text-white font-mono">{data.until}</span>
-              <span className="ml-3 text-[11px] text-[#6B6B75]">
+              <span className="ml-3 text-[11px] text-[#5B6478]">
                 Spend = Meta API · Funnel metrics = HubSpot · WIX/HOPPER + pre-launch fallback victims excluded
               </span>
             </p>
             <div className="overflow-x-auto -mx-2">
               <Table>
                 <TableHeader>
-                  <TableRow className="border-[#1F1F28] hover:bg-transparent">
-                    <TableHead className="text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Campaign</TableHead>
-                    <TableHead className="text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Type</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Spend</TableHead>
-                    <TableHead className="text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Opt Signal</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Leads</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Mtgs Bkd</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Signups</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Qual Sgnp</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Airbnb Conn</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">🚀 Ready</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">A-DQ %</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">No-show % mtgs</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">DQ % mtgs</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Int % mtgs</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">NotInt % mtgs</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Coverage % mtgs</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Form→Mtg %</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">$/Mtg</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Trials</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">$/Trial</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">QS → T</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Cust</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">$/Cust</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">QS → C</TableHead>
+                  <TableRow className="border-[#1F2937] hover:bg-transparent">
+                    <TableHead className="text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Campaign</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Type</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Spend</TableHead>
+                    <TableHead className="text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Opt Signal</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Leads</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Mtgs Bkd</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Signups</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Qual Sgnp</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Airbnb Conn</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">🚀 Ready</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">A-DQ %</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">No-show % mtgs</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">DQ % mtgs</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Int % mtgs</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">NotInt % mtgs</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Coverage % mtgs</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Form→Mtg %</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">$/Mtg</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Trials</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">$/Trial</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">QS → T</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Cust</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">$/Cust</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">QS → C</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -188,8 +188,8 @@ export default function CampaignAnalysisCard({
                 </TableBody>
               </Table>
             </div>
-            <div className="mt-4 pt-3 border-t border-[#1F1F28] flex flex-wrap gap-x-5 gap-y-1 text-[10px] text-[#6B6B75]">
-              <span><span className="text-[#A78BFA] font-semibold">call</span> = Meta optimizes for meetings</span>
+            <div className="mt-4 pt-3 border-t border-[#1F2937] flex flex-wrap gap-x-5 gap-y-1 text-[10px] text-[#5B6478]">
+              <span><span className="text-[#1E6FFF] font-semibold">call</span> = Meta optimizes for meetings</span>
               <span><span className="text-[#6EE7B7] font-semibold">self</span> = Meta optimizes for signups or airbnb_connected</span>
               <span>Qual Sgnp = Signups − Airbnb DQ</span>
               <span>Customers = real paid (Amplify/Flex), excl. &lt;2-day cancels</span>

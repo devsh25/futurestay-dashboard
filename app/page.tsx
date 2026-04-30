@@ -74,26 +74,29 @@ export default function Dashboard() {
   }, [fetchData]);
 
   return (
-    <div className="min-h-screen bg-[#0A0A0C] text-white">
-      {/* Header */}
-      <header className="bg-[#0A0A0C] border-b border-[#1F1F28] sticky top-0 z-10 backdrop-blur-sm">
-        <div className="max-w-[1400px] mx-auto px-6 py-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div className="min-h-screen bg-[#0A0F1A] text-white antialiased">
+      {/* Sticky header — Dashbrd X look: subtle blur + hairline divider,
+          left cluster (logo + title + breadcrumb), right cluster (filters
+          + qualified-signups chip). */}
+      <header className="bg-[#0A0F1A]/85 border-b border-[#1F2937] sticky top-0 z-20 backdrop-blur-md">
+        <div className="max-w-[1440px] mx-auto px-6 lg:px-8 py-4">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div className="flex items-center gap-3">
-              {/* Futurestay logo mark */}
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#A78BFA] to-[#6366F1] flex items-center justify-center shadow-[0_4px_16px_rgba(167,139,250,0.3)]">
-                <span className="text-white font-bold text-base">F</span>
+              {/* Logo mark — solid blue gradient square per moodboard. */}
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#1E6FFF] to-[#3B82F6] flex items-center justify-center shadow-[0_8px_24px_rgba(30,111,255,0.35)]">
+                <span className="text-white font-bold text-[17px] tracking-tight">F</span>
               </div>
-              <div>
-                <h1 className="text-[15px] font-semibold text-white tracking-tight">
-                  Futurestay Growth
-                </h1>
-                {data && (
-                  <p className="text-[11px] text-[#8A8A94]">
-                    {data.totalContacts.toLocaleString()} qualified signups
-                  </p>
-                )}
+              <div className="flex items-center gap-2.5 text-[14px]">
+                <span className="text-[#8B92A3]">Futurestay</span>
+                <span className="text-[#1F2937]">›</span>
+                <span className="text-white font-semibold tracking-tight">Growth Dashboard</span>
               </div>
+              {data && (
+                <span className="hidden md:inline-flex items-center gap-1.5 ml-2 px-3 py-1 rounded-full bg-[#11182B] border border-[#1F2937] text-[12px] text-[#C9D1DC] font-medium tabular-nums">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#10B981]" />
+                  {data.totalContacts.toLocaleString()} qualified signups
+                </span>
+              )}
             </div>
             <FilterBar
               period={period}
@@ -113,7 +116,7 @@ export default function Dashboard() {
       </header>
 
       {/* Content */}
-      <main className="max-w-[1400px] mx-auto px-6 py-6">
+      <main className="max-w-[1440px] mx-auto px-6 lg:px-8 py-6 lg:py-8">
         {error && (
           <div className="bg-[#2D1B21] border border-[#EF4444]/30 rounded-xl p-4 text-[#FCA5A5] mb-5">
             <p className="font-semibold text-sm">Error loading data</p>
@@ -156,7 +159,7 @@ export default function Dashboard() {
                 icon={Icons.Gauge}
                 title="Overview"
                 description="Headline metrics with 14-day trend vs prior period"
-                iconColor="#A78BFA"
+                iconColor="#1E6FFF"
               />
               <KPICards kpis={data.kpis} cohort={data.cohort} />
 
@@ -211,23 +214,23 @@ export default function Dashboard() {
           <div className="space-y-5 animate-pulse">
             <div className="grid grid-cols-4 gap-4">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-32 bg-[#15151A] rounded-2xl" />
+                <div key={i} className="h-32 bg-[#11182B] rounded-2xl" />
               ))}
             </div>
             <div className="grid grid-cols-4 gap-4">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-24 bg-[#15151A] rounded-2xl" />
+                <div key={i} className="h-24 bg-[#11182B] rounded-2xl" />
               ))}
             </div>
             <div className="grid grid-cols-2 gap-5">
-              <div className="h-96 bg-[#15151A] rounded-2xl" />
-              <div className="h-96 bg-[#15151A] rounded-2xl" />
+              <div className="h-96 bg-[#11182B] rounded-2xl" />
+              <div className="h-96 bg-[#11182B] rounded-2xl" />
             </div>
           </div>
         )}
 
         {!data && !loading && !error && (
-          <div className="text-center py-20 text-[#8A8A94]">
+          <div className="text-center py-20 text-[#8B92A3]">
             <p>No data available. Check your HubSpot API token.</p>
           </div>
         )}

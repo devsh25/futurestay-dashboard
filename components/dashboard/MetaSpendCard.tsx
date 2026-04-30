@@ -30,9 +30,9 @@ function shortCampaign(name: string): string {
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div>
-      <p className="text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">{label}</p>
+      <p className="text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">{label}</p>
       <p className="text-2xl font-bold text-white tabular-nums mt-1">{value}</p>
-      {sub && <p className="text-[10px] text-[#6B6B75] mt-0.5">{sub}</p>}
+      {sub && <p className="text-[10px] text-[#5B6478] mt-0.5">{sub}</p>}
     </div>
   );
 }
@@ -82,7 +82,7 @@ export default function MetaSpendCard({
   }, [period, customStart, customEnd]);
 
   return (
-    <Card className="bg-[#15151A] border border-[#1F1F28] rounded-2xl shadow-none">
+    <Card className="bg-[#11182B] border border-[#1F2937] rounded-2xl shadow-none">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center justify-between text-[15px] font-semibold text-white tracking-tight">
           <span>Meta Ads — Spend & Performance</span>
@@ -90,14 +90,14 @@ export default function MetaSpendCard({
             Live from Meta Marketing API
           </Badge>
         </CardTitle>
-        <p className="text-[13px] text-[#8A8A94] mt-1.5 leading-relaxed">
+        <p className="text-[13px] text-[#8B92A3] mt-1.5 leading-relaxed">
           <span className="text-[#60A5FA] font-medium">Period-based.</span>{" "}
           Spend, impressions, clicks, CTR, CPC pulled from Meta Marketing API for the selected window. Independent of HubSpot — purely platform metrics.
         </p>
       </CardHeader>
       <CardContent>
         {loading && !data && (
-          <p className="text-[12px] text-[#8A8A94] py-8 text-center">Loading Meta insights…</p>
+          <p className="text-[12px] text-[#8B92A3] py-8 text-center">Loading Meta insights…</p>
         )}
         {error && (
           <div className="bg-[#2D1B21] border border-[#EF4444]/30 rounded-xl p-3 text-[#FCA5A5] text-[12px]">
@@ -107,7 +107,7 @@ export default function MetaSpendCard({
         )}
         {data && (
           <>
-            <div className="grid grid-cols-3 md:grid-cols-6 gap-3 pb-4 border-b border-[#1F1F28]">
+            <div className="grid grid-cols-3 md:grid-cols-6 gap-3 pb-4 border-b border-[#1F2937]">
               <Stat label="Spend" value={fmtMoney(data.summary.spend)} sub={`${data.since} → ${data.until}`} />
               <Stat label="Impressions" value={fmtNum(data.summary.impressions)} />
               <Stat label="Clicks" value={fmtNum(data.summary.clicks)} />
@@ -119,7 +119,7 @@ export default function MetaSpendCard({
             {/* Daily spend */}
             {data.daily.length > 0 && (
               <div className="mt-4">
-                <p className="text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold mb-2">
+                <p className="text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold mb-2">
                   Daily Spend
                 </p>
                 <div className="h-40">
@@ -127,8 +127,8 @@ export default function MetaSpendCard({
                     <BarChart data={data.daily} margin={{ top: 4, right: 0, bottom: 0, left: -10 }}>
                       <XAxis
                         dataKey="date"
-                        tick={{ fontSize: 9, fill: "#8A8A94" }}
-                        axisLine={{ stroke: "#2A2A32" }}
+                        tick={{ fontSize: 9, fill: "#8B92A3" }}
+                        axisLine={{ stroke: "#1F2937" }}
                         tickLine={false}
                         tickFormatter={(v: string) => {
                           const [, m, d] = v.split("-");
@@ -137,7 +137,7 @@ export default function MetaSpendCard({
                         minTickGap={20}
                       />
                       <YAxis
-                        tick={{ fontSize: 9, fill: "#6B6B75" }}
+                        tick={{ fontSize: 9, fill: "#5B6478" }}
                         axisLine={false}
                         tickLine={false}
                         tickFormatter={(v: number) => (v >= 1000 ? `$${(v / 1000).toFixed(1)}K` : `$${v}`)}
@@ -145,9 +145,9 @@ export default function MetaSpendCard({
                       <Tooltip
                         cursor={{ fill: "rgba(96, 165, 250, 0.08)" }}
                         contentStyle={{
-                          backgroundColor: "#1A1A22",
+                          backgroundColor: "#0E1422",
                           borderRadius: 10,
-                          border: "1px solid #2A2A32",
+                          border: "1px solid #1F2937",
                           fontSize: 12,
                           boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
                           padding: "8px 12px",
@@ -169,39 +169,39 @@ export default function MetaSpendCard({
 
             {/* Campaigns table */}
             <div className="mt-4">
-              <p className="text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold mb-2">
+              <p className="text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold mb-2">
                 Top Campaigns ({data.summary.campaignCount})
               </p>
               <Table>
                 <TableHeader>
-                  <TableRow className="border-[#1F1F28] hover:bg-transparent">
-                    <TableHead className="text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Campaign</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Spend</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Impr.</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Clicks</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">CTR</TableHead>
-                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">CPC</TableHead>
+                  <TableRow className="border-[#1F2937] hover:bg-transparent">
+                    <TableHead className="text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Campaign</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Spend</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Impr.</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Clicks</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">CTR</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">CPC</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {data.campaigns.slice(0, 15).map((c) => (
-                    <TableRow key={c.id || c.name} className="border-[#1F1F28] hover:bg-[#1A1A22] transition-colors">
+                    <TableRow key={c.id || c.name} className="border-[#1F2937] hover:bg-[#0E1422] transition-colors">
                       <TableCell className="font-medium text-[12px] text-white max-w-[380px] truncate" title={c.name}>
                         {shortCampaign(c.name)}
                       </TableCell>
                       <TableCell className="text-right font-mono text-[12px] tabular-nums text-white">
                         {fmtMoney(c.spend)}
                       </TableCell>
-                      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#E5E5EB]">
+                      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">
                         {fmtNum(c.impressions)}
                       </TableCell>
-                      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#E5E5EB]">
+                      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">
                         {fmtNum(c.clicks)}
                       </TableCell>
-                      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#8A8A94]">
+                      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#8B92A3]">
                         {c.ctr.toFixed(2)}%
                       </TableCell>
-                      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#8A8A94]">
+                      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#8B92A3]">
                         {fmtMoney(c.cpc)}
                       </TableCell>
                     </TableRow>
@@ -209,7 +209,7 @@ export default function MetaSpendCard({
                 </TableBody>
               </Table>
               {data.campaigns.length === 0 && (
-                <p className="text-[12px] text-[#8A8A94] py-4 text-center">No campaigns with spend in this period.</p>
+                <p className="text-[12px] text-[#8B92A3] py-4 text-center">No campaigns with spend in this period.</p>
               )}
             </div>
           </>

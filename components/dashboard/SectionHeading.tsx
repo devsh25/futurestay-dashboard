@@ -6,7 +6,7 @@ export default function SectionHeading({
   icon,
   title,
   description,
-  iconColor = "#A78BFA",
+  iconColor = "#1E6FFF",
 }: {
   icon: ReactNode;
   title: string;
@@ -26,7 +26,7 @@ export default function SectionHeading({
           {title}
         </h2>
         {description && (
-          <p className="text-[12px] text-[#8A8A94] mt-0.5">{description}</p>
+          <p className="text-[12px] text-[#8B92A3] mt-0.5">{description}</p>
         )}
       </div>
     </div>

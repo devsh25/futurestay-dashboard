@@ -33,51 +33,51 @@ export default function CohortCard({ cohort }: { cohort: CohortData; period: str
   ];
 
   return (
-    <Card className="bg-[#15151A] border border-[#1F1F28] rounded-2xl shadow-none">
+    <Card className="bg-[#11182B] border border-[#1F2937] rounded-2xl shadow-none">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center justify-between text-[15px] font-semibold text-white tracking-tight">
           <span>Cohort Analysis</span>
-          <Badge className="bg-[#A78BFA]/15 text-[#C4B5FD] border-[#A78BFA]/25 text-[10px] font-medium">
+          <Badge className="bg-[#1E6FFF]/15 text-[#93BBFE] border-[#1E6FFF]/25 text-[10px] font-medium">
             Qualified signups from this period
           </Badge>
         </CardTitle>
-        <p className="text-[13px] text-[#8A8A94] mt-1.5 leading-relaxed">
-          <span className="text-[#A78BFA] font-medium">Cohort-based.</span>{" "}
+        <p className="text-[13px] text-[#8B92A3] mt-1.5 leading-relaxed">
+          <span className="text-[#1E6FFF] font-medium">Cohort-based.</span>{" "}
           Of qualified signups whose <code className="text-[#C9C9D1]">createdate</code> falls in the window, % that reached each downstream stage. Preserves causal attribution from signup to outcome.
         </p>
       </CardHeader>
       <CardContent>
-        <p className="text-[13px] text-[#8A8A94] mb-3">
+        <p className="text-[13px] text-[#8B92A3] mb-3">
           Of {cohort.signups.toLocaleString()} qualified signups (Airbnb DQ excluded), what % reached each stage?
         </p>
         <Table>
           <TableHeader>
-            <TableRow className="border-[#1F1F28] hover:bg-transparent">
-              <TableHead className="text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Stage</TableHead>
-              <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Count</TableHead>
-              <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">% of Signups</TableHead>
-              <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">Visual</TableHead>
+            <TableRow className="border-[#1F2937] hover:bg-transparent">
+              <TableHead className="text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Stage</TableHead>
+              <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Count</TableHead>
+              <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">% of Signups</TableHead>
+              <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Visual</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {stages.map((stage) => {
               const pct = cohort.signups > 0 ? (stage.count / cohort.signups) * 100 : 0;
               return (
-                <TableRow key={stage.name} className="border-[#1F1F28] hover:bg-[#1A1A22] transition-colors">
+                <TableRow key={stage.name} className="border-[#1F2937] hover:bg-[#0E1422] transition-colors">
                   <TableCell className="font-medium text-[13px] text-white">{stage.name}</TableCell>
                   <TableCell className="text-right font-mono text-[13px] tabular-nums text-white">{stage.count.toLocaleString()}</TableCell>
                   <TableCell className="text-right">
                     {stage.rate !== null ? (
                       <RateBadge value={stage.rate} thresholds={[50, 20]} />
                     ) : (
-                      <span className="text-[12px] text-[#8A8A94]">100%</span>
+                      <span className="text-[12px] text-[#8B92A3]">100%</span>
                     )}
                   </TableCell>
                   <TableCell className="text-right w-[120px]">
                     <div className="flex items-center justify-end gap-1">
-                      <div className="h-2 rounded-full bg-[#1F1F28] w-[100px] overflow-hidden">
+                      <div className="h-2 rounded-full bg-[#1F2937] w-[100px] overflow-hidden">
                         <div
-                          className="h-full rounded-full bg-gradient-to-r from-[#A78BFA] to-[#8B5CF6]"
+                          className="h-full rounded-full bg-gradient-to-r from-[#1E6FFF] to-[#8B5CF6]"
                           style={{ width: `${Math.max(2, pct)}%` }}
                         />
                       </div>
@@ -90,18 +90,18 @@ export default function CohortCard({ cohort }: { cohort: CohortData; period: str
         </Table>
 
         {/* Key conversion rates summary */}
-        <div className="mt-4 pt-3 border-t border-[#1F1F28] grid grid-cols-3 gap-3">
+        <div className="mt-4 pt-3 border-t border-[#1F2937] grid grid-cols-3 gap-3">
           <div className="text-center">
-            <p className="text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">QS-to-T</p>
+            <p className="text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">QS-to-T</p>
             <p className="text-2xl font-bold text-[#6EE7B7] tabular-nums mt-1">{cohort.trialRate.toFixed(1)}%</p>
           </div>
           <div className="text-center">
-            <p className="text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">T-to-C</p>
+            <p className="text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">T-to-C</p>
             <p className="text-2xl font-bold text-[#6EE7B7] tabular-nums mt-1">{cohort.trialToCustomerRate.toFixed(1)}%</p>
           </div>
           <div className="text-center">
-            <p className="text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold">QS-to-C</p>
-            <p className="text-2xl font-bold text-[#A78BFA] tabular-nums mt-1">{cohort.customerRate.toFixed(1)}%</p>
+            <p className="text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">QS-to-C</p>
+            <p className="text-2xl font-bold text-[#1E6FFF] tabular-nums mt-1">{cohort.customerRate.toFixed(1)}%</p>
           </div>
         </div>
       </CardContent>

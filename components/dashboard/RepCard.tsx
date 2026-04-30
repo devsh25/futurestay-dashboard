@@ -21,20 +21,20 @@ function RateBadge({ value, thresholds }: { value: number; thresholds: [number, 
 
 export default function RepCard({ reps }: { reps: RepRow[] }) {
   return (
-    <Card className="bg-[#15151A] border border-[#1F1F28] rounded-2xl shadow-none">
+    <Card className="bg-[#11182B] border border-[#1F2937] rounded-2xl shadow-none">
       <CardHeader className="pb-3">
         <CardTitle className="text-[15px] font-semibold text-white tracking-tight">Rep Scorecard</CardTitle>
-        <p className="text-[13px] text-[#8A8A94] mt-1.5 leading-relaxed">
-          <span className="text-[#A78BFA] font-medium">Cohort-based.</span>{" "}
+        <p className="text-[13px] text-[#8B92A3] mt-1.5 leading-relaxed">
+          <span className="text-[#1E6FFF] font-medium">Cohort-based.</span>{" "}
           Contacts assigned to each rep (via <code className="text-[#C9C9D1]">hubspot_owner_id</code>) whose <code className="text-[#C9C9D1]">createdate</code> falls in the selected window. Trial / customer rates count outcomes from that cohort.
         </p>
       </CardHeader>
       <CardContent>
         <Table>
           <TableHeader>
-            <TableRow className="border-[#1F1F28] hover:bg-transparent">
+            <TableRow className="border-[#1F2937] hover:bg-transparent">
               {["Rep", "Contacts", "Trials", "In Trial", "Customers", "Contact-to-Trial", "Trial-to-Cust", "Contact-to-Cust"].map((h) => (
-                <TableHead key={h} className={`text-[10px] uppercase tracking-wider text-[#8A8A94] font-semibold ${h !== "Rep" ? "text-right" : ""}`}>
+                <TableHead key={h} className={`text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold ${h !== "Rep" ? "text-right" : ""}`}>
                   {h}
                 </TableHead>
               ))}
@@ -42,7 +42,7 @@ export default function RepCard({ reps }: { reps: RepRow[] }) {
           </TableHeader>
           <TableBody>
             {reps.map((row) => (
-              <TableRow key={row.rep} className="border-[#1F1F28] hover:bg-[#1A1A22] transition-colors">
+              <TableRow key={row.rep} className="border-[#1F2937] hover:bg-[#0E1422] transition-colors">
                 <TableCell className="font-medium text-[13px] text-white">{row.rep}</TableCell>
                 <TableCell className="text-right font-mono text-[13px] tabular-nums text-white">{row.contacts}</TableCell>
                 <TableCell className="text-right font-mono text-[13px] tabular-nums text-white">{row.trials}</TableCell>
@@ -55,7 +55,7 @@ export default function RepCard({ reps }: { reps: RepRow[] }) {
                   {row.trialToCustomer !== null ? (
                     <RateBadge value={row.trialToCustomer} thresholds={[50, 30]} />
                   ) : (
-                    <span className="text-[12px] text-[#6B6B75]">—</span>
+                    <span className="text-[12px] text-[#5B6478]">—</span>
                   )}
                 </TableCell>
                 <TableCell className="text-right">

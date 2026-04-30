@@ -36,7 +36,7 @@ const LIN_X = [150, 430, 710, 990, 1270];
 //   VIOLET — linear in-flight stages (signup, auth, props, ready, trial, in-trial)
 //   MINT   — positive outcome (Customer)
 //   CORAL  — negative outcomes (Failed Trialist, Churned)
-const C_INFLIGHT = "#A78BFA";  // violet
+const C_INFLIGHT = "#1E6FFF";  // violet
 const C_POSITIVE = "#6EE7B7";  // mint
 const C_NEGATIVE = "#F87171";  // coral
 
@@ -126,8 +126,8 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
   }
 
   return (
-    <Card className="bg-[#15151A] border border-[#1F1F28] rounded-2xl shadow-none">
-      <CardHeader className="pb-4 border-b border-[#1F1F28]">
+    <Card className="bg-[#11182B] border border-[#1F2937] rounded-2xl shadow-none">
+      <CardHeader className="pb-4 border-b border-[#1F2937]">
         <CardTitle className="flex items-center justify-between text-[17px] font-semibold text-white tracking-tight">
           <span>Funnel Analysis</span>
           {dqRow && (
@@ -140,7 +140,7 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
 
       <CardContent className="pt-6">
         <p className="text-[14px] text-[#A8A8B2] mb-4 leading-relaxed">
-          <span className="text-[#A78BFA] font-medium">Cohort-based.</span>{" "}
+          <span className="text-[#1E6FFF] font-medium">Cohort-based.</span>{" "}
           Of qualified signups whose <code className="text-[#C9C9D1] text-[13px]">createdate</code> falls in the window, what % reached each stage. Linear path top → Trial Started, then 3 outcomes branch downward (Customer can further churn).
         </p>
 
@@ -170,17 +170,17 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
               </filter>
 
               <linearGradient id="branchBand" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#1F1F28" stopOpacity="0" />
-                <stop offset="50%" stopColor="#1F1F28" stopOpacity="0.5" />
-                <stop offset="100%" stopColor="#1F1F28" stopOpacity="0" />
+                <stop offset="0%" stopColor="#1F2937" stopOpacity="0" />
+                <stop offset="50%" stopColor="#1F2937" stopOpacity="0.5" />
+                <stop offset="100%" stopColor="#1F2937" stopOpacity="0" />
               </linearGradient>
             </defs>
 
             {/* Section labels */}
-            <text x={50} y={40} fill="#6B6B75" fontSize={11} fontWeight={700} letterSpacing="2.5">
+            <text x={50} y={40} fill="#5B6478" fontSize={11} fontWeight={700} letterSpacing="2.5">
               CONVERSION PATH →
             </text>
-            <text x={50} y={290} fill="#6B6B75" fontSize={11} fontWeight={700} letterSpacing="2.5">
+            <text x={50} y={290} fill="#5B6478" fontSize={11} fontWeight={700} letterSpacing="2.5">
               ↓ OUTCOMES OF TRIAL STARTED
             </text>
 
@@ -193,7 +193,7 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
               const parentCount = byName[p.from.key]?.count ?? 0;
               const childCount = byName[p.to.key]?.count ?? 0;
               let labelText = "";
-              let labelColor = "#8A8A94";
+              let labelColor = "#8B92A3";
               if (parentCount > 0) {
                 if (isBranch || p.to.key === "Churned") {
                   const share = (childCount / parentCount) * 100;
@@ -282,8 +282,8 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
                             width={64}
                             height={28}
                             rx={8}
-                            fill="#0A0A0C"
-                            stroke="#2A2A32"
+                            fill="#0A0F1A"
+                            stroke="#1F2937"
                             strokeWidth={1}
                           />
                           <text
@@ -331,7 +331,7 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
                     width={NODE_W}
                     height={NODE_H}
                     rx={14}
-                    fill="#15151A"
+                    fill="#11182B"
                     stroke={n.color}
                     strokeWidth={2}
                     strokeOpacity={0.7}
@@ -381,9 +381,9 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
           </svg>
 
         {/* Legend — 3-color palette: violet=in-flight, mint=positive, coral=negative */}
-        <div className="mt-6 pt-5 border-t border-[#1F1F28] grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-[14px] leading-snug">
+        <div className="mt-6 pt-5 border-t border-[#1F2937] grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-3 text-[14px] leading-snug">
           <div className="flex items-start gap-2.5">
-            <span className="mt-1.5 h-2.5 w-2.5 rounded-full bg-[#A78BFA] shrink-0" />
+            <span className="mt-1.5 h-2.5 w-2.5 rounded-full bg-[#1E6FFF] shrink-0" />
             <span className="text-[#C9C9D1]">
               <span className="text-white font-medium">In-flight</span> = stages still progressing (Auth → Properties → Ready → Trial → In Trial)
             </span>
