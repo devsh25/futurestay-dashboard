@@ -452,6 +452,18 @@ export async function computeCampaignAnalysis(
     const pct = (n: number, d: number) => (d > 0 ? (n / d) * 100 : 0);
     const cpa = (n: number) => (n > 0 ? sp / n : null);
 
+    // Meetings Held = Meetings Booked − classified no-shows.
+    // Uses the 3-source classifier (sales_call_outcome ∪ note keywords
+    // ∪ Aircall after-meeting no-answer) to remove no-shows from the
+    // booked count. Unclassified meetings are conservatively counted
+    // as held (since reps tend to log no-shows more than successes
+    // in this account, but coverage is climbing — caveat: when
+    // outcomeCoverage is low, meetingsHeld is an upper bound).
+    const meetingsHeld = isCall ? Math.max(0, a.meeting - a.clsNoShow) : null;
+    const meetingToTrialRate = isCall && meetingsHeld && meetingsHeld > 0
+      ? (a.trial / meetingsHeld) * 100
+      : null;
+
     return {
       campaign: def.key,
       type: def.type,
@@ -459,6 +471,7 @@ export async function computeCampaignAnalysis(
       optSignal: def.optSignal,
       leads: a.leads,
       meetingsBooked: isCall ? a.meeting : null,
+      meetingsHeld,
       signups: a.signups,
       qualifiedSignups: a.signups - a.airbnbDq,
       airbnbConnected: a.auth,
@@ -476,6 +489,7 @@ export async function computeCampaignAnalysis(
       costPerTrial: cpa(a.trial),
       customers: a.cust,
       costPerCustomer: cpa(a.cust),
+      meetingToTrialRate,
       // QS conversion rates: of Qualified Signups (signups − Airbnb DQ),
       // what % progressed to trial / customer? Cohort-based.
       qsToTrialRate: (a.signups - a.airbnbDq) > 0 ? (a.trial / (a.signups - a.airbnbDq)) * 100 : null,
@@ -484,4 +498,127 @@ export async function computeCampaignAnalysis(
   });
 
   return { rows, since, until };
+}
+
+// ============================================================
+// Meetings Run Rate — daily timeseries by path (Airbnb vs Direct)
+// ============================================================
+
+export interface MeetingsTimeseriesPath {
+  meetingsBooked: number[];
+  meetingsHeld: number[];
+  trialists: number[];
+  customers: number[];
+}
+
+export interface MeetingsTimeseries {
+  days: string[];        // ISO YYYY-MM-DD, oldest → newest
+  airbnb: MeetingsTimeseriesPath;
+  direct: MeetingsTimeseriesPath;
+}
+
+/** Path classification — which "side" of the funnel each campaign sits on.
+ *  Airbnb path = campaigns whose LP/objective is the Airbnb-connected
+ *  flow (Airbnb Optimization Call + Airbnb Listing Opt variants).
+ *  Direct path = campaigns selling the direct-booking website
+ *  (Direct Website Call + DW Booking variants). */
+function pathFor(campaignKey: string): "airbnb" | "direct" | null {
+  if (campaignKey.startsWith("Airbnb")) return "airbnb";
+  if (campaignKey.startsWith("Direct") || campaignKey.startsWith("DW")) return "direct";
+  return null;
+}
+
+export async function computeMeetingsTimeseries(
+  contacts: HubSpotContact[],
+  daysBack = 60
+): Promise<MeetingsTimeseries> {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const startMs = today.getTime() - daysBack * 86_400_000;
+  const endMs = today.getTime();
+  const dayMs = 86_400_000;
+  const dayCount = daysBack + 1;
+
+  const days: string[] = [];
+  for (let i = 0; i < dayCount; i++) {
+    days.push(new Date(startMs + i * dayMs).toISOString().slice(0, 10));
+  }
+
+  function bucketIndex(d: string | null): number {
+    if (!d) return -1;
+    const t = new Date(d).getTime();
+    if (isNaN(t)) return -1;
+    const dayStart = new Date(new Date(t).toISOString().slice(0, 10) + "T00:00:00Z").getTime();
+    const idx = Math.floor((dayStart - startMs) / dayMs);
+    return idx >= 0 && idx < dayCount ? idx : -1;
+  }
+
+  const empty = (): MeetingsTimeseriesPath => ({
+    meetingsBooked: new Array(dayCount).fill(0),
+    meetingsHeld: new Array(dayCount).fill(0),
+    trialists: new Array(dayCount).fill(0),
+    customers: new Array(dayCount).fill(0),
+  });
+  const airbnb = empty();
+  const direct = empty();
+
+  // For meetings_held we need the no-show classification. The full
+  // 3-source classifier (notes + Aircall + outcome field) requires
+  // fetching notes which is expensive. For the timeseries we use the
+  // explicit sales_call_outcome field only (note classification is
+  // limited to the call-funnel cohort fetcher in the main analysis
+  // path) — the explicit field captures most no-shows since reps now
+  // have ~41% logging coverage. Acceptable trade-off for a daily chart.
+  const isExplicitNoShow = (c: HubSpotContact) => {
+    const v = (c.sales_call_outcome || "").trim();
+    return v === "Did Not Reach" || v === "Did Not Reach Left Message";
+  };
+
+  // Pre-compute campaign launches so we can exclude pre-launch fallback
+  const launchByBucket: Record<string, Date> = {};
+  for (const def of CAMPAIGN_DEFS) {
+    launchByBucket[def.key] = new Date(`${def.launch}T00:00:00.000Z`);
+  }
+
+  for (const c of contacts) {
+    const ref = (c.referral_source || "").toUpperCase().trim();
+    if (ref === "WIX" || ref === "HOPPER") continue;
+
+    const bk = bucketContactToCampaign(c);
+    if (!bk) continue;
+    const path = pathFor(bk);
+    if (!path) continue;
+    const target = path === "airbnb" ? airbnb : direct;
+
+    // Pre-launch fallback exclusion
+    const created = c.createdate ? new Date(c.createdate) : null;
+    const launch = launchByBucket[bk];
+    if (created && launch && created < launch) continue;
+
+    // Meetings booked / held — bucket by meeting date (when scheduled)
+    const mtgDate = c.engagements_last_meeting_booked;
+    if (mtgDate) {
+      const i = bucketIndex(mtgDate);
+      if (i >= 0) {
+        target.meetingsBooked[i] += 1;
+        if (!isExplicitNoShow(c)) target.meetingsHeld[i] += 1;
+      }
+    }
+
+    // Trialists — bucket by trial start date
+    const trialDate = c.trial__start_date || c.hs_v2_date_entered_opportunity;
+    if (trialDate) {
+      const i = bucketIndex(trialDate);
+      if (i >= 0) target.trialists[i] += 1;
+    }
+
+    // Customers — bucket by customer entry date
+    const custDate = c.hs_v2_date_entered_customer;
+    if (custDate) {
+      const i = bucketIndex(custDate);
+      if (i >= 0) target.customers[i] += 1;
+    }
+  }
+
+  return { days, airbnb, direct };
 }

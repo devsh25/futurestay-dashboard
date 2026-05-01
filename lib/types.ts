@@ -202,7 +202,8 @@ export interface CampaignAnalysisRow {
   optSignal: string;          // "meetings" | "signups" | "airbnb_connected"
 
   leads: number;              // form submissions on landing page
-  meetingsBooked: number | null;  // call only
+  meetingsBooked: number | null;  // call only — engagements_last_meeting_booked populated
+  meetingsHeld: number | null;    // call only — booked minus classified no-shows
   signups: number;            // lifecycle reached "signup" or beyond
   qualifiedSignups: number;   // signups - airbnb DQ
   airbnbConnected: number;    // auth status COMPLETED/REVOKED
@@ -225,6 +226,7 @@ export interface CampaignAnalysisRow {
   costPerCustomer: number | null;
   qsToTrialRate: number | null;     // Qualified Signups → Trial %
   qsToCustomerRate: number | null;  // Qualified Signups → Customer %
+  meetingToTrialRate: number | null; // call only — Trials / Meetings Held
 }
 
 export interface CampaignAnalysisData {

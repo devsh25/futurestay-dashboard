@@ -57,6 +57,7 @@ function CampaignRow({ r }: { r: CampaignAnalysisRow }) {
       <TableCell className="text-[10px] text-[#8B92A3] whitespace-nowrap">{OPT_LABEL[r.optSignal] || r.optSignal}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-white">{fmtNum(r.leads)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">{fmtNum(r.meetingsBooked)}</TableCell>
+      <TableCell className="text-right font-mono text-[12px] tabular-nums text-white">{fmtNum(r.meetingsHeld)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">{fmtNum(r.signups)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-white font-semibold">{fmtNum(r.qualifiedSignups)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#60A5FA]">{fmtNum(r.airbnbConnected)}</TableCell>
@@ -71,6 +72,7 @@ function CampaignRow({ r }: { r: CampaignAnalysisRow }) {
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">{fmtMoney(r.costPerMeeting)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">{fmtNum(r.trials)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">{fmtMoney(r.costPerTrial)}</TableCell>
+      <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#60A5FA]">{fmtPct(r.meetingToTrialRate)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#1E6FFF]">{fmtPct(r.qsToTrialRate)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-white font-semibold">{fmtNum(r.customers)}</TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-white font-semibold">{fmtMoney(r.costPerCustomer)}</TableCell>
@@ -163,6 +165,7 @@ export default function CampaignAnalysisCard({
                     <TableHead className="text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Opt Signal</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Leads</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Mtgs Bkd</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold" title="Booked minus classified no-shows (sales_call_outcome ∪ note keywords ∪ Aircall no-answer)">Mtgs Held</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Signups</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Qual Sgnp</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Airbnb Conn</TableHead>
@@ -177,6 +180,7 @@ export default function CampaignAnalysisCard({
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">$/Mtg</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Trials</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">$/Trial</TableHead>
+                    <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold" title="Trials / Meetings Held — call-funnel close rate">Mtg → T</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">QS → T</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Cust</TableHead>
                     <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">$/Cust</TableHead>

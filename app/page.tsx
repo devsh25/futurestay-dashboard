@@ -5,6 +5,7 @@ import { DashboardData, PeriodFilter } from "@/lib/types";
 import FilterBar from "@/components/FilterBar";
 import KPICards from "@/components/dashboard/KPICards";
 import AllTimeChart from "@/components/dashboard/AllTimeChart";
+import MeetingsRunRateChart from "@/components/dashboard/MeetingsRunRateChart";
 import FunnelCard from "@/components/dashboard/FunnelCard";
 import GeoCard from "@/components/dashboard/GeoCard";
 import RepCard from "@/components/dashboard/RepCard";
@@ -181,6 +182,9 @@ export default function Dashboard() {
                 customStart={customStart}
                 customEnd={customEnd}
               />
+
+              {/* Daily meetings run rate split by campaign path. */}
+              <MeetingsRunRateChart />
 
               {/* Meta Ads card lives at the end of the funnel section so
                   the spend numbers sit next to the campaign performance
