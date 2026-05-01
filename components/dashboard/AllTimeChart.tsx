@@ -118,7 +118,7 @@ export default function AllTimeChart() {
     <Card className="bg-[#11182B] border border-[#1F2937] rounded-2xl shadow-none">
       <CardHeader className="pb-4 border-b border-[#1F2937]">
         <CardTitle className="flex items-center justify-between text-[17px] font-semibold text-white tracking-tight">
-          <span>All-Time Trend</span>
+          <span>Run Rate</span>
           <Badge className="bg-[#1E6FFF]/15 text-[#60A5FA] border-[#1E6FFF]/25 text-[11px] font-medium">
             {data ? `${data.days[0]} → ${data.days[data.days.length - 1]}` : "—"}
           </Badge>
@@ -211,6 +211,11 @@ export default function AllTimeChart() {
                     axisLine={false}
                     tickLine={false}
                     width={48}
+                    // Round y-axis ticks to integers — fractional people
+                    // don't make sense even when the underlying line is a
+                    // 7-day moving average.
+                    tickFormatter={(v: number) => Math.round(v).toLocaleString()}
+                    allowDecimals={false}
                   />
                   <Tooltip
                     cursor={{ stroke: "#1F2937", strokeWidth: 1 }}
@@ -229,7 +234,10 @@ export default function AllTimeChart() {
                     formatter={(value, name) => {
                       const n = typeof value === "number" ? value : parseFloat(String(value ?? 0));
                       const m = METRICS.find((x) => x.key === name);
-                      return [smoothed ? n.toFixed(1) : Math.round(n), m?.label || name];
+                      // Always show whole numbers in the tooltip. The 7-day
+                      // smooth makes the underlying value fractional, but
+                      // people-counts read as nonsense in decimals.
+                      return [Math.round(n).toLocaleString(), m?.label || name];
                     }}
                   />
                   <Legend
