@@ -219,25 +219,125 @@ export default function AllTimeChart() {
                   />
                   <Tooltip
                     cursor={{ stroke: "#1F2937", strokeWidth: 1 }}
-                    contentStyle={{
-                      backgroundColor: "rgba(14, 20, 34, 0.95)",
-                      backdropFilter: "blur(8px)",
-                      borderRadius: 12,
-                      border: "1px solid #1F2937",
-                      fontSize: 12,
-                      boxShadow: "0 12px 36px rgba(0,0,0,0.5)",
-                      padding: "10px 14px",
-                      color: "#FFFFFF",
-                    }}
-                    labelStyle={{ color: "#8B92A3", fontSize: 11, marginBottom: 4 }}
-                    itemStyle={{ color: "#C9D1DC" }}
-                    formatter={(value, name) => {
-                      const n = typeof value === "number" ? value : parseFloat(String(value ?? 0));
-                      const m = METRICS.find((x) => x.key === name);
-                      // Always show whole numbers in the tooltip. The 7-day
-                      // smooth makes the underlying value fractional, but
-                      // people-counts read as nonsense in decimals.
-                      return [Math.round(n).toLocaleString(), m?.label || name];
+                    // Custom content so we can render colour dots before
+                    // each metric name AND show step-to-step conversion %
+                    // between adjacent visible metrics (e.g. Trials/QS).
+                    content={(props) => {
+                      const { active, label, payload } = props as {
+                        active?: boolean;
+                        label?: string | number;
+                        payload?: ReadonlyArray<{ name?: string | number; value?: number | string; color?: string }>;
+                      };
+                      if (!active || !payload || payload.length === 0) return null;
+
+                      // Index payload by key for lookup
+                      const byKey: Record<string, { name: string; value: number; color: string }> = {};
+                      for (const p of payload) {
+                        const k = typeof p.name === "string" ? p.name : String(p.name ?? "");
+                        if (k) {
+                          byKey[k] = {
+                            name: k,
+                            value: typeof p.value === "number" ? p.value : parseFloat(String(p.value ?? 0)),
+                            color: p.color || "#FFFFFF",
+                          };
+                        }
+                      }
+
+                      // Render rows in METRICS order so the funnel reads
+                      // top-to-bottom (signups → connects → ready → trials → customers)
+                      const visible = METRICS.filter((m) => byKey[m.key]);
+
+                      // Format the date label nicely
+                      const labelStr = typeof label === "string" ? label : String(label ?? "");
+                      let dateStr: string = labelStr;
+                      if (labelStr && /^\d{4}-\d{2}-\d{2}/.test(labelStr)) {
+                        const [, m, d] = labelStr.split("-");
+                        const months = ["", "Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+                        dateStr = `${months[parseInt(m)]} ${parseInt(d)}, ${labelStr.split("-")[0]}`;
+                      }
+
+                      return (
+                        <div
+                          style={{
+                            backgroundColor: "rgba(14, 20, 34, 0.95)",
+                            backdropFilter: "blur(8px)",
+                            borderRadius: 12,
+                            border: "1px solid #1F2937",
+                            fontSize: 12,
+                            boxShadow: "0 12px 36px rgba(0,0,0,0.5)",
+                            padding: "10px 14px",
+                            color: "#FFFFFF",
+                            minWidth: 200,
+                          }}
+                        >
+                          <div style={{ color: "#8B92A3", fontSize: 11, marginBottom: 6 }}>
+                            {dateStr}
+                          </div>
+
+                          {visible.map((m) => {
+                            const row = byKey[m.key];
+                            return (
+                              <div
+                                key={m.key}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 8,
+                                  padding: "2px 0",
+                                  color: "#C9D1DC",
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    display: "inline-block",
+                                    width: 8,
+                                    height: 8,
+                                    borderRadius: "50%",
+                                    backgroundColor: m.color,
+                                    flexShrink: 0,
+                                  }}
+                                />
+                                <span style={{ flex: 1 }}>{m.label}</span>
+                                <span style={{ fontVariantNumeric: "tabular-nums", color: "#FFFFFF", fontWeight: 600 }}>
+                                  {Math.round(row.value).toLocaleString()}
+                                </span>
+                              </div>
+                            );
+                          })}
+
+                          {/* Step-to-step conversion rates between adjacent
+                              visible metrics in funnel order. Lets the
+                              reader see "Trials/QS = 16%" without doing
+                              the arithmetic in their head. */}
+                          {visible.length >= 2 && (
+                            <div
+                              style={{
+                                marginTop: 8,
+                                paddingTop: 8,
+                                borderTop: "1px solid #1F2937",
+                                color: "#8B92A3",
+                                fontSize: 11,
+                              }}
+                            >
+                              {visible.slice(0, -1).map((m, i) => {
+                                const next = visible[i + 1];
+                                const a = byKey[m.key].value;
+                                const b = byKey[next.key].value;
+                                if (!a || a === 0) return null;
+                                const pct = (b / a) * 100;
+                                return (
+                                  <div key={m.key + "->" + next.key} style={{ display: "flex", justifyContent: "space-between", padding: "1px 0" }}>
+                                    <span>{m.label} → {next.label}</span>
+                                    <span style={{ fontVariantNumeric: "tabular-nums", color: "#60A5FA" }}>
+                                      {pct.toFixed(1)}%
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
                     }}
                   />
                   <Legend

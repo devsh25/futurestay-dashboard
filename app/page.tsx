@@ -9,7 +9,6 @@ import FunnelCard from "@/components/dashboard/FunnelCard";
 import GeoCard from "@/components/dashboard/GeoCard";
 import RepCard from "@/components/dashboard/RepCard";
 import DQChartCard from "@/components/dashboard/DQChartCard";
-import CohortCard from "@/components/dashboard/CohortCard";
 import MetaSpendCard from "@/components/dashboard/MetaSpendCard";
 import CampaignAnalysisCard from "@/components/dashboard/CampaignAnalysisCard";
 import SectionHeading, { Icons } from "@/components/dashboard/SectionHeading";
@@ -206,14 +205,11 @@ export default function Dashboard() {
 
               <SectionHeading
                 icon={Icons.Globe}
-                title="Cohort & Geography"
-                description="Signup cohort progression and country/city breakdown"
+                title="Geography"
+                description="Country and city breakdown of qualified signups"
                 iconColor="#60A5FA"
               />
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                <CohortCard cohort={data.cohort} period={data.period} />
-                <GeoCard geo={data.geo} />
-              </div>
+              <GeoCard geo={data.geo} />
             </>
           )}
         </div>

@@ -271,9 +271,18 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
               let labelColor = "#8B92A3";
               if (parentCount > 0 && !isMergeEdge) {
                 if (SHARE_LABEL_KEYS.has(p.to.key)) {
-                  // Show share-of-parent (% of QS who reached this milestone,
-                  // % of Trial who became Customer, etc.).
-                  const share = (childCount / parentCount) * 100;
+                  // Default: share-of-parent. % of Trial Started who
+                  // ended up as Customer / In Trial / Failed Trialist.
+                  // Special case for Churned: standard churn rate is
+                  //   churned / (churned + active customers)
+                  // not churned / current-customers, because it's
+                  // measuring "what fraction of everyone who became a
+                  // customer eventually cancelled" — including the
+                  // 28 who already churned in the denominator.
+                  const denom = p.to.key === "Churned"
+                    ? parentCount + childCount
+                    : parentCount;
+                  const share = (childCount / denom) * 100;
                   labelText = `${share.toFixed(0)}%`;
                   labelColor = p.color;
                 } else {
