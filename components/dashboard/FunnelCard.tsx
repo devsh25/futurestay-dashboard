@@ -213,7 +213,7 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
       <CardContent className="pt-6">
         <p className="text-[14px] text-[#A8A8B2] mb-4 leading-relaxed">
           <span className="text-[#1E6FFF] font-medium">Cohort-based.</span>{" "}
-          Of qualified signups whose <code className="text-[#C9D1DC] text-[13px]">createdate</code> falls in the window, what % reached each stage. Authorizing Airbnb auto-imports listings (the path most users take). 3 outcomes drop from Trial Started (In Trial = still active, Customer = real paid, Failed = cancelled before converting). Customer can further churn.
+          Of qualified signups (contacts whose <code className="text-[#C9D1DC] text-[13px]">account_lifecycle</code> has reached <span className="text-white">signup</span> or beyond and whose <code className="text-[#C9D1DC] text-[13px]">createdate</code> falls in the window), what % reached each stage. Authorizing Airbnb auto-imports listings (the path most users take). 3 outcomes drop from Trial Started (In Trial = still active, Customer = real paid, Failed = cancelled before converting). Customer can further churn.
         </p>
 
         <svg

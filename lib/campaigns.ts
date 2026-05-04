@@ -16,12 +16,20 @@ const AIRCALL_NO_ANSWER = new Set([
   "b2cf5968-551e-4856-9783-52b3da59a7d0",  // Left voicemail
 ]);
 
+// Lifecycles that count as "Signup" — has reached or passed the signup
+// stage. Note "Disqualfied" is HubSpot's actual stored value (typo'd,
+// missing one 'i') — DQ'd contacts ARE signups, they just got rejected
+// at the Airbnb-validation step. They're then excluded from Qualified
+// Signups via the airbnbdqreason check downstream. Keep both lib/
+// funnel.ts and lib/campaigns.ts in sync — they share the same
+// definition of Signup across the dashboard.
 const SIGNUP_LIFECYCLES = new Set([
   "signup",
   "Trialist",
   "customer",
   "former.customer",
   "Customer/Limited Access",
+  "Disqualfied",
 ]);
 
 const PAID_PLANS = new Set(["amplify", "flex"]);

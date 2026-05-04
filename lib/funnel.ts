@@ -174,6 +174,29 @@ const TRIAL_LIFECYCLES = ["Trialist", "customer", "former.customer", "Customer/L
 const CUSTOMER_LIFECYCLES = ["customer", "Customer/Limited Access"];
 const EVER_PAID_LIFECYCLES = ["customer", "former.customer", "Customer/Limited Access"];
 
+// A "Signup" is a contact that has reached or passed the signup stage of
+// account_lifecycle — they completed the Futurestay signup form. Excludes
+// pure marketing leads (Lead), partner-imported contacts that never
+// signed up (empty lifecycle), and other ghost contacts. Disqualified
+// users ARE signups — they completed the form, just got rejected at the
+// Airbnb-validation step.
+//
+// Note: HubSpot stores "Disqualfied" with a typo (missing one 'i').
+// The set must match the actual stored value, not the correctly-spelled
+// English word. Verified against live HubSpot data.
+const SIGNUP_LIFECYCLES = new Set([
+  "signup",
+  "Trialist",
+  "customer",
+  "former.customer",
+  "Customer/Limited Access",
+  "Disqualfied",
+]);
+
+function isSignup(c: HubSpotContact): boolean {
+  return SIGNUP_LIFECYCLES.has(c.account_lifecycle || "");
+}
+
 // ---- Paid plan detection ----
 // Per Data Guide 3.0 + product rule: a Customer is someone on a *paid*
 // plan (Amplify or Flex). FS Connect ("Connect") is free and NOT counted
@@ -444,8 +467,9 @@ function computeKPIs(
   };
 
   for (const c of allContacts) {
-    // Signups (qualified only, matching the headline metric)
-    if (!hasDQ(c) && c.createdate) {
+    // Signups (qualified only, matching the headline metric).
+    // Filters: isSignup (lifecycle ≥ signup) AND no Airbnb DQ.
+    if (isSignup(c) && !hasDQ(c) && c.createdate) {
       const idx = dayIndex(new Date(c.createdate));
       if (idx >= 0) signupsDaily[idx]++;
     }
@@ -828,13 +852,20 @@ export function processDashboardData(
   // Resolve date range
   const { start, end } = resolvedDateRange(period, customStart, customEnd);
 
-  // Filter by signup date for most cards
+  // Filter by signup date — first by createdate-in-window, then by
+  // account_lifecycle ≥ signup. The lifecycle check is the critical fix:
+  // it excludes marketing leads, partner imports, and ghost contacts
+  // that HubSpot created without the user actually completing the
+  // Futurestay signup form. Without this filter, the Signup count is
+  // ~38% inflated by non-signup contacts.
   let signupFiltered = filterBySignupDate(clean, start, end);
+  signupFiltered = signupFiltered.filter(isSignup);
   signupFiltered = filterByCountries(signupFiltered, countries);
   signupFiltered = filterByChannels(signupFiltered, channels);
 
   // Qualified signups = signups without an Airbnb DQ reason.
-  // This is what most funnel/cohort/campaign/geo cards operate on.
+  // (Disqualified-lifecycle contacts have airbnbdqreason set, so they
+  // automatically drop out here.)
   const qualifiedSignups = signupFiltered.filter((c) => !hasDQ(c));
 
   // All clean contacts (for period-based trial/customer counts)
@@ -904,7 +935,7 @@ export function computeTimeSeries(contacts: HubSpotContact[]): TimeSeries {
   }
 
   for (const c of clean) {
-    if (!hasDQ(c)) consider(c.createdate);
+    if (isSignup(c) && !hasDQ(c)) consider(c.createdate);
     if (everTrialed(c)) consider(c.trial__start_date || c.hs_v2_date_entered_opportunity);
     if (isCustomer(c)) consider(c.hs_v2_date_entered_customer);
   }
@@ -940,8 +971,10 @@ export function computeTimeSeries(contacts: HubSpotContact[]): TimeSeries {
   }
 
   for (const c of clean) {
-    // Qualified signups
-    if (!hasDQ(c)) {
+    // Qualified signups: must have reached signup lifecycle AND no DQ.
+    // Without the lifecycle check this counts marketing leads / ghost
+    // contacts as signups, inflating the daily count.
+    if (isSignup(c) && !hasDQ(c)) {
       const i = bucketIndex(c.createdate);
       if (i >= 0) signups[i]++;
     }

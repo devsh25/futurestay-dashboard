@@ -105,9 +105,11 @@ export default function KPICards({
       <p className="text-[13px] text-[#8B92A3] leading-relaxed">
         <span className="text-[#1E6FFF] font-medium">Cohort-based.</span>{" "}
         Top row: counts of contacts whose <code className="text-[#C9D1DC]">createdate</code>{" "}
-        falls in the window. Sparkline = daily trend; delta vs same-length prior
-        period. Bottom row: cohort conversion rates from Qualified Signup → each
-        stage. Excludes WIX/HOPPER partner referrals.
+        falls in the window AND <code className="text-[#C9D1DC]">account_lifecycle</code> has
+        reached <span className="text-white">signup</span> or beyond (excludes raw
+        leads, partner imports, and ghost contacts). Sparkline = daily trend;
+        delta vs same-length prior period. Bottom row: cohort conversion rates
+        from Qualified Signup → each stage. Excludes WIX/HOPPER partner referrals.
       </p>
 
       {/* Hero KPI row — divided container pattern. Four numbers share one
