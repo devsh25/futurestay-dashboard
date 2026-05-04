@@ -18,12 +18,12 @@ type Node = {
   parentExitX?: number; // override the exit x on the parent (for fan branches)
 };
 
-// Single linear spine: QS → Auth → Ready → Trial Started, then 3 outcomes
-// drop straight down from Trial Started. Created Properties was removed
-// because Authorized Airbnb already covers the property-creation path
-// (auth auto-imports listings). The handful of users who manually create
-// properties without auth are a tiny minority not worth their own stage.
-const VB_W = 1500;
+// Spine: Total Signups → Qualified Signups → Auth → Ready → Trial Started,
+// then 3 outcomes drop straight down from Trial Started. The Total →
+// Qualified drop is the Airbnb DQ step. Bumped VB_W from 1500 to 1700 to
+// fit 5 spine nodes plus the right-side outcome cluster (Customer at
+// X_TRIAL + 270 = 1580 + NODE_W/2 = 1695).
+const VB_W = 1700;
 const VB_H = 800;
 const NODE_W = 230;
 const NODE_H = 132;
@@ -34,20 +34,18 @@ const BRANCH_Y = 540;
 // Churned drops below Customer.
 const CHURN_Y = 720;
 
-// Spine x — 4 stages evenly across the canvas, with right-side margin
-// large enough to fit Customer (the rightmost outcome).
-const X_QS = 130;
-const X_AUTH = 430;
-const X_READY = 730;
-const X_TRIAL = 1030;
+// Spine x — 5 stages evenly across the canvas with ~290px spacing.
+// Total at 130, Trial Started at 1310 → outcomes still fit on the right.
+const X_TOTAL = 130;
+const X_QS = 425;
+const X_AUTH = 720;
+const X_READY = 1015;
+const X_TRIAL = 1310;
 
-// Outcome cluster — 3 boxes spread either side of Trial Started, all at
-// the same y, all dropping DOWN from Trial Started's bottom edge. Spacing
-// of 270 keeps boxes from overlapping (NODE_W = 230) and dy/dx > 1 so the
-// connectors render as vertical-style Beziers rather than horizontal.
-const X_FAILED = X_TRIAL - 270;   // 760
-const X_INTRIAL = X_TRIAL;        // 1030 — directly under Trial Started
-const X_CUSTOMER = X_TRIAL + 270; // 1300
+// Outcome cluster — 3 boxes spread either side of Trial Started.
+const X_FAILED = X_TRIAL - 270;   // 1040
+const X_INTRIAL = X_TRIAL;        // 1310 — directly under Trial Started
+const X_CUSTOMER = X_TRIAL + 270; // 1580
 
 // Restricted palette — blue spectrum + white only. No red/green/coral
 // in decorative elements. Status colors (delta pills) keep green/red
@@ -58,7 +56,8 @@ const C_NEUTRAL = "#FFFFFF";    // white — Failed Trialist / Churned (off-path
 
 const NODES: Node[] = [
   // Linear spine
-  { key: "Qualified Signups",  label: "Qualified Signups",  cx: X_QS,         cy: SPINE_Y, color: C_INFLIGHT },
+  { key: "Total Signups",      label: "Total Signups",      cx: X_TOTAL,      cy: SPINE_Y, color: C_INFLIGHT },
+  { key: "Qualified Signups",  label: "Qualified Signups",  cx: X_QS,         cy: SPINE_Y, color: C_INFLIGHT, parent: "Total Signups" },
   { key: "Authorized Airbnb",  label: "Authorized Airbnb",  cx: X_AUTH,       cy: SPINE_Y, color: C_INFLIGHT, parent: "Qualified Signups" },
   { key: "Ready to Launch",    label: "Ready to Launch",    cx: X_READY,      cy: SPINE_Y, color: C_INFLIGHT, parent: "Authorized Airbnb", icon: "🚀" },
   { key: "Trial Started",      label: "Trial Started",      cx: X_TRIAL,      cy: SPINE_Y, color: C_INFLIGHT, parent: "Ready to Launch", icon: "★" },
@@ -413,7 +412,17 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
               const stage = byName[n.key];
               if (!stage) return null;
               const count = stage.count;
-              const pctOfTop = topCount > 0 ? (count / topCount) * 100 : 0;
+              // Inside-card percentage. For most nodes we show "% of
+              // qualified" using QualifiedSignups as the denominator.
+              // Total Signups is a special case — it's *above* Qualified
+              // in the funnel, so a "% of qualified" reading would be
+              // > 100% which is meaningless. Show it as % of itself
+              // (always 100%) labelled "of total" instead.
+              const isTotal = n.key === "Total Signups";
+              const pctOfTop = isTotal
+                ? 100
+                : topCount > 0 ? (count / topCount) * 100 : 0;
+              const pctLabel = isTotal ? "100% of total" : `${pctOfTop.toFixed(1)}% of qualified`;
               const x = n.cx - NODE_W / 2;
               const y = n.cy - NODE_H / 2;
               return (
@@ -477,7 +486,7 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
                     fontWeight={700}
                     style={{ fontVariantNumeric: "tabular-nums" }}
                   >
-                    {pctOfTop.toFixed(1)}% of qualified
+                    {pctLabel}
                   </text>
                 </g>
               );

@@ -20,18 +20,19 @@ export default function DashboardSkeleton() {
         <div className="lp-shimmer h-5 w-32 rounded-md" />
       </div>
 
-      {/* KPI hero row — divided container layout */}
+      {/* KPI hero row — divided container layout, 5-up to match the
+          real card (Total Signups + Qualified + Trials + In Trial + Customers) */}
       <div className="bg-[#11182B] border border-[#1F2937] rounded-2xl overflow-hidden">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-[#1F2937]">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="px-6 py-5 first:pl-7 last:pr-7">
-              <div className="flex items-baseline justify-between mb-3">
-                <div className="lp-shimmer h-12 w-24 rounded-lg" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-[#1F2937]">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="px-5 py-5 first:pl-6 last:pr-6">
+              <div className="flex items-baseline justify-between mb-3 gap-2">
+                <div className="lp-shimmer h-11 w-20 rounded-lg" />
                 <div className="lp-shimmer h-5 w-12 rounded-full" />
               </div>
-              <div className="flex items-center justify-between gap-3">
-                <div className="lp-shimmer h-3 w-28 rounded" />
-                <div className="lp-shimmer h-6 w-16 rounded" />
+              <div className="flex items-center justify-between gap-2">
+                <div className="lp-shimmer h-3 w-24 rounded" />
+                <div className="lp-shimmer h-5 w-14 rounded" />
               </div>
             </div>
           ))}

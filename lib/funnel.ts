@@ -366,7 +366,10 @@ function computeFunnel(qualified: HubSpotContact[], allSignups: HubSpotContact[]
 
   // Note: launchCount removed from funnel display per product request
   void launchCount;
+  // Total Signups added as the new first stage. Drop from Total → Qualified
+  // is the Airbnb DQ step (computed/labeled in the FunnelCard component).
   const mainStages: [string, number][] = [
+    ["Total Signups", totalSignups],
     ["Qualified Signups", qualifiedTotal],
     ["Authorized Airbnb", authCount],
     ["Created Properties", propsCount],
@@ -449,6 +452,7 @@ function computeKPIs(
   sparklineStart.setHours(0, 0, 0, 0);
 
   const days: string[] = [];
+  const rawSignupsDaily = new Array(SPARKLINE_DAYS).fill(0);
   const signupsDaily = new Array(SPARKLINE_DAYS).fill(0);
   const trialsDaily = new Array(SPARKLINE_DAYS).fill(0);
   const customersDaily = new Array(SPARKLINE_DAYS).fill(0);
@@ -467,8 +471,12 @@ function computeKPIs(
   };
 
   for (const c of allContacts) {
-    // Signups (qualified only, matching the headline metric).
-    // Filters: isSignup (lifecycle ≥ signup) AND no Airbnb DQ.
+    // Total signups (raw — includes DQ'd, excludes leads/empty).
+    if (isSignup(c) && c.createdate) {
+      const idx = dayIndex(new Date(c.createdate));
+      if (idx >= 0) rawSignupsDaily[idx]++;
+    }
+    // Qualified signups (matches the headline metric — excludes DQ'd).
     if (isSignup(c) && !hasDQ(c) && c.createdate) {
       const idx = dayIndex(new Date(c.createdate));
       if (idx >= 0) signupsDaily[idx]++;
@@ -510,7 +518,8 @@ function computeKPIs(
   const createdateOf = (c: HubSpotContact): Date | null =>
     c.createdate ? new Date(c.createdate) : null;
 
-  const prevSignups = countInRange(allContacts, createdateOf, prevStart, prevEnd, (c) => !hasDQ(c));
+  const prevRawSignups = countInRange(allContacts, createdateOf, prevStart, prevEnd, isSignup);
+  const prevSignups = countInRange(allContacts, createdateOf, prevStart, prevEnd, (c) => isSignup(c) && !hasDQ(c));
   const prevTrials = countInRange(allContacts, getTrialEnteredDate, prevStart, prevEnd);
   const prevCustomers = countInRange(allContacts, getCustomerEnteredDate, prevStart, prevEnd);
   const prevInTrial = countInRange(allContacts, getTrialEnteredDate, prevStart, prevEnd, isInTrial);
@@ -556,6 +565,7 @@ function computeKPIs(
     churnRate,
     dqRate: totalSignups > 0 ? (dqCount / totalSignups) * 100 : 0,
     sparkline: {
+      rawSignups: rawSignupsDaily,
       signups: signupsDaily,
       trials: trialsDaily,
       customers: customersDaily,
@@ -563,6 +573,7 @@ function computeKPIs(
       days,
     },
     deltas: {
+      rawSignups: delta(totalSignups, prevRawSignups),
       signups: delta(totalQualifiedSignups, prevSignups),
       trials: delta(totalTrials, prevTrials),
       inTrial: delta(totalInTrial, prevInTrial),

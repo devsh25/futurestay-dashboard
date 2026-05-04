@@ -87,7 +87,8 @@ export interface RepRow {
 }
 
 export interface SparklineSeries {
-  signups: number[];    // daily counts, oldest → newest
+  rawSignups: number[]; // daily total signups (incl. DQ'd, lifecycle ≥ signup)
+  signups: number[];    // daily qualified signups (excl. DQ'd)
   trials: number[];
   customers: number[];
   inTrial: number[];
@@ -118,7 +119,8 @@ export interface KPIs {
   dqRate: number;
   sparkline: SparklineSeries;
   deltas: {
-    signups: TrendDelta;
+    rawSignups: TrendDelta; // total signups incl. DQ'd
+    signups: TrendDelta;    // qualified signups
     trials: TrendDelta;
     inTrial: TrendDelta;
     customers: TrendDelta;

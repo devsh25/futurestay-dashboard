@@ -43,16 +43,16 @@ function KPICell({
   sparklineColor: string;
 }) {
   return (
-    <div className="px-6 py-5 first:pl-7 last:pr-7">
-      <div className="flex items-baseline justify-between mb-3">
-        <p className="text-[60px] leading-none font-bold text-white tracking-tight tabular-nums">
+    <div className="px-5 py-5 first:pl-6 last:pr-6">
+      <div className="flex items-baseline justify-between mb-3 gap-2">
+        <p className="text-[44px] xl:text-[52px] leading-none font-bold text-white tracking-tight tabular-nums">
           {value.toLocaleString()}
         </p>
         <TrendBadge delta={delta} />
       </div>
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-[13px] text-[#8B92A3] font-medium">{label}</p>
-        <Sparkline data={sparklineData} color={sparklineColor} width={64} height={24} />
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[12px] text-[#8B92A3] font-medium truncate">{label}</p>
+        <Sparkline data={sparklineData} color={sparklineColor} width={56} height={22} />
       </div>
     </div>
   );
@@ -112,14 +112,23 @@ export default function KPICards({
         from Qualified Signup → each stage. Excludes WIX/HOPPER partner referrals.
       </p>
 
-      {/* Hero KPI row — divided container pattern. Four numbers share one
-          rounded card with hairline dividers between cells. This is the
-          signature look of the Dashbrd X moodboard. */}
+      {/* Hero KPI row — divided container pattern. Five numbers share
+          one rounded card with hairline dividers between cells. The
+          first cell (Total Signups) includes DQ'd contacts; everything
+          right of it filters them out. Bumped from 4-up to 5-up so the
+          full top-of-funnel is visible at a glance. */}
       <div className="bg-[#11182B] border border-[#1F2937] rounded-2xl overflow-hidden">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-[#1F2937]">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-[#1F2937]">
           {/* All sparklines use the same blue tone — keeps the divided
-              row looking like one cohesive band rather than 4 different
+              row looking like one cohesive band rather than 5 different
               colour stories. The numbers themselves carry the meaning. */}
+          <KPICell
+            label="Total Signups"
+            value={kpis.totalRawSignups}
+            delta={kpis.deltas.rawSignups}
+            sparklineData={kpis.sparkline.rawSignups}
+            sparklineColor="#1E6FFF"
+          />
           <KPICell
             label="Qualified Signups"
             value={kpis.totalSignups}
