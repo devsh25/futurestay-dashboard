@@ -43,7 +43,7 @@ function smooth(arr: number[], window = 7): number[] {
   return out;
 }
 
-export default function AllTimeChart() {
+export default function AllTimeChart({ onReady }: { onReady?: () => void } = {}) {
   const [data, setData] = useState<Series | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,10 +66,17 @@ export default function AllTimeChart() {
         if (!cancelled) setError(e.message);
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          // Notify parent so the dashboard's first-fold loader knows
+          // this metric is done. Both data success AND error count as
+          // "done" — we want to dismiss the skeleton even on failure
+          // so the user sees the error state, not a frozen loader.
+          onReady?.();
+        }
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [onReady]);
 
   // Build chart-ready rows: one row per day, each metric as a column.
   const rows = useMemo(() => {

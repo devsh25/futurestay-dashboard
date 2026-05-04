@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { DashboardData, PeriodFilter } from "@/lib/types";
 import FilterBar from "@/components/FilterBar";
 import KPICards from "@/components/dashboard/KPICards";
 import AllTimeChart from "@/components/dashboard/AllTimeChart";
+import DashboardSkeleton from "@/components/dashboard/DashboardSkeleton";
 import MeetingsRunRateChart from "@/components/dashboard/MeetingsRunRateChart";
 import FunnelCard from "@/components/dashboard/FunnelCard";
 import GeoCard from "@/components/dashboard/GeoCard";
@@ -19,6 +20,19 @@ export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // First-fold loading tracker. The skeleton stays visible until BOTH
+  //   1) the contacts API call returns (powers KPIs + funnel)
+  //   2) the AllTimeChart's timeseries call returns (the Run Rate card)
+  // Once both are done we know everything in the first viewport has
+  // its data and the skeleton can fade out. Subsequent refreshes
+  // (filter changes) don't re-show the skeleton — they show the top
+  // progress bar instead, since the existing data is still valid until
+  // the new data lands.
+  const [hasInitialContacts, setHasInitialContacts] = useState(false);
+  const [hasInitialRunRate, setHasInitialRunRate] = useState(false);
+  const firstFoldReady = hasInitialContacts && hasInitialRunRate;
+  const isRefreshing = loading && firstFoldReady;
   // Default custom range: Feb 1, 2026 → T−14d.
   // T−14d enforces the cohort-maturity rule (Futurestay's median signup→customer
   // is ~14 days, so anything fresher than that has unmatured conversion data).
@@ -65,8 +79,12 @@ export default function Dashboard() {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
+      setHasInitialContacts(true);  // initial load complete (success or fail)
     }
   }, [period, countries, channels, customStart, customEnd]);
+
+  // Stable callback for AllTimeChart so its useEffect dep doesn't loop.
+  const handleRunRateReady = useMemo(() => () => setHasInitialRunRate(true), []);
 
   useEffect(() => {
     const timeout = setTimeout(fetchData, 300);
@@ -124,9 +142,26 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Loading overlay */}
+        {/* Top progress bar — visible during any refresh after the
+            initial load has completed. Two states:
+              • First load: skeleton replaces content entirely.
+              • Refresh: existing content stays visible, this thin
+                blue bar at the top signals new data is in flight. */}
+        {isRefreshing && <div className="lp-progress-bar" />}
+
+        {/* Initial-load skeleton — replaces the real content area
+            until both the contacts API and the Run Rate timeseries API
+            have returned. Layout matches the real first fold so the
+            page doesn't reflow when data lands. */}
+        {!firstFoldReady && !error && <DashboardSkeleton />}
+
+        {/* Real content — hidden during initial load, dimmed slightly
+            during refreshes so the user knows the numbers are about
+            to update. */}
         <div
-          className={`transition-opacity duration-200 space-y-6 ${loading ? "opacity-40 pointer-events-none" : "opacity-100"}`}
+          className={`transition-opacity duration-200 space-y-6 ${
+            !firstFoldReady ? "hidden" : isRefreshing ? "opacity-60 pointer-events-none" : "opacity-100"
+          }`}
         >
           {data && (
             <>
@@ -167,7 +202,7 @@ export default function Dashboard() {
 
               {/* Headline timeseries — independent of period filter,
                   shows daily milestone counts since first signup. */}
-              <AllTimeChart />
+              <AllTimeChart onReady={handleRunRateReady} />
 
               <SectionHeading
                 icon={Icons.Funnel}
@@ -218,27 +253,10 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Skeleton loading */}
-        {!data && loading && (
-          <div className="space-y-5 animate-pulse">
-            <div className="grid grid-cols-4 gap-4">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-32 bg-[#11182B] rounded-2xl" />
-              ))}
-            </div>
-            <div className="grid grid-cols-4 gap-4">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-24 bg-[#11182B] rounded-2xl" />
-              ))}
-            </div>
-            <div className="grid grid-cols-2 gap-5">
-              <div className="h-96 bg-[#11182B] rounded-2xl" />
-              <div className="h-96 bg-[#11182B] rounded-2xl" />
-            </div>
-          </div>
-        )}
-
-        {!data && !loading && !error && (
+        {/* Empty state — only shown if the initial load completed but
+            returned no data (genuine empty result, not still loading).
+            Loading is now handled by <DashboardSkeleton /> above. */}
+        {firstFoldReady && !data && !error && (
           <div className="text-center py-20 text-[#8B92A3]">
             <p>No data available. Check your HubSpot API token.</p>
           </div>

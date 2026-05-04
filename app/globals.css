@@ -132,3 +132,60 @@
     @apply font-sans;
   }
 }
+
+/* ── Loading shimmer ──
+   Gradient sweep from left to right across skeleton blocks. Subtler
+   than animate-pulse alone — feels like data is actively loading
+   rather than a flat gray block fading in/out. */
+@keyframes lp-shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%);  }
+}
+.lp-shimmer {
+  position: relative;
+  overflow: hidden;
+  background-color: #11182B;
+}
+.lp-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(30, 111, 255, 0.06) 40%,
+    rgba(30, 111, 255, 0.12) 50%,
+    rgba(30, 111, 255, 0.06) 60%,
+    transparent 100%
+  );
+  animation: lp-shimmer 1.6s ease-in-out infinite;
+}
+
+/* Top progress bar — indeterminate animation that runs whenever any
+   metric is being refreshed in the background. Subtle electric-blue
+   line, very thin, doesn't compete with the page content. */
+@keyframes lp-progress {
+  0%   { transform: translateX(-100%) scaleX(0.4); }
+  50%  { transform: translateX(0%)    scaleX(0.6); }
+  100% { transform: translateX(100%)  scaleX(0.4); }
+}
+.lp-progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 100;
+  background-color: rgba(30, 111, 255, 0.1);
+  overflow: hidden;
+  pointer-events: none;
+}
+.lp-progress-bar::after {
+  content: "";
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, transparent, #1E6FFF, #60A5FA, #1E6FFF, transparent);
+  animation: lp-progress 1.4s linear infinite;
+  transform-origin: 0 0;
+}
