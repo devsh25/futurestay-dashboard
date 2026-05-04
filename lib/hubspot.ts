@@ -52,6 +52,13 @@ let ownersCache: { data: Record<string, string>; timestamp: number } | null =
   null;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+// In-flight promises so concurrent callers share one fetch instead of
+// each starting their own (cache stampede). Critical when the dashboard
+// loads 4+ endpoints in parallel and they all want the same data on a
+// cold cache.
+let contactsInFlight: Promise<HubSpotContact[]> | null = null;
+let ownersInFlight: Promise<Record<string, string>> | null = null;
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -59,7 +66,7 @@ function sleep(ms: number) {
 async function hubspotFetch(
   url: string,
   options?: RequestInit,
-  retries = 3
+  retries = 5
 ): Promise<Record<string, unknown>> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     const res = await fetch(url, {
@@ -72,9 +79,15 @@ async function hubspotFetch(
     });
 
     if (res.status === 429) {
-      // Rate limited — wait and retry
-      const waitMs = Math.min(1000 * Math.pow(2, attempt), 10000);
-      console.log(`Rate limited, waiting ${waitMs}ms (attempt ${attempt + 1})`);
+      // Rate limited. Honour Retry-After header if HubSpot provided one,
+      // else exponential backoff capped at 30s. Bigger ceiling than the
+      // old 10s because cold-start request stampedes can need more time
+      // for HubSpot's bucket to refill.
+      const retryAfter = parseFloat(res.headers.get("retry-after") || "0");
+      const headerWait = retryAfter > 0 ? retryAfter * 1000 : 0;
+      const backoff = Math.min(1500 * Math.pow(2, attempt), 30000);
+      const waitMs = Math.max(headerWait, backoff);
+      console.log(`HubSpot 429: waiting ${waitMs}ms (attempt ${attempt + 1}/${retries + 1})`);
       await sleep(waitMs);
       continue;
     }
@@ -87,7 +100,7 @@ async function hubspotFetch(
     return res.json();
   }
 
-  throw new Error("HubSpot API: max retries exceeded (rate limit)");
+  throw new Error("HubSpot API rate limit — please refresh in ~30 seconds");
 }
 
 export async function fetchAllContacts(): Promise<HubSpotContact[]> {
@@ -95,7 +108,19 @@ export async function fetchAllContacts(): Promise<HubSpotContact[]> {
   if (contactsCache && Date.now() - contactsCache.timestamp < CACHE_TTL) {
     return contactsCache.data;
   }
+  // If another caller is already fetching, wait for that fetch instead
+  // of starting our own. Single-flight prevents cache stampede when
+  // multiple endpoints load simultaneously on a cold cache.
+  if (contactsInFlight) {
+    return contactsInFlight;
+  }
+  contactsInFlight = doFetchAllContacts().finally(() => {
+    contactsInFlight = null;
+  });
+  return contactsInFlight;
+}
 
+async function doFetchAllContacts(): Promise<HubSpotContact[]> {
   const allContacts: HubSpotContact[] = [];
   let after: string | undefined;
   let pageCount = 0;
@@ -199,7 +224,14 @@ export async function fetchOwnerNames(): Promise<Record<string, string>> {
   if (ownersCache && Date.now() - ownersCache.timestamp < CACHE_TTL) {
     return ownersCache.data;
   }
+  if (ownersInFlight) return ownersInFlight;
+  ownersInFlight = doFetchOwnerNames().finally(() => {
+    ownersInFlight = null;
+  });
+  return ownersInFlight;
+}
 
+async function doFetchOwnerNames(): Promise<Record<string, string>> {
   const data = await hubspotFetch(`${BASE_URL}/crm/v3/owners?limit=100`);
   const map: Record<string, string> = {};
   const ownerResults = (data.results || []) as Array<{

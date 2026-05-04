@@ -164,21 +164,38 @@ function classifyAircall(c: HubSpotContact, meetingStart: Date | null): Outcome 
 
 // ---- HubSpot Notes fetcher (for call-funnel contacts) ----
 
-async function hsFetch<T = unknown>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${HS_BASE}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${HUBSPOT_TOKEN}`,
-      "Content-Type": "application/json",
-      ...(init?.headers as Record<string, string> | undefined),
-    },
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`HubSpot ${res.status}: ${text.slice(0, 200)}`);
+async function hsFetch<T = unknown>(path: string, init?: RequestInit, retries = 5): Promise<T> {
+  // Same backoff strategy as lib/hubspot.ts. The notes/meetings batch
+  // endpoints used by Campaign Analysis hit HubSpot once per chunk of
+  // 100, and a single Campaign Analysis call can fire 5–10 such
+  // batches. Without retry on 429 the whole card errors out the moment
+  // any chunk gets unlucky.
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const res = await fetch(`${HS_BASE}${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${HUBSPOT_TOKEN}`,
+        "Content-Type": "application/json",
+        ...(init?.headers as Record<string, string> | undefined),
+      },
+      cache: "no-store",
+    });
+    if (res.status === 429) {
+      const retryAfter = parseFloat(res.headers.get("retry-after") || "0");
+      const headerWait = retryAfter > 0 ? retryAfter * 1000 : 0;
+      const backoff = Math.min(1500 * Math.pow(2, attempt), 30000);
+      const waitMs = Math.max(headerWait, backoff);
+      console.log(`[campaigns] HubSpot 429: waiting ${waitMs}ms (attempt ${attempt + 1}/${retries + 1})`);
+      await new Promise((r) => setTimeout(r, waitMs));
+      continue;
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`HubSpot ${res.status}: ${text.slice(0, 200)}`);
+    }
+    return res.json() as Promise<T>;
   }
-  return res.json() as Promise<T>;
+  throw new Error("HubSpot API rate limit — please refresh in ~30 seconds");
 }
 
 function chunked<T>(arr: T[], size: number): T[][] {
