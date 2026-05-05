@@ -35,7 +35,7 @@ const SIGNUP_LIFECYCLES = new Set([
 const PAID_PLANS = new Set(["amplify", "flex"]);
 
 // 6 Meta campaigns + their type / optimization signal / launch date
-const CAMPAIGN_DEFS: {
+export const CAMPAIGN_DEFS: {
   key: string;
   type: "call" | "self";
   optSignal: string;
@@ -62,7 +62,7 @@ function bucketMetaCampaign(name: string): string | null {
   return null;
 }
 
-function bucketContactToCampaign(c: HubSpotContact): string | null {
+export function bucketContactToCampaign(c: HubSpotContact): string | null {
   // Primary: UTM campaign field (or HubSpot's parsed source_data_2)
   const raw = `${c.first_touch_utm_campaign || ""} ${c.hs_analytics_source_data_2 || ""}`.toLowerCase();
   const hasSubscribe = raw.includes("subscribe");

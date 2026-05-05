@@ -211,7 +211,14 @@ export default function Dashboard() {
                 description="How qualified signups progress through stages, and where they come from"
                 iconColor="#1E6FFF"
               />
-              <FunnelCard funnel={data.funnel} />
+              <FunnelCard
+                funnel={data.funnel}
+                period={period}
+                customStart={customStart}
+                customEnd={customEnd}
+                countries={countries}
+                channels={channels}
+              />
 
               <CampaignAnalysisCard
                 period={period}

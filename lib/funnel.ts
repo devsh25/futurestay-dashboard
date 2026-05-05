@@ -10,6 +10,7 @@ import {
   DashboardData,
   PeriodFilter,
 } from "./types";
+import { bucketContactToCampaign } from "./campaigns";
 
 // ---- Date helpers ----
 
@@ -844,6 +845,45 @@ function computeDQWeekly(contacts: HubSpotContact[]): DQWeekly[] {
   return Object.values(weekMap)
     .sort((a, b) => a.sortKey.localeCompare(b.sortKey))
     .map((v) => v.data);
+}
+
+// ---- Per-campaign funnel scoping ----
+//
+// Returns the same FunnelStage[] shape as the main dashboard funnel,
+// but scoped to contacts attributed to a single Meta campaign. Used by
+// the FunnelCard's campaign-filter dropdown — lets the user see how
+// each campaign's signups progress through the funnel independently.
+//
+// Bucketing reuses bucketContactToCampaign() from lib/campaigns.ts so
+// the attribution logic (UTM ∪ source_data_2 ∪ URL fallback, with
+// pre-launch exclusion) matches Campaign Analysis exactly.
+
+export function computeFunnelByCampaign(
+  contacts: HubSpotContact[],
+  period: PeriodFilter,
+  campaign: string | null,  // null = all campaigns (no filter)
+  countries: string[],
+  channels: string[],
+  customStart?: string,
+  customEnd?: string
+): FunnelStage[] {
+  const clean = excludePartnerSources(contacts);
+  const { start, end } = resolvedDateRange(period, customStart, customEnd);
+
+  // Same upstream filters as the main dashboard pipeline so the totals
+  // line up for "All campaigns" mode.
+  let signupFiltered = filterBySignupDate(clean, start, end);
+  signupFiltered = signupFiltered.filter(isSignup);
+  signupFiltered = filterByCountries(signupFiltered, countries);
+  signupFiltered = filterByChannels(signupFiltered, channels);
+
+  // Campaign filter — only applied if a campaign was specified.
+  if (campaign) {
+    signupFiltered = signupFiltered.filter((c) => bucketContactToCampaign(c) === campaign);
+  }
+
+  const qualifiedSignups = signupFiltered.filter((c) => !hasDQ(c));
+  return computeFunnel(qualifiedSignups, signupFiltered);
 }
 
 // ---- Main entry point ----

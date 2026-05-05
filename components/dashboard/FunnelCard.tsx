@@ -1,8 +1,20 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { FunnelStage } from "@/lib/types";
+import { FunnelStage, PeriodFilter } from "@/lib/types";
+
+// Same campaigns as Campaign Analysis. Hard-coded here to avoid the
+// FunnelCard hitting the Campaigns API just for the dropdown options.
+const CAMPAIGN_OPTIONS = [
+  "Airbnb Optimization Call",
+  "Direct Website Call",
+  "DW Booking — Static & Video",
+  "DW Booking — Subscribe Event",
+  "Airbnb Listing Opt — Subscribe Event",
+  "Airbnb Listing Opt — Static & Video",
+] as const;
 
 type Node = {
   key: string;
@@ -85,7 +97,68 @@ const SHARE_LABEL_KEYS = new Set([
   "Churned",
 ]);
 
-export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
+interface FunnelCardProps {
+  funnel: FunnelStage[];
+  // Period + custom dates passed from the page so the per-campaign
+  // refetch can scope to the same window the rest of the dashboard
+  // is showing.
+  period: PeriodFilter;
+  customStart: string;
+  customEnd: string;
+  countries?: string[];
+  channels?: string[];
+}
+
+export default function FunnelCard({
+  funnel: funnelProp,
+  period,
+  customStart,
+  customEnd,
+  countries = [],
+  channels = [],
+}: FunnelCardProps) {
+  const [campaign, setCampaign] = useState<string | null>(null); // null = All
+  const [scopedFunnel, setScopedFunnel] = useState<FunnelStage[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // When campaign is null, use the prop-passed funnel (already
+  // computed for the global cohort). When a campaign is selected,
+  // fetch a scoped version from /api/funnel.
+  useEffect(() => {
+    if (!campaign) {
+      setScopedFunnel(null);
+      setError(null);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    const params = new URLSearchParams({ period, campaign });
+    if (period === "custom") {
+      params.set("start", customStart);
+      params.set("end", customEnd);
+    }
+    if (countries.length > 0) params.set("country", countries.join(","));
+    if (channels.length > 0) params.set("channels", channels.join(","));
+
+    fetch(`/api/funnel?${params}`)
+      .then(async (r) => {
+        if (!r.ok) {
+          const e = await r.json().catch(() => ({}));
+          throw new Error(e.error || `HTTP ${r.status}`);
+        }
+        return r.json();
+      })
+      .then((d: { funnel: FunnelStage[] }) => { if (!cancelled) setScopedFunnel(d.funnel); })
+      .catch((e) => { if (!cancelled) setError(e.message); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [campaign, period, customStart, customEnd, countries, channels]);
+
+  // Pick the active funnel: scoped if a campaign is set + data has
+  // arrived, otherwise the prop (full cohort).
+  const funnel: FunnelStage[] = scopedFunnel ?? funnelProp;
   const dqRow = funnel.find((f) => f.name === "AirbnbDQ");
   const byName: Record<string, FunnelStage> = {};
   for (const s of funnel) byName[s.name] = s;
@@ -199,21 +272,56 @@ export default function FunnelCard({ funnel }: { funnel: FunnelStage[] }) {
   return (
     <Card className="bg-[#11182B] border border-[#1F2937] rounded-2xl shadow-none">
       <CardHeader className="pb-4 border-b border-[#1F2937]">
-        <CardTitle className="flex items-center justify-between text-[17px] font-semibold text-white tracking-tight">
+        <CardTitle className="flex items-center justify-between gap-3 text-[17px] font-semibold text-white tracking-tight">
           <span>Funnel Analysis</span>
-          {dqRow && (
-            <Badge className="bg-[#1A2235] text-[#8B92A3] border-[#1F2937] text-[11px] font-medium">
-              AirbnbDQ: {dqRow.count.toLocaleString()} ({dqRow.dropoff?.toFixed(1)}%)
-            </Badge>
-          )}
+          <div className="flex items-center gap-2">
+            {/* Campaign filter — null = all campaigns (default).
+                Selecting one re-scopes the entire funnel to contacts
+                attributed to that Meta campaign via the same logic
+                Campaign Analysis uses (UTM ∪ source_data_2 ∪ URL
+                fallback, with pre-launch exclusion). */}
+            <select
+              value={campaign ?? ""}
+              onChange={(e) => setCampaign(e.target.value || null)}
+              className="h-8 px-3 rounded-full text-[12px] font-medium bg-[#0E1422] border border-[#1F2937] text-[#C9D1DC] hover:border-[#1E6FFF]/50 hover:text-white transition-colors cursor-pointer outline-none focus:border-[#1E6FFF]/60"
+              disabled={loading}
+            >
+              <option value="">All campaigns</option>
+              {CAMPAIGN_OPTIONS.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+            {dqRow && (
+              <Badge className="bg-[#1A2235] text-[#8B92A3] border-[#1F2937] text-[11px] font-medium">
+                AirbnbDQ: {dqRow.count.toLocaleString()} ({dqRow.dropoff?.toFixed(1)}%)
+              </Badge>
+            )}
+          </div>
         </CardTitle>
       </CardHeader>
 
       <CardContent className="pt-6">
         <p className="text-[14px] text-[#A8A8B2] mb-4 leading-relaxed">
           <span className="text-[#1E6FFF] font-medium">Cohort-based.</span>{" "}
-          Of qualified signups (contacts whose <code className="text-[#C9D1DC] text-[13px]">account_lifecycle</code> has reached <span className="text-white">signup</span> or beyond and whose <code className="text-[#C9D1DC] text-[13px]">createdate</code> falls in the window), what % reached each stage. Authorizing Airbnb auto-imports listings (the path most users take). 3 outcomes drop from Trial Started (In Trial = still active, Customer = real paid, Failed = cancelled before converting). Customer can further churn.
+          Of qualified signups (contacts whose <code className="text-[#C9D1DC] text-[13px]">account_lifecycle</code> has reached <span className="text-white">signup</span> or beyond and whose <code className="text-[#C9D1DC] text-[13px]">createdate</code> falls in the window), what % reached each stage.{" "}
+          {campaign ? (
+            <span className="text-[#60A5FA] font-medium">
+              Filtered to <span className="text-white">{campaign}</span>.
+            </span>
+          ) : (
+            <>Authorizing Airbnb auto-imports listings (the path most users take). 3 outcomes drop from Trial Started (In Trial = still active, Customer = real paid, Failed = cancelled before converting). Customer can further churn.</>
+          )}
         </p>
+
+        {error && (
+          <div className="bg-[#11182B] border border-[#1F2937] rounded-xl p-3 text-[#C9D1DC] text-[12px] mb-4">
+            <p className="font-semibold text-white">Failed to scope funnel to {campaign}</p>
+            <p className="text-[11px] mt-1 text-[#8B92A3]">{error}</p>
+          </div>
+        )}
+        {loading && (
+          <p className="text-[12px] text-[#8B92A3] mb-3">Re-scoping funnel to {campaign}…</p>
+        )}
 
         <svg
             viewBox={`0 0 ${VB_W} ${VB_H}`}
