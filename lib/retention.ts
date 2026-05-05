@@ -8,19 +8,28 @@
  * account. Property history is the only reliable source for "when
  * did this person actually cancel" given current data.
  *
- * Cohort math (rolling-window survival):
- *   For each milestone week W:
- *     cohortAtW = customers whose tenure (today − entry) ≥ W*7 days
- *                 — i.e., everyone who's had a chance to be observed
- *                   for at least W weeks
- *     retainedAtW = of those, how many were still customers at day
- *                   W*7 (currently active OR churned ≥ W*7 days
- *                   after entering)
- *     retention(W) = retainedAtW / cohortAtW
+ * Cohort math (single-cohort survival — fixed denominator):
+ *   1. Pick a per-segment observation horizon = the longest milestone
+ *      where (customers with ≥ that tenure) ≥ MIN_COHORT_SIZE.
+ *   2. Anchor the cohort at that horizon: cohort = customers whose
+ *      tenure ≥ horizon.
+ *   3. For every milestone W ≤ horizon:
+ *        retainedAtW = customers in the anchor cohort who had NOT
+ *                      cancelled before day W
+ *        retention(W) = retainedAtW / cohort.length
  *
- *   This lets the curve incorporate every customer ever — not just
- *   those who entered ≥ 1 year ago — and is the standard "retention
- *   curve" definition.
+ *   Why fixed-cohort instead of rolling-window:
+ *   The rolling-window approach (where the denominator was different
+ *   at each milestone — "everyone with ≥W tenure") produced a
+ *   non-monotonic curve because newer cohorts churn at different
+ *   rates than older cohorts. With a fixed cohort, every milestone
+ *   measures the SAME set of people, so the curve is guaranteed
+ *   monotonically decreasing — what a retention curve is supposed
+ *   to show.
+ *
+ *   Trade-off: the cohort is smaller (only customers with ≥horizon
+ *   tenure count), but the result is statistically meaningful instead
+ *   of statistically misleading.
  */
 
 import type { HubSpotContact } from "./types";
@@ -201,31 +210,37 @@ export async function computeRetention(
       })
       .filter((r): r is { entryMs: number; cancelMs: number | null } => r !== null);
 
-    const points: RetentionPoint[] = [];
+    // Step 1: find the longest milestone for which we have a usable
+    // cohort (≥ MIN_COHORT_SIZE customers with that tenure).
+    let horizonDay = 0;
+    let anchorCohort: { entryMs: number; cancelMs: number | null }[] = [];
     for (const m of MILESTONES) {
       const requiredTenureMs = m.day * 86_400_000;
-
-      // Cohort at milestone = customers who've had ≥ m.day days of
-      // observation (so we can fairly say whether they're still around)
-      const cohort = records.filter((r) => today - r.entryMs >= requiredTenureMs);
-
-      if (cohort.length < MIN_COHORT_SIZE) {
-        // Don't plot — sample too small to be meaningful
-        continue;
+      const c = records.filter((r) => today - r.entryMs >= requiredTenureMs);
+      if (c.length >= MIN_COHORT_SIZE) {
+        horizonDay = m.day;
+        anchorCohort = c;
+      } else {
+        break; // milestones only get further out — once we drop below threshold we're done
       }
+    }
 
-      // Retained = NOT cancelled before reaching this milestone
-      const retained = cohort.filter((r) => {
-        if (r.cancelMs === null) return true; // still active
+    // Step 2: compute retention at each milestone ≤ horizon using the
+    // SAME anchor cohort. Curve is monotonically decreasing.
+    const points: RetentionPoint[] = [];
+    for (const m of MILESTONES) {
+      if (m.day > horizonDay) break;
+      const requiredTenureMs = m.day * 86_400_000;
+      const retained = anchorCohort.filter((r) => {
+        if (r.cancelMs === null) return true; // still active = still retained
         const tenureAtCancelMs = r.cancelMs - r.entryMs;
         return tenureAtCancelMs >= requiredTenureMs;
       }).length;
-
       points.push({
         day: m.day,
         label: m.label,
-        retentionPct: (retained / cohort.length) * 100,
-        cohortSize: cohort.length,
+        retentionPct: anchorCohort.length > 0 ? (retained / anchorCohort.length) * 100 : 0,
+        cohortSize: anchorCohort.length,
       });
     }
 

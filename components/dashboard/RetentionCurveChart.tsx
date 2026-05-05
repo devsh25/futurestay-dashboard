@@ -81,12 +81,17 @@ export default function RetentionCurveChart() {
           </Badge>
         </CardTitle>
         <p className="text-[13px] text-[#8B92A3] mt-2 leading-relaxed">
-          <span className="text-[#1E6FFF] font-medium">Cohort survival.</span>{" "}
-          Of all paid customers (Amplify or Flex) who became customer ≥ N days ago,
-          what % are still customer at day N? Cancellation timestamps come from
-          HubSpot&apos;s property history (<code className="text-[#C9D1DC]">account_lifecycle → former.customer</code>),
+          <span className="text-[#1E6FFF] font-medium">Single-cohort survival.</span>{" "}
+          For each plan family, the cohort is the same group of customers across
+          every milestone — specifically, those with enough tenure to be observed
+          at the longest plotted milestone. Retention at each point is the % of that
+          fixed cohort still active. This guarantees a monotonically decreasing
+          curve (you can never gain retained customers as time passes). Cancellation
+          timestamps come from HubSpot&apos;s property history{" "}
+          (<code className="text-[#C9D1DC]">account_lifecycle → former.customer</code>),
           since <code className="text-[#C9D1DC]">hs_v2_date_exited_customer</code> is empty in this account.
-          Milestones with cohort size &lt; 10 are not plotted (too noisy).{" "}
+          The curve extends only as far as the data supports a cohort of ≥ 10
+          customers — it lengthens automatically as more time passes.{" "}
           <span className="text-[#8B92A3] italic">
             Note: Annual vs Monthly billing-cycle data is too sparse to segment by;
             this view splits by plan family instead. Once cycle data is reliably
