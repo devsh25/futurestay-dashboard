@@ -7,6 +7,7 @@ import KPICards from "@/components/dashboard/KPICards";
 import AllTimeChart from "@/components/dashboard/AllTimeChart";
 import DashboardSkeleton from "@/components/dashboard/DashboardSkeleton";
 import MeetingsRunRateChart from "@/components/dashboard/MeetingsRunRateChart";
+import RetentionCurveChart from "@/components/dashboard/RetentionCurveChart";
 import FunnelCard from "@/components/dashboard/FunnelCard";
 import GeoCard from "@/components/dashboard/GeoCard";
 import RepCard from "@/components/dashboard/RepCard";
@@ -233,10 +234,11 @@ export default function Dashboard() {
 
               <SectionHeading
                 icon={Icons.Shield}
-                title="Quality & Team"
-                description="DQ reasons by week and sales rep performance"
+                title="Retention & Quality"
+                description="How long paying customers stick around, plus DQ reasons and sales rep performance"
                 iconColor="#93C5FD"
               />
+              <RetentionCurveChart />
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 <DQChartCard data={data.dqWeekly} />
                 <RepCard reps={data.reps} />
