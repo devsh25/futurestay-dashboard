@@ -35,15 +35,32 @@ function KPICell({
   delta,
   sparklineData,
   sparklineColor,
+  basis,
 }: {
   label: string;
   value: number;
   delta: TrendDelta;
   sparklineData: number[];
   sparklineColor: string;
+  // "cohort" = filtered by createdate in window
+  // "period" = filtered by lifecycle-event date in window (trial/customer entry)
+  basis: "cohort" | "period";
 }) {
+  // Tiny corner indicator so the basis is glanceable without reading the
+  // methodology paragraph. Uses the same blue tone for both so it
+  // doesn't fight the number — the letter alone signals which is which.
+  const basisLabel = basis === "cohort" ? "C" : "P";
+  const basisTitle = basis === "cohort"
+    ? "Cohort-based: createdate in window"
+    : "Period-based: lifecycle-event date in window";
   return (
-    <div className="px-5 py-5 first:pl-6 last:pr-6">
+    <div className="relative px-5 py-5 first:pl-6 last:pr-6">
+      <span
+        className="absolute top-2 right-3 text-[9px] font-semibold text-[#5B6478] uppercase tracking-wider tabular-nums select-none"
+        title={basisTitle}
+      >
+        {basisLabel}
+      </span>
       <div className="flex items-baseline justify-between mb-3 gap-2">
         <p className="text-[44px] xl:text-[52px] leading-none font-bold text-white tracking-tight tabular-nums">
           {value.toLocaleString()}
@@ -103,13 +120,23 @@ export default function KPICards({
   return (
     <div className="space-y-5">
       <p className="text-[13px] text-[#8B92A3] leading-relaxed">
-        <span className="text-[#1E6FFF] font-medium">Cohort-based.</span>{" "}
-        Top row: counts of contacts whose <code className="text-[#C9D1DC]">createdate</code>{" "}
-        falls in the window AND <code className="text-[#C9D1DC]">account_lifecycle</code> has
-        reached <span className="text-white">signup</span> or beyond (excludes raw
-        leads, partner imports, and ghost contacts). Sparkline = daily trend;
-        delta vs same-length prior period. Bottom row: cohort conversion rates
-        from Qualified Signup → each stage. Excludes WIX/HOPPER partner referrals.
+        <span className="text-[#1E6FFF] font-medium">Mixed methodology — read carefully.</span>{" "}
+        <span className="text-white">Total Signups</span> and{" "}
+        <span className="text-white">Qualified Signups</span> are{" "}
+        <span className="text-[#60A5FA]">cohort-based</span> — contacts whose{" "}
+        <code className="text-[#C9D1DC]">createdate</code> falls in the window
+        and whose lifecycle has reached signup. <span className="text-white">Total Trials</span>,{" "}
+        <span className="text-white">In Trial</span>, and{" "}
+        <span className="text-white">Total Customers</span> are{" "}
+        <span className="text-[#60A5FA]">period-based</span> — contacts whose
+        trial- or customer-entry date falls in the window, regardless of when
+        they originally signed up. So a customer who signed up 60 days ago and
+        converted today counts in Customers but not Signups for a 30-day view.
+        Sparkline = daily trend; delta vs same-length prior period. The{" "}
+        <span className="text-white">bottom row</span> ratios use the cohort path
+        consistently — denominators are Qualified Signups in the window, so the
+        % matches a clean signup-to-stage conversion. Excludes WIX/HOPPER partner
+        referrals.
       </p>
 
       {/* Hero KPI row — divided container pattern. Five numbers share
@@ -128,6 +155,7 @@ export default function KPICards({
             delta={kpis.deltas.rawSignups}
             sparklineData={kpis.sparkline.rawSignups}
             sparklineColor="#1E6FFF"
+            basis="cohort"
           />
           <KPICell
             label="Qualified Signups"
@@ -135,6 +163,7 @@ export default function KPICards({
             delta={kpis.deltas.signups}
             sparklineData={kpis.sparkline.signups}
             sparklineColor="#1E6FFF"
+            basis="cohort"
           />
           <KPICell
             label="Total Trials"
@@ -142,6 +171,7 @@ export default function KPICards({
             delta={kpis.deltas.trials}
             sparklineData={kpis.sparkline.trials}
             sparklineColor="#1E6FFF"
+            basis="period"
           />
           <KPICell
             label="In Trial"
@@ -149,6 +179,7 @@ export default function KPICards({
             delta={kpis.deltas.inTrial}
             sparklineData={kpis.sparkline.inTrial}
             sparklineColor="#1E6FFF"
+            basis="period"
           />
           <KPICell
             label="Total Customers"
@@ -156,6 +187,7 @@ export default function KPICards({
             delta={kpis.deltas.customers}
             sparklineData={kpis.sparkline.customers}
             sparklineColor="#1E6FFF"
+            basis="period"
           />
         </div>
       </div>
