@@ -944,7 +944,9 @@ export function processDashboardData(
 //                     timestamp; same-day proxy is correct for ≥95% of
 //                     users since auth happens immediately after signup)
 //   - readyToLaunch:  createdate (no event-date field exists)
-//   - trials:         hs_v2_date_entered_opportunity (real trial start)
+//   - trials:         hs_v2_date_entered_opportunity, with trial__start_date
+//                     as fallback (canonical priority, matches the KPI
+//                     tile's definition — no lifecycle gate)
 //   - customers:      hs_v2_date_entered_customer (real customer start)
 //
 // The trials/customers buckets therefore reflect WHEN those people
@@ -981,7 +983,13 @@ export function computeTimeSeries(contacts: HubSpotContact[]): TimeSeries {
 
   for (const c of clean) {
     if (isSignup(c) && !hasDQ(c)) consider(c.createdate);
-    if (everTrialed(c)) consider(c.trial__start_date || c.hs_v2_date_entered_opportunity);
+    // Trials: match KPI semantics exactly — canonical date first
+    // (hs_v2_date_entered_opportunity), trial__start_date as fallback.
+    // No lifecycle gate: KPI's totalTrials counts any contact whose
+    // trial-entry date is in the window, regardless of current
+    // lifecycle. The Run Rate has to match or the chart and the KPI
+    // tile disagree on the same week.
+    consider(c.hs_v2_date_entered_opportunity || c.trial__start_date);
     if (isCustomer(c)) consider(c.hs_v2_date_entered_customer);
   }
 
@@ -1057,10 +1065,15 @@ export function computeTimeSeries(contacts: HubSpotContact[]): TimeSeries {
       const i = bucketIndex(c.createdate);
       if (i >= 0) readyToLaunch[i]++;
     }
-    // Trials — by actual trial start date so the line reflects when
-    // people became trialists, not when they signed up.
-    if (everTrialed(c)) {
-      const i = bucketIndex(c.trial__start_date || c.hs_v2_date_entered_opportunity);
+    // Trials — by canonical trial-entry date (hs_v2_date_entered_opportunity,
+    // trial__start_date as fallback). Matches computeKPIs() exactly so
+    // the chart's weekly bucket equals the KPI tile for the same window;
+    // previously the priority was reversed AND gated on everTrialed(),
+    // which dropped contacts whose date field is set but whose current
+    // lifecycle isn't in TRIAL_LIFECYCLES — diverged from KPI by 5+/wk.
+    const trialDate = c.hs_v2_date_entered_opportunity || c.trial__start_date;
+    if (trialDate) {
+      const i = bucketIndex(trialDate);
       if (i >= 0) trials[i]++;
     }
     // Customers — by actual customer entry date.
