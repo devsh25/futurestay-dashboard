@@ -11,58 +11,49 @@ import {
   PeriodFilter,
 } from "./types";
 import { bucketContactToCampaign } from "./campaigns";
+import {
+  tzStartOfDay, tzEndOfDay, tzAddDays, tzStartOfWeek,
+  tzStartOfMonth, tzStartOfQuarter, tzDateKey,
+} from "./timezone";
 
 // ---- Date helpers ----
 
 function getDateRange(period: PeriodFilter): { start: Date; end: Date } {
+  // All boundaries computed in Eastern Time. "Last 7 days" means the
+  // last 7 ET calendar days, "This week" means Monday 00:00 ET → now,
+  // etc. — matches what a US user expects.
   const now = new Date();
-  const end = new Date(now);
-  end.setHours(23, 59, 59, 999);
+  const end = tzEndOfDay(now);
 
   switch (period) {
     case "last7d": {
-      const start = new Date(now);
-      start.setDate(start.getDate() - 7);
-      start.setHours(0, 0, 0, 0);
+      const start = tzAddDays(now, -7);
       return { start, end };
     }
     case "last30d": {
-      const start = new Date(now);
-      start.setDate(start.getDate() - 30);
-      start.setHours(0, 0, 0, 0);
+      const start = tzAddDays(now, -30);
       return { start, end };
     }
     case "thisWeek": {
-      // Monday–Sunday week. JS getDay() returns Sun=0..Sat=6; we want Mon=0.
-      const dow = (now.getDay() + 6) % 7; // Mon→0, Sun→6
-      const start = new Date(now);
-      start.setDate(start.getDate() - dow);
-      start.setHours(0, 0, 0, 0);
+      const start = tzStartOfWeek(now);
       return { start, end };
     }
     case "lastWeek": {
-      // Previous Monday → previous Sunday.
-      const dow = (now.getDay() + 6) % 7;
-      const start = new Date(now);
-      start.setDate(start.getDate() - dow - 7);
-      start.setHours(0, 0, 0, 0);
-      const lwEnd = new Date(start);
-      lwEnd.setDate(start.getDate() + 6);
-      lwEnd.setHours(23, 59, 59, 999);
+      // Previous Monday → previous Sunday in ET.
+      const thisMonday = tzStartOfWeek(now);
+      const start = tzAddDays(thisMonday, -7);
+      const lwEnd = tzEndOfDay(tzAddDays(start, 6));
       return { start, end: lwEnd };
     }
     case "thisMonth": {
-      const start = new Date(now.getFullYear(), now.getMonth(), 1);
-      return { start, end };
+      return { start: tzStartOfMonth(now), end };
     }
     case "thisQuarter": {
-      const qMonth = Math.floor(now.getMonth() / 3) * 3;
-      const start = new Date(now.getFullYear(), qMonth, 1);
-      return { start, end };
+      return { start: tzStartOfQuarter(now), end };
     }
     case "allTime":
     default:
-      return { start: new Date(2026, 0, 1), end };
+      return { start: tzStartOfDay(new Date("2026-01-01T12:00:00Z")), end };
   }
 }
 
@@ -72,9 +63,12 @@ export function resolvedDateRange(
   customEnd?: string
 ): { start: Date; end: Date } {
   if (period === "custom" && customStart && customEnd) {
-    const end = new Date(customEnd);
-    end.setHours(23, 59, 59, 999);
-    return { start: new Date(customStart), end };
+    // Custom dates are YYYY-MM-DD strings — interpret them in ET so
+    // the picker shows local-meaningful days.
+    return {
+      start: tzStartOfDay(new Date(customStart + "T12:00:00Z")),
+      end: tzEndOfDay(new Date(customEnd + "T12:00:00Z")),
+    };
   }
   return getDateRange(period);
 }
@@ -969,12 +963,12 @@ export function computeTimeSeries(contacts: HubSpotContact[]): TimeSeries {
   const clean = excludePartnerSources(contacts);
 
   // Find earliest event date across any metric — that's where the
-  // x-axis should start.
+  // x-axis should start. All bucketing is in Eastern Time so a contact
+  // who signed up at 11pm ET appears on the same calendar day as one
+  // who signed up at 9am ET, not the next UTC day.
   let minTs = Infinity;
   let maxTs = -Infinity;
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
-  const todayTs = today.getTime();
+  const todayTs = tzStartOfDay(new Date()).getTime();
 
   function consider(d: string | null) {
     if (!d) return;
@@ -995,14 +989,8 @@ export function computeTimeSeries(contacts: HubSpotContact[]): TimeSeries {
     return { days: [], signups: [], airbnbConnects: [], readyToLaunch: [], trials: [], customers: [] };
   }
 
-  // Snap min to start of day, cap max at today.
-  const startMs = new Date(new Date(minTs).toISOString().slice(0, 10) + "T00:00:00Z").getTime();
-  // Always extend the chart through today, even if there's no data on
-  // the most recent days. Previously this used Math.min(todayTs, maxTs)
-  // which truncated the x-axis at the latest event date — so weekends
-  // and quiet days at the end of the window were invisible, and the
-  // chart appeared to be "3 days stale" when in fact those days just
-  // had no activity yet.
+  // Snap min to ET start-of-day; chart always extends to today (ET).
+  const startMs = tzStartOfDay(new Date(minTs)).getTime();
   const endMs = todayTs;
   const dayMs = 86_400_000;
   const dayCount = Math.floor((endMs - startMs) / dayMs) + 1;
@@ -1015,14 +1003,15 @@ export function computeTimeSeries(contacts: HubSpotContact[]): TimeSeries {
   const customers: number[] = new Array(dayCount).fill(0);
 
   for (let i = 0; i < dayCount; i++) {
-    days.push(new Date(startMs + i * dayMs).toISOString().slice(0, 10));
+    days.push(tzDateKey(new Date(startMs + i * dayMs)));
   }
 
   function bucketIndex(d: string | null): number {
     if (!d) return -1;
     const t = new Date(d).getTime();
     if (isNaN(t)) return -1;
-    const dayStart = new Date(new Date(t).toISOString().slice(0, 10) + "T00:00:00Z").getTime();
+    // Bucket the event into its ET calendar day, not UTC.
+    const dayStart = tzStartOfDay(new Date(t)).getTime();
     const idx = Math.floor((dayStart - startMs) / dayMs);
     return idx >= 0 && idx < dayCount ? idx : -1;
   }
