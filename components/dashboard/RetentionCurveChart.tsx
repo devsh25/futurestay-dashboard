@@ -82,16 +82,19 @@ export default function RetentionCurveChart() {
         </CardTitle>
         <p className="text-[13px] text-[#8B92A3] mt-2 leading-relaxed">
           <span className="text-[#1E6FFF] font-medium">Single-cohort survival.</span>{" "}
-          For each plan family, the cohort is the same group of customers across
-          every milestone — specifically, those with enough tenure to be observed
-          at the longest plotted milestone. Retention at each point is the % of that
-          fixed cohort still active. This guarantees a monotonically decreasing
-          curve (you can never gain retained customers as time passes). Cancellation
-          timestamps come from HubSpot&apos;s property history{" "}
-          (<code className="text-[#C9D1DC]">account_lifecycle → former.customer</code>),
-          since <code className="text-[#C9D1DC]">hs_v2_date_exited_customer</code> is empty in this account.
-          The curve extends only as far as the data supports a cohort of ≥ 10
-          customers — it lengthens automatically as more time passes.{" "}
+          Customers who entered customer status on or after{" "}
+          <span className="text-white">March 1, 2026</span>. For each plan family, the
+          cohort is the same group across every milestone — those with enough tenure
+          to be observed at the longest plotted milestone. Retention at each point
+          is the % of that fixed cohort still active. This guarantees a monotonically
+          decreasing curve (you can never gain retained customers as time passes).
+          Both entry and cancellation timestamps come from HubSpot&apos;s property
+          history (<code className="text-[#C9D1DC]">account_lifecycle</code> transitions),
+          since <code className="text-[#C9D1DC]">hs_v2_date_exited_customer</code> is
+          empty in this account and{" "}
+          <code className="text-[#C9D1DC]">hs_v2_date_entered_customer</code> is also
+          empty for many older contacts. Curve extends as far as the data supports a
+          cohort of ≥ 10 customers.{" "}
           <span className="text-[#8B92A3] italic">
             Note: Annual vs Monthly billing-cycle data is too sparse to segment by;
             this view splits by plan family instead. Once cycle data is reliably

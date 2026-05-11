@@ -1,20 +1,21 @@
 import { NextResponse } from "next/server";
-import { fetchAllContacts } from "@/lib/hubspot";
+import { fetchAllCustomers } from "@/lib/hubspot";
 import { computeRetention } from "@/lib/retention";
 
 /**
  * Retention curve data — % of paying-customer cohort retained at
  * each milestone post-entry, segmented by plan family (Amplify / Flex).
  *
- * Uses the cached fetchAllContacts() so it doesn't add to the cold-
- * start request burden. The expensive bit is the property-history
- * batch fetch inside computeRetention(), which is gated by an
- * in-route response cache via Next.js Route Handler caching.
+ * Uses fetchAllCustomers() (not fetchAllContacts) because we need
+ * EVERY paying customer regardless of createdate. fetchAllContacts is
+ * scoped to contacts created since 2026-01-01, which would silently
+ * drop the ~300 customers who became customer in 2024/2025 — exactly
+ * the long-tail cohort that's most valuable for retention analysis.
  */
 export async function GET() {
   try {
-    const contacts = await fetchAllContacts();
-    const data = await computeRetention(contacts);
+    const customers = await fetchAllCustomers();
+    const data = await computeRetention(customers);
     return NextResponse.json(data);
   } catch (error) {
     console.error("Retention API error:", error);

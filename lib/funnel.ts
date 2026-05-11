@@ -997,7 +997,13 @@ export function computeTimeSeries(contacts: HubSpotContact[]): TimeSeries {
 
   // Snap min to start of day, cap max at today.
   const startMs = new Date(new Date(minTs).toISOString().slice(0, 10) + "T00:00:00Z").getTime();
-  const endMs = Math.min(todayTs, maxTs);
+  // Always extend the chart through today, even if there's no data on
+  // the most recent days. Previously this used Math.min(todayTs, maxTs)
+  // which truncated the x-axis at the latest event date — so weekends
+  // and quiet days at the end of the window were invisible, and the
+  // chart appeared to be "3 days stale" when in fact those days just
+  // had no activity yet.
+  const endMs = todayTs;
   const dayMs = 86_400_000;
   const dayCount = Math.floor((endMs - startMs) / dayMs) + 1;
 

@@ -91,22 +91,34 @@ function wasPaidCustomer(c: HubSpotContact): boolean {
   return false;
 }
 
-/** Batch-fetch property history for a list of contact IDs. Returns a
- *  Map keyed by contact ID with the timestamp (ms) at which their
- *  account_lifecycle transitioned to "former.customer", or null if no
- *  such transition exists.
+/** Per-contact lifecycle dates derived from HubSpot's property history.
+ *  - entryMs: most-recent transition INTO a customer-style lifecycle
+ *    (customer / Customer/Limited Access). Used to recover entry-date
+ *    for the ~270 old contacts whose hs_v2_date_entered_customer is
+ *    not populated.
+ *  - cancelMs: most-recent transition into former.customer. Null if
+ *    the contact has never cancelled (currently active customer).
  *
- *  Uses HubSpot's batch read endpoint with propertiesWithHistory —
- *  one API call per 100 contacts, instead of one call per contact.
- *  Critical for keeping this card cheap to refresh. */
-async function fetchCancelTimestamps(
+ *  Both are taken from the SAME history array, which HubSpot returns
+ *  newest-first by default. */
+interface LifecycleTimes {
+  entryMs: number | null;
+  cancelMs: number | null;
+}
+
+async function fetchLifecycleTimes(
   contactIds: string[]
-): Promise<Map<string, number>> {
-  const result = new Map<string, number>();
+): Promise<Map<string, LifecycleTimes>> {
+  const result = new Map<string, LifecycleTimes>();
   if (contactIds.length === 0) return result;
 
-  for (let i = 0; i < contactIds.length; i += 100) {
-    const chunk = contactIds.slice(i, i + 100);
+  // HubSpot batch-read with propertiesWithHistory has a *50-per-request*
+  // limit (the normal batch-read limit of 100 doesn't apply here).
+  // Sending 100 silently truncates to 50, which produced incomplete
+  // results in the first version of this code. Chunk at 50 strictly.
+  const CHUNK = 50;
+  for (let i = 0; i < contactIds.length; i += CHUNK) {
+    const chunk = contactIds.slice(i, i + CHUNK);
     const body = {
       inputs: chunk.map((id) => ({ id })),
       propertiesWithHistory: ["account_lifecycle"],
@@ -123,11 +135,7 @@ async function fetchCancelTimestamps(
     });
 
     if (!res.ok) {
-      // Don't fail the whole computation — skip this chunk and keep
-      // going. The result for those contacts will just be missing,
-      // which we'll treat as "currently active" (best available
-      // assumption when we can't determine cancel time).
-      console.warn(`Retention batch read failed for chunk: ${res.status}`);
+      console.warn(`Retention batch read failed for chunk starting at ${i}: ${res.status}`);
       continue;
     }
 
@@ -142,16 +150,22 @@ async function fetchCancelTimestamps(
     const d = (await res.json()) as Resp;
     for (const row of d.results ?? []) {
       const history = row.propertiesWithHistory?.account_lifecycle ?? [];
-      // Most-recent transition to former.customer
+      let entryMs: number | null = null;
+      let cancelMs: number | null = null;
+      // Iterate newest → oldest. Take the most-recent transition for
+      // each target lifecycle value.
       for (const h of history) {
-        if (h.value === "former.customer") {
+        if (cancelMs === null && h.value === "former.customer") {
           const t = new Date(h.timestamp).getTime();
-          if (!isNaN(t)) {
-            result.set(row.id, t);
-            break;
-          }
+          if (!isNaN(t)) cancelMs = t;
         }
+        if (entryMs === null && (h.value === "customer" || h.value === "Customer/Limited Access")) {
+          const t = new Date(h.timestamp).getTime();
+          if (!isNaN(t)) entryMs = t;
+        }
+        if (entryMs !== null && cancelMs !== null) break;
       }
+      result.set(row.id, { entryMs, cancelMs });
     }
   }
 
@@ -175,18 +189,28 @@ const MILESTONES: { day: number; label: string }[] = [
  *  too noisy to display (one cancellation moves the line by 10%+). */
 const MIN_COHORT_SIZE = 10;
 
+/** Earliest customer-entry date the retention curve will consider.
+ *  Older customers are pre-2026 long-tail and aren't relevant for
+ *  the user's current decision-making — they distort the curve with
+ *  multi-year survivorship from a different product era. */
+const COHORT_START_MS = new Date("2026-03-01T00:00:00.000Z").getTime();
+
 export async function computeRetention(
   contacts: HubSpotContact[]
 ): Promise<RetentionData> {
-  // Filter to paid customers only (Amplify or Flex)
-  const paidCustomers = contacts.filter(wasPaidCustomer);
+  // Filter to paid customers only (Amplify or Flex). Exclude
+  // WIX/HOPPER partner referrals (same exclusion every other card uses).
+  const paidCustomers = contacts.filter((c) => {
+    const ref = (c.referral_source || "").trim().toUpperCase();
+    if (ref === "WIX" || ref === "HOPPER") return false;
+    return wasPaidCustomer(c);
+  });
 
-  // Identify former.customers we need cancel timestamps for
-  const cancelledIds = paidCustomers
-    .filter((c) => c.account_lifecycle === "former.customer")
-    .map((c) => c.id);
-
-  const cancelTimestamps = await fetchCancelTimestamps(cancelledIds);
+  // Fetch property history for EVERY paying customer — not just the
+  // former.customers — so we can recover entry-date for the ~270
+  // legacy contacts whose hs_v2_date_entered_customer is empty.
+  const allIds = paidCustomers.map((c) => c.id);
+  const lifecycleTimes = await fetchLifecycleTimes(allIds);
 
   // Group customers by plan family + compute retention curves
   const today = Date.now();
@@ -196,16 +220,39 @@ export async function computeRetention(
     const customers = paidCustomers.filter((c) => planFamily(c) === family);
     const totalCohort = customers.length;
 
-    // For each customer: compute (entryMs, cancelMs|null)
+    // For each customer: derive (entryMs, cancelMs).
+    //   entryMs:  prefer hs_v2_date_entered_customer (more accurate
+    //             when it exists), fall back to property history's
+    //             most-recent customer transition for legacy contacts
+    //             where the field is empty.
+    //   cancelMs: from property history (the hs_v2 exit-date field
+    //             is empty in this account, so history is the only
+    //             reliable source). Only set if currently
+    //             former.customer — re-subscribers (currently customer
+    //             but were former.customer in the past) are treated
+    //             as active, which is correct: they ARE active again.
     const records: { entryMs: number; cancelMs: number | null }[] = customers
       .map((c) => {
-        if (!c.hs_v2_date_entered_customer) return null;
-        const entryMs = new Date(c.hs_v2_date_entered_customer).getTime();
-        if (isNaN(entryMs)) return null;
+        const history = lifecycleTimes.get(c.id);
+        // Prefer the property field; fall back to history.
+        let entryMs: number | null = null;
+        if (c.hs_v2_date_entered_customer) {
+          const t = new Date(c.hs_v2_date_entered_customer).getTime();
+          if (!isNaN(t)) entryMs = t;
+        }
+        if (entryMs === null) entryMs = history?.entryMs ?? null;
+        if (entryMs === null) return null;
+
+        // Cohort window: customers who entered AFTER March 1, 2026.
+        // Pre-March cohorts represent a different product era and
+        // distort the curve with multi-year survivorship bias.
+        if (entryMs < COHORT_START_MS) return null;
+
         const cancelMs =
           c.account_lifecycle === "former.customer"
-            ? cancelTimestamps.get(c.id) ?? null
+            ? history?.cancelMs ?? null
             : null;
+
         return { entryMs, cancelMs };
       })
       .filter((r): r is { entryMs: number; cancelMs: number | null } => r !== null);

@@ -50,6 +50,7 @@ const CONTACT_PROPERTIES = [
 let contactsCache: { data: HubSpotContact[]; timestamp: number } | null = null;
 let ownersCache: { data: Record<string, string>; timestamp: number } | null =
   null;
+let customersCache: { data: HubSpotContact[]; timestamp: number } | null = null;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 // In-flight promises so concurrent callers share one fetch instead of
@@ -57,6 +58,7 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 // loads 4+ endpoints in parallel and they all want the same data on a
 // cold cache.
 let contactsInFlight: Promise<HubSpotContact[]> | null = null;
+let customersInFlight: Promise<HubSpotContact[]> | null = null;
 let ownersInFlight: Promise<Record<string, string>> | null = null;
 
 function sleep(ms: number) {
@@ -218,6 +220,117 @@ async function doFetchAllContacts(): Promise<HubSpotContact[]> {
   // Update cache
   contactsCache = { data: allContacts, timestamp: Date.now() };
   return allContacts;
+}
+
+/**
+ * Fetch every paying-customer-lifecycle contact regardless of createdate.
+ *
+ * Why this is separate from fetchAllContacts():
+ *   fetchAllContacts() is scoped to contacts created since 2026-01-01 to
+ *   keep the page-load fetch fast and bounded. But the Retention Curve
+ *   needs the FULL paid-customer history — including the ~300 customers
+ *   who became customer in 2024/2025 before the createdate cutoff.
+ *   Filtering by createdate misses them entirely.
+ *
+ * Filter: account_lifecycle ∈ {customer, former.customer, Customer/Limited Access}
+ *         No date filter. Excludes WIX/HOPPER via the caller (same as
+ *         every other dashboard query).
+ *
+ * The data shape is the same as fetchAllContacts() — same field set.
+ */
+export async function fetchAllCustomers(): Promise<HubSpotContact[]> {
+  if (customersCache && Date.now() - customersCache.timestamp < CACHE_TTL) {
+    return customersCache.data;
+  }
+  if (customersInFlight) return customersInFlight;
+  customersInFlight = doFetchAllCustomers().finally(() => {
+    customersInFlight = null;
+  });
+  return customersInFlight;
+}
+
+async function doFetchAllCustomers(): Promise<HubSpotContact[]> {
+  const all: HubSpotContact[] = [];
+  let after: string | undefined;
+  const MAX_PAGES = 50;
+  let pageCount = 0;
+
+  do {
+    const body: Record<string, unknown> = {
+      filterGroups: [
+        {
+          filters: [
+            {
+              propertyName: "account_lifecycle",
+              operator: "IN",
+              values: ["customer", "former.customer", "Customer/Limited Access"],
+            },
+          ],
+        },
+      ],
+      sorts: [{ propertyName: "hs_v2_date_entered_customer", direction: "DESCENDING" }],
+      properties: CONTACT_PROPERTIES,
+      limit: 100,
+      ...(after ? { after } : {}),
+    };
+
+    const data = await hubspotFetch(`${BASE_URL}/crm/v3/objects/contacts/search`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+
+    const results = (data.results || []) as Array<{
+      id: string;
+      properties: Record<string, string | null>;
+    }>;
+    for (const result of results) {
+      const p = result.properties;
+      all.push({
+        id: result.id,
+        createdate: p.createdate || "",
+        account_lifecycle: p.account_lifecycle || null,
+        airbnb_authorization_status: p.airbnb_authorization_status || null,
+        airbnbdqreason: p.airbnbdqreason || null,
+        user_properties_created: p.user_properties_created || null,
+        user_clicked_launch_property: p.user_clicked_launch_property || null,
+        property_ready_to_launch: p.property_ready_to_launch || null,
+        trial__start_date: p.trial__start_date || null,
+        cb_subcst_trial_end: p.cb_subcst_trial_end || null,
+        subscription_status: p.subscription_status || null,
+        subscription_type: p.subscription_type || null,
+        plan_name: p.plan_name || null,
+        plan_type_legacy: p["don_t_use____plan_type"] || null,
+        plan_type_old: p["don_t_use_____old_plan_type"] || null,
+        limited_access_previous_plan: p.limited_access_previous_plan || null,
+        first_touch_utm_campaign: p.first_touch_utm_campaign || null,
+        first_touch_utm_source: p.first_touch_utm_source || null,
+        first_touch_utm_medium: p.first_touch_utm_medium || null,
+        first_touch_utm_term: p.first_touch_utm_term || null,
+        hs_analytics_first_url: p.hs_analytics_first_url || null,
+        hs_analytics_source_data_2: p.hs_analytics_source_data_2 || null,
+        engagements_last_meeting_booked: p.engagements_last_meeting_booked || null,
+        sales_call_outcome: p.sales_call_outcome || null,
+        aircall_last_call_at: p.aircall_last_call_at || null,
+        last_aircall_call_outcome: p.last_aircall_call_outcome || null,
+        hubspot_owner_id: p.hubspot_owner_id || null,
+        country: p.country || null,
+        city: p.city || null,
+        ip_country: p.ip_country || null,
+        ip_city: p.ip_city || null,
+        referral_source: p.referral_source || null,
+        hs_v2_date_entered_opportunity: p.hs_v2_date_entered_opportunity || null,
+        hs_v2_date_exited_opportunity: p.hs_v2_date_exited_opportunity || null,
+        hs_v2_date_entered_customer: p.hs_v2_date_entered_customer || null,
+        hs_v2_date_exited_customer: p.hs_v2_date_exited_customer || null,
+      });
+    }
+    after = (data.paging as Record<string, Record<string, string>>)?.next?.after;
+    pageCount++;
+    if (after) await sleep(150);
+  } while (after && pageCount < MAX_PAGES);
+
+  customersCache = { data: all, timestamp: Date.now() };
+  return all;
 }
 
 export async function fetchOwnerNames(): Promise<Record<string, string>> {
