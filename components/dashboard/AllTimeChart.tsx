@@ -9,6 +9,19 @@ import {
 } from "recharts";
 import { tzStartOfWeek, tzDateKey } from "@/lib/timezone";
 
+/** Add `n` calendar days to a YYYY-MM-DD string. Pure string math —
+ *  DST-safe because we're not crossing time-of-day boundaries. */
+function addDaysToKey(key: string, n: number): string {
+  const y = parseInt(key.slice(0, 4), 10);
+  const m = parseInt(key.slice(5, 7), 10);
+  const d = parseInt(key.slice(8, 10), 10);
+  const dt = new Date(Date.UTC(y, m - 1, d + n));
+  const yy = dt.getUTCFullYear();
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getUTCDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
 type Granularity = "day" | "week";
 
 type Series = {
@@ -73,13 +86,15 @@ function bucketByWeek(data: Series): WeeklyData {
 
   for (let i = 0; i < data.days.length; i++) {
     const day = data.days[i];
-    // The day string is already an ET calendar date; parse it as ET-noon
-    // to avoid any DST edge case, then snap to that week's Monday.
-    const dayDate = new Date(day + "T12:00:00-05:00");
+    // `day` is already an ET calendar date — parse as noon UTC, which
+    // always lands inside the ET day regardless of DST, then snap to
+    // the week's Monday.
+    const dayDate = new Date(day + "T12:00:00Z");
     const monday = tzStartOfWeek(dayDate);
     const weekKey = tzDateKey(monday);
-    const sunday = new Date(monday.getTime() + 6 * 86_400_000);
-    const sundayKey = tzDateKey(sunday);
+    // Sunday key via pure string math so we don't drift across DST
+    // (Mon + 6×24h can land 23h or 25h off on transition weeks).
+    const sundayKey = addDaysToKey(weekKey, 6);
 
     if (!buckets.has(weekKey)) {
       buckets.set(weekKey, {
@@ -168,16 +183,62 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
     if (!data) return [];
     if (granularity === "week") {
       const w = bucketByWeek(data);
+      const N = w.weekStart.length;
+
+      // Split each metric's values into two parallel arrays per row:
+      //   metric_solid   = value on full weeks, null on partial weeks
+      //   metric_dashed  = value on partial weeks, null on full weeks
+      // Plus at every solid↔dashed transition, the boundary index gets
+      // its value copied into the other array so the line actually
+      // *connects* through the transition instead of leaving a gap.
+      const partial = w.partial;
+      function split(values: number[]) {
+        const solid: (number | null)[] = new Array(N).fill(null);
+        const dashed: (number | null)[] = new Array(N).fill(null);
+        for (let i = 0; i < N; i++) {
+          if (partial[i]) dashed[i] = values[i];
+          else            solid[i]  = values[i];
+        }
+        for (let i = 1; i < N; i++) {
+          // Boundary point: this index's "is partial" differs from prev.
+          // Ensure the line that "lives" on this side has the previous
+          // point too, so Recharts draws the connecting segment.
+          if (partial[i] && !partial[i - 1]) {
+            dashed[i - 1] = values[i - 1];     // start dashed at the last complete week
+          } else if (!partial[i] && partial[i - 1]) {
+            solid[i - 1] = values[i - 1];      // start solid at the last partial week
+          }
+        }
+        return { solid, dashed };
+      }
+
+      const split_signups        = split(w.signups);
+      const split_airbnbConnects = split(w.airbnbConnects);
+      const split_readyToLaunch  = split(w.readyToLaunch);
+      const split_trials         = split(w.trials);
+      const split_customers      = split(w.customers);
+
       return w.weekStart.map((ws, i) => ({
-        day: ws,           // used as the x-axis dataKey, named `day` for
-                           //   continuity with the daily mode
+        day: ws,                  // x-axis key, named `day` for continuity with daily mode
         weekEnd: w.weekEnd[i],
         partial: w.partial[i],
+        // Raw values — used by the tooltip (read directly from row.payload)
         signups: w.signups[i],
         airbnbConnects: w.airbnbConnects[i],
         readyToLaunch: w.readyToLaunch[i],
         trials: w.trials[i],
         customers: w.customers[i],
+        // Split values — used by the two Line components per metric
+        signups_solid: split_signups.solid[i],
+        signups_dashed: split_signups.dashed[i],
+        airbnbConnects_solid: split_airbnbConnects.solid[i],
+        airbnbConnects_dashed: split_airbnbConnects.dashed[i],
+        readyToLaunch_solid: split_readyToLaunch.solid[i],
+        readyToLaunch_dashed: split_readyToLaunch.dashed[i],
+        trials_solid: split_trials.solid[i],
+        trials_dashed: split_trials.dashed[i],
+        customers_solid: split_customers.solid[i],
+        customers_dashed: split_customers.dashed[i],
       }));
     }
     // Daily mode (existing behaviour)
@@ -353,23 +414,28 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
                     // each metric name AND show step-to-step conversion %
                     // between adjacent visible metrics (e.g. Trials/QS).
                     content={(props) => {
-                      const { active, label, payload } = props as {
+                      const { active: isActive, label, payload } = props as {
                         active?: boolean;
                         label?: string | number;
-                        payload?: ReadonlyArray<{ name?: string | number; value?: number | string; color?: string }>;
+                        payload?: ReadonlyArray<{ name?: string | number; value?: number | string; color?: string; payload?: Record<string, number | null | string | boolean> }>;
                       };
-                      if (!active || !payload || payload.length === 0) return null;
+                      if (!isActive || !payload || payload.length === 0) return null;
 
-                      // Index payload by key for lookup
+                      // Read raw values from the row payload — that has
+                      // every metric's full value (vs. the per-Line
+                      // `name`/`value` pairs, which in weekly mode are
+                      // split into "_solid"/"_dashed" halves with nulls).
+                      const row = (payload[0] as { payload?: Record<string, number | null | string | boolean> })?.payload ?? {};
+
+                      // Build a key-indexed lookup of values for visible
+                      // metrics (outer-scope `active` is the toggle Set).
                       const byKey: Record<string, { name: string; value: number; color: string }> = {};
-                      for (const p of payload) {
-                        const k = typeof p.name === "string" ? p.name : String(p.name ?? "");
-                        if (k) {
-                          byKey[k] = {
-                            name: k,
-                            value: typeof p.value === "number" ? p.value : parseFloat(String(p.value ?? 0)),
-                            color: p.color || "#FFFFFF",
-                          };
+                      for (const m of METRICS) {
+                        if (!active.has(m.key)) continue;
+                        const v = row[m.key];
+                        const num = typeof v === "number" ? v : parseFloat(String(v ?? 0));
+                        if (Number.isFinite(num)) {
+                          byKey[m.key] = { name: m.label, value: num, color: m.color };
                         }
                       }
 
@@ -388,7 +454,10 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
                       const partial = firstPayload?.payload?.partial;
                       let dateStr: string = labelStr;
                       if (granularity === "week" && weekEnd) {
-                        dateStr = `${shortDate(labelStr)} – ${shortDate(weekEnd)}${partial ? "  (partial week)" : ""}`;
+                        // "Mon Apr 27 – Sun May 3" so the reader can see
+                        // at a glance the bucket matches the Mon-Sun
+                        // convention used by the "Last week" filter.
+                        dateStr = `Mon ${shortDate(labelStr)} – Sun ${shortDate(weekEnd)}${partial ? "  (partial week)" : ""}`;
                       } else if (labelStr && /^\d{4}-\d{2}-\d{2}/.test(labelStr)) {
                         const [, m, d] = labelStr.split("-");
                         const months = ["", "Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -488,18 +557,59 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
                       return <span className="text-[#C9D1DC]">{m?.label || value}</span>;
                     }}
                   />
-                  {METRICS.filter((m) => active.has(m.key)).map((m) => (
-                    <Line
-                      key={m.key}
-                      type="monotone"
-                      dataKey={m.key}
-                      stroke={m.color}
-                      strokeWidth={2.5}
-                      dot={false}
-                      activeDot={{ r: 5, strokeWidth: 0, fill: m.color }}
-                      isAnimationActive={false}
-                    />
-                  ))}
+                  {/* In daily mode: one solid Line per metric.
+                      In weekly mode: TWO lines per metric — the solid
+                      one covers full Mon-Sun weeks; the dashed one
+                      covers the leading-edge / trailing-edge partial
+                      week so the reader doesn't misread a half-week
+                      dip as a real drop. Both pull from null-padded
+                      arrays built in `rows`, so they only render where
+                      they should. */}
+                  {METRICS.filter((m) => active.has(m.key)).flatMap((m) => {
+                    if (granularity === "week") {
+                      return [
+                        <Line
+                          key={m.key + "_solid"}
+                          type="monotone"
+                          name={m.key}
+                          dataKey={m.key + "_solid"}
+                          stroke={m.color}
+                          strokeWidth={2.5}
+                          dot={false}
+                          activeDot={{ r: 5, strokeWidth: 0, fill: m.color }}
+                          isAnimationActive={false}
+                          connectNulls={false}
+                        />,
+                        <Line
+                          key={m.key + "_dashed"}
+                          type="monotone"
+                          name={m.key + "__dashed"}
+                          dataKey={m.key + "_dashed"}
+                          stroke={m.color}
+                          strokeWidth={2.5}
+                          strokeDasharray="4 4"
+                          strokeOpacity={0.85}
+                          dot={false}
+                          activeDot={{ r: 5, strokeWidth: 0, fill: m.color }}
+                          isAnimationActive={false}
+                          connectNulls={false}
+                          legendType="none"  // hide the dashed half from the legend
+                        />,
+                      ];
+                    }
+                    return [
+                      <Line
+                        key={m.key}
+                        type="monotone"
+                        dataKey={m.key}
+                        stroke={m.color}
+                        strokeWidth={2.5}
+                        dot={false}
+                        activeDot={{ r: 5, strokeWidth: 0, fill: m.color }}
+                        isAnimationActive={false}
+                      />,
+                    ];
+                  })}
                 </LineChart>
               </ResponsiveContainer>
             </div>
