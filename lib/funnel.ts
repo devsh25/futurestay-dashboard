@@ -991,22 +991,36 @@ export function computeTimeSeries(contacts: HubSpotContact[]): TimeSeries {
 
   // Snap min to ET start-of-day; chart always extends to today (ET).
   //
-  // Important: we step through days using tzAddDays() instead of
-  // `startMs + i * 86_400_000`. Why: during DST transitions an ET
-  // calendar day is 23 or 25 hours, not 24. The ms-arithmetic
-  // approach drifts by an hour each side of a DST boundary and
-  // truncates the last day. Date-key iteration is DST-safe.
-  const startDate = tzStartOfDay(new Date(minTs));
-  const endDate = new Date(todayTs);
+  // We enumerate days using YYYY-MM-DD string arithmetic instead of
+  // stepping Date objects through tzAddDays(). Why: tzAddDays calls
+  // Intl.DateTimeFormat under the hood, and at ~520 iterations that
+  // adds up to multi-second cost on Vercel serverless (it was hitting
+  // the 300s function timeout). Simple calendar increment on the date
+  // string is DST-safe — we're just enumerating calendar days, not
+  // crossing time boundaries — and dramatically faster.
+  const startKey = tzDateKey(new Date(minTs));
+  const endKey = tzDateKey(new Date(todayTs));
 
   const days: string[] = [];
   const dayIndex = new Map<string, number>();
-  let cursor = startDate;
-  while (cursor.getTime() <= endDate.getTime()) {
-    const key = tzDateKey(cursor);
+  let key = startKey;
+  // Safety cap: even a 5-year window is < 2000 days. Prevents an
+  // infinite loop if some edge case ever made nextDay() not advance.
+  let safety = 4000;
+  while (key <= endKey && safety-- > 0) {
     dayIndex.set(key, days.length);
     days.push(key);
-    cursor = tzAddDays(cursor, 1);
+    if (key === endKey) break;
+    // Increment calendar date via UTC math (no DST issues for pure
+    // calendar increment — Date.UTC normalizes month/year rollover).
+    const y = parseInt(key.slice(0, 4), 10);
+    const m = parseInt(key.slice(5, 7), 10);
+    const d = parseInt(key.slice(8, 10), 10);
+    const next = new Date(Date.UTC(y, m - 1, d + 1));
+    const yy = next.getUTCFullYear();
+    const mm = String(next.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(next.getUTCDate()).padStart(2, "0");
+    key = `${yy}-${mm}-${dd}`;
   }
   const dayCount = days.length;
   const signups: number[] = new Array(dayCount).fill(0);

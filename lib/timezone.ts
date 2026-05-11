@@ -49,6 +49,17 @@ export function tzDayOfWeek(d: Date | string): number {
   return DOW_MAP[_dowFmt.format(date)];
 }
 
+// Cached at module scope — creating Intl.DateTimeFormat inside
+// tzOffsetMinutes on every call adds up fast (each instantiation is
+// ~tens of ms on Vercel serverless, and we call this hundreds of times
+// when building the run-rate timeseries day list). Reuse one instance.
+const _offsetFmt = new Intl.DateTimeFormat("en-US", {
+  timeZone: APP_TIMEZONE,
+  year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", second: "2-digit",
+  hour12: false,
+});
+
 /**
  * Eastern-Time offset in minutes for a specific instant (handles DST).
  * Returns negative number — e.g., -300 for EST (UTC-5), -240 for EDT
@@ -56,12 +67,7 @@ export function tzDayOfWeek(d: Date | string): number {
  * tzEndOfDay instead.
  */
 function tzOffsetMinutes(d: Date): number {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: APP_TIMEZONE,
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-    hour12: false,
-  }).formatToParts(d);
+  const parts = _offsetFmt.formatToParts(d);
   const get = (type: string) => {
     const part = parts.find((p) => p.type === type);
     return part ? parseInt(part.value, 10) : 0;
