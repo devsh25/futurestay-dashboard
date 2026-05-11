@@ -990,30 +990,39 @@ export function computeTimeSeries(contacts: HubSpotContact[]): TimeSeries {
   }
 
   // Snap min to ET start-of-day; chart always extends to today (ET).
-  const startMs = tzStartOfDay(new Date(minTs)).getTime();
-  const endMs = todayTs;
-  const dayMs = 86_400_000;
-  const dayCount = Math.floor((endMs - startMs) / dayMs) + 1;
+  //
+  // Important: we step through days using tzAddDays() instead of
+  // `startMs + i * 86_400_000`. Why: during DST transitions an ET
+  // calendar day is 23 or 25 hours, not 24. The ms-arithmetic
+  // approach drifts by an hour each side of a DST boundary and
+  // truncates the last day. Date-key iteration is DST-safe.
+  const startDate = tzStartOfDay(new Date(minTs));
+  const endDate = new Date(todayTs);
 
   const days: string[] = [];
+  const dayIndex = new Map<string, number>();
+  let cursor = startDate;
+  while (cursor.getTime() <= endDate.getTime()) {
+    const key = tzDateKey(cursor);
+    dayIndex.set(key, days.length);
+    days.push(key);
+    cursor = tzAddDays(cursor, 1);
+  }
+  const dayCount = days.length;
   const signups: number[] = new Array(dayCount).fill(0);
   const airbnbConnects: number[] = new Array(dayCount).fill(0);
   const readyToLaunch: number[] = new Array(dayCount).fill(0);
   const trials: number[] = new Array(dayCount).fill(0);
   const customers: number[] = new Array(dayCount).fill(0);
 
-  for (let i = 0; i < dayCount; i++) {
-    days.push(tzDateKey(new Date(startMs + i * dayMs)));
-  }
-
   function bucketIndex(d: string | null): number {
     if (!d) return -1;
-    const t = new Date(d).getTime();
-    if (isNaN(t)) return -1;
-    // Bucket the event into its ET calendar day, not UTC.
-    const dayStart = tzStartOfDay(new Date(t)).getTime();
-    const idx = Math.floor((dayStart - startMs) / dayMs);
-    return idx >= 0 && idx < dayCount ? idx : -1;
+    const t = new Date(d);
+    if (isNaN(t.getTime())) return -1;
+    // Find the event's ET calendar day → look up its array index.
+    const key = tzDateKey(t);
+    const idx = dayIndex.get(key);
+    return idx === undefined ? -1 : idx;
   }
 
   for (const c of clean) {
