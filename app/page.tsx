@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { DashboardData, PeriodFilter } from "@/lib/types";
+import { tzStartOfDay, tzAddDays, tzDateKey } from "@/lib/timezone";
 import FilterBar from "@/components/FilterBar";
 import KPICards from "@/components/dashboard/KPICards";
 import AllTimeChart from "@/components/dashboard/AllTimeChart";
@@ -36,10 +37,10 @@ export default function Dashboard() {
   // Default custom range: Feb 1, 2026 → T−14d.
   // T−14d enforces the cohort-maturity rule (Futurestay's median signup→customer
   // is ~14 days, so anything fresher than that has unmatured conversion data).
-  const today = new Date();
-  const tMinus14 = new Date(today);
-  tMinus14.setDate(tMinus14.getDate() - 14);
-  const tMinus14Iso = tMinus14.toISOString().slice(0, 10);
+  // All date arithmetic in ET so the default + maturity warning are stable
+  // for any user regardless of their browser timezone.
+  const nowEt = tzStartOfDay(new Date());
+  const tMinus14Iso = tzDateKey(tzAddDays(nowEt, -14));
 
   const [period, setPeriod] = useState<PeriodFilter>("custom");
   const [customStart, setCustomStart] = useState("2026-02-01");
@@ -47,15 +48,13 @@ export default function Dashboard() {
   const [countries, setCountries] = useState<string[]>([]);
   const [channels, setChannels] = useState<string[]>([]);
 
-  // Cohort-maturity warning: end date inside the last 14 days means trial
-  // and customer counts for recent signups haven't fully materialized.
+  // Cohort-maturity warning: end date inside the last 14 days (ET) means
+  // trial and customer counts for recent signups haven't fully materialized.
   const isMaturityRisky = (() => {
     if (period !== "custom") return false;
-    const end = new Date(customEnd + "T00:00:00Z");
-    const cutoff = new Date(today);
-    cutoff.setUTCHours(0, 0, 0, 0);
-    cutoff.setUTCDate(cutoff.getUTCDate() - 14);
-    return end > cutoff;
+    const endEt = tzStartOfDay(new Date(customEnd + "T12:00:00Z"));
+    const cutoffEt = tzAddDays(nowEt, -14);
+    return endEt > cutoffEt;
   })();
 
   const fetchData = useCallback(async () => {
