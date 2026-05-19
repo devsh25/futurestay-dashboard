@@ -19,11 +19,21 @@ function fmtNum(n: number): string {
   return n.toLocaleString();
 }
 
+/** Strip Meta-naming boilerplate so the meaningful part fits without
+ *  truncation. Convention: "DD.MM | US & CA | <description> | Campaign".
+ *  We drop the geo qualifier and "| Campaign" suffix, but keep the
+ *  date prefix since multiple campaigns of the same family launch on
+ *  different dates and the date is the cheapest disambiguator. Names
+ *  not following the pipe-delimited convention pass through unchanged. */
 function shortCampaign(name: string): string {
-  // "05.03 | US & CA | Direct Website Booking | Static ..." → "Direct Website Booking | Static ..."
-  const parts = name.split("|").map((p) => p.trim());
-  if (parts.length >= 3) return parts.slice(2).join(" | ");
-  return name;
+  const parts = name.split("|").map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 3) return name;
+  const filtered = parts.filter((p, i) => {
+    if (p.toLowerCase() === "us & ca") return false;
+    if (i === parts.length - 1 && p.toLowerCase() === "campaign") return false;
+    return true;
+  });
+  return filtered.join(" | ");
 }
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -150,7 +160,10 @@ export default function MetaSpendCard({
                   <TableBody>
                     {data.campaigns.slice(0, 15).map((c) => (
                       <TableRow key={c.id || c.name} className="border-[#1F2937] hover:bg-[#0E1422] transition-colors">
-                        <TableCell className="font-medium text-[12px] text-white max-w-[380px] truncate" title={c.name}>
+                        {/* Let the column size to its longest (cleaned)
+                            name; table is already in overflow-x-auto.
+                            Tooltip preserves the full original. */}
+                        <TableCell className="font-medium text-[12px] text-white whitespace-nowrap" title={c.name}>
                           {shortCampaign(c.name)}
                         </TableCell>
                         <TableCell className="text-right font-mono text-[12px] tabular-nums text-white">

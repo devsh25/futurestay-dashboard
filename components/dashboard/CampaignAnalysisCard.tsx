@@ -41,12 +41,38 @@ function dqColor(rate: number) {
   return "text-[#8B92A3]";
 }
 
+/** Strip Meta-naming boilerplate so the meaningful part of the name
+ *  fits without truncation. Convention in this account is
+ *  "DD.MM | US & CA | <description> | Campaign". We drop the geo
+ *  qualifier and the "| Campaign" suffix, but keep the date prefix
+ *  since multiple campaigns of the same family launch on different
+ *  dates and the date is the cheapest disambiguator.
+ *
+ *  Bucket-key names that don't follow the pipe-delimited convention
+ *  (e.g. "Airbnb Listing Opt — Static & Video", "Retargeting Ads")
+ *  pass through unchanged. */
+function shortCampaign(name: string): string {
+  const parts = name.split("|").map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 3) return name;
+  const filtered = parts.filter((p, i) => {
+    if (p.toLowerCase() === "us & ca") return false;
+    if (i === parts.length - 1 && p.toLowerCase() === "campaign") return false;
+    return true;
+  });
+  return filtered.join(" | ");
+}
+
 function CampaignRow({ r }: { r: CampaignAnalysisRow }) {
   const tb = TYPE_BADGE[r.type];
   return (
     <TableRow className="border-[#1F2937] hover:bg-[#0E1422] transition-colors">
-      <TableCell className="font-medium text-[12px] text-white whitespace-nowrap max-w-[260px] truncate" title={r.campaign}>
-        {r.campaign}
+      {/* No max-w cap: the table is already in an overflow-x-auto
+          container, so letting the column auto-size to its longest
+          (cleaned) name keeps everything one-line + readable. Tooltip
+          preserves the original Meta name for users who need the
+          full string. */}
+      <TableCell className="font-medium text-[12px] text-white whitespace-nowrap" title={r.campaign}>
+        {shortCampaign(r.campaign)}
       </TableCell>
       <TableCell>
         <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded border ${tb.bg} ${tb.text} ${tb.border}`}>
