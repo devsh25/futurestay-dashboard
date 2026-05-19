@@ -468,10 +468,71 @@ export async function computeCampaignAnalysis(
     else if (cls === "dq") a.clsDq += 1;
   }
 
-  // Build rows in defined campaign order
-  const rows: CampaignAnalysisRow[] = CAMPAIGN_DEFS.map((def) => {
-    const a = agg[def.key] ?? empty();
-    const sp = spendByBucket[def.key] ?? 0;
+  // ---- Per-Meta-campaign row generation ----
+  //
+  // Previously this card emitted ONE row per CAMPAIGN_DEFS bucket (6 rows
+  // total). Problem: when growth launches a new Meta campaign — say
+  // "18.05 | ... | Direct Website Call | Batch 2 Video Ads" — it gets
+  // silently rolled into the existing "Direct Website Call" bucket and
+  // is invisible to the user as a distinct campaign. They asked for all
+  // active Meta campaigns (except test) to surface.
+  //
+  // New model: one row PER Meta campaign. Spend is per-campaign (from
+  // Meta). HubSpot funnel data still aggregates at the bucket level (we
+  // can't attribute a HubSpot contact to a specific Meta campaign — only
+  // to a campaign family via UTM substring), then we split that bucket's
+  // counts among the bucket's Meta campaigns proportionally by spend.
+  // Largest-remainder rounding so per-campaign counts still sum to the
+  // bucket total. Unbucketed Meta campaigns (e.g. "Retargeting Ads",
+  // whose UTMs don't match any of our keywords) get their spend shown
+  // with HubSpot funnel = 0 / null.
+
+  // Group Meta campaigns by bucket
+  const metaByBucket: Record<string, typeof metaInsights.campaigns> = {};
+  const unbucketedMeta: typeof metaInsights.campaigns = [];
+  for (const m of metaInsights.campaigns) {
+    const bk = bucketMetaCampaign(m.name);
+    if (bk) {
+      (metaByBucket[bk] ||= []).push(m);
+    } else {
+      unbucketedMeta.push(m);
+    }
+  }
+
+  // Largest-remainder integer split that preserves sum.
+  // Returns an array of integer shares of `total` weighted by `weights`.
+  function splitInt(total: number, weights: number[]): number[] {
+    const sumW = weights.reduce((a, b) => a + b, 0);
+    if (sumW === 0 || weights.length === 0 || total === 0) {
+      return weights.map(() => 0);
+    }
+    const raw = weights.map((w) => (total * w) / sumW);
+    const floors = raw.map((r) => Math.floor(r));
+    let remainder = total - floors.reduce((a, b) => a + b, 0);
+    const idxByFrac = raw
+      .map((r, i) => ({ i, frac: r - Math.floor(r) }))
+      .sort((a, b) => b.frac - a.frac);
+    for (let k = 0; k < idxByFrac.length && remainder > 0; k++, remainder--) {
+      floors[idxByFrac[k].i] += 1;
+    }
+    return floors;
+  }
+
+  // Map of bucket key → CAMPAIGN_DEFS entry, for type / optSignal lookup
+  const defByBucket: Record<string, typeof CAMPAIGN_DEFS[number]> = {};
+  for (const def of CAMPAIGN_DEFS) defByBucket[def.key] = def;
+
+  // Build the row factory: given an agg + spend + optional name override,
+  // produce a CampaignAnalysisRow with rates re-derived from THIS row's
+  // own spend (not the bucket spend). Otherwise CPT/CPC would be the
+  // bucket average across all sub-campaigns instead of the campaign's
+  // own efficiency.
+  function buildRow(
+    def: typeof CAMPAIGN_DEFS[number],
+    a: typeof agg[string],
+    sp: number,
+    nameOverride?: string,
+  ): CampaignAnalysisRow {
     const isCall = def.type === "call";
 
     const pct = (n: number, d: number) => (d > 0 ? (n / d) * 100 : 0);
@@ -490,7 +551,7 @@ export async function computeCampaignAnalysis(
       : null;
 
     return {
-      campaign: def.key,
+      campaign: nameOverride ?? def.key,
       type: def.type,
       spend: sp,
       optSignal: def.optSignal,
@@ -520,6 +581,101 @@ export async function computeCampaignAnalysis(
       qsToTrialRate: (a.signups - a.airbnbDq) > 0 ? (a.trial / (a.signups - a.airbnbDq)) * 100 : null,
       qsToCustomerRate: (a.signups - a.airbnbDq) > 0 ? (a.cust / (a.signups - a.airbnbDq)) * 100 : null,
     };
+  }
+
+  // Assemble rows: one per Meta campaign, per bucket.
+  const rows: CampaignAnalysisRow[] = [];
+
+  for (const def of CAMPAIGN_DEFS) {
+    const a = agg[def.key] ?? empty();
+    const metas = metaByBucket[def.key] ?? [];
+
+    if (metas.length === 0) {
+      // No active Meta campaigns currently in this family (window).
+      // Still emit the bucket row so the table doesn't suddenly drop
+      // historical rows on a window with no active spend.
+      rows.push(buildRow(def, a, spendByBucket[def.key] ?? 0));
+      continue;
+    }
+
+    // Split bucket-level HubSpot counts across Meta campaigns by spend.
+    const spends = metas.map((m) => m.spend);
+    const split = {
+      leads:           splitInt(a.leads,            spends),
+      signups:         splitInt(a.signups,          spends),
+      airbnbDq:        splitInt(a.airbnbDq,         spends),
+      auth:            splitInt(a.auth,             spends),
+      ready:           splitInt(a.ready,            spends),
+      meeting:         splitInt(a.meeting,          spends),
+      trial:           splitInt(a.trial,            spends),
+      cust:            splitInt(a.cust,             spends),
+      clsNoShow:       splitInt(a.clsNoShow,        spends),
+      clsInterested:   splitInt(a.clsInterested,    spends),
+      clsNotInterested:splitInt(a.clsNotInterested, spends),
+      clsDq:           splitInt(a.clsDq,            spends),
+    };
+
+    metas.forEach((m, i) => {
+      const a_i = {
+        leads: split.leads[i],
+        signups: split.signups[i],
+        airbnbDq: split.airbnbDq[i],
+        auth: split.auth[i],
+        ready: split.ready[i],
+        meeting: split.meeting[i],
+        trial: split.trial[i],
+        cust: split.cust[i],
+        clsNoShow: split.clsNoShow[i],
+        clsInterested: split.clsInterested[i],
+        clsNotInterested: split.clsNotInterested[i],
+        clsDq: split.clsDq[i],
+      };
+      rows.push(buildRow(def, a_i, m.spend, m.name));
+    });
+  }
+
+  // Unbucketed active Meta campaigns: show their spend; HubSpot funnel
+  // metrics stay null/0 because no UTM substring rule attributes them.
+  // (To get full attribution, add a matcher in bucketContactToCampaign +
+  // bucketMetaCampaign + a CAMPAIGN_DEFS entry.)
+  for (const m of unbucketedMeta) {
+    const isCall = /\bcall\b/i.test(m.name);
+    rows.push({
+      campaign: m.name,
+      type: isCall ? "call" : "self",
+      spend: m.spend,
+      optSignal: "unknown",
+      leads: 0,
+      meetingsBooked: isCall ? 0 : null,
+      meetingsHeld: isCall ? 0 : null,
+      signups: 0,
+      qualifiedSignups: 0,
+      airbnbConnected: 0,
+      readyToLaunch: 0,
+      airbnbDqRate: 0,
+      formToMeetingRate: isCall ? null : null,
+      costPerMeeting: isCall ? null : null,
+      noShowMtgRate: isCall ? null : null,
+      dqMtgRate: isCall ? null : null,
+      interestedMtgRate: isCall ? null : null,
+      notInterestedMtgRate: isCall ? null : null,
+      outcomeCoverage: isCall ? null : null,
+      trials: 0,
+      costPerTrial: null,
+      customers: 0,
+      costPerCustomer: null,
+      meetingToTrialRate: isCall ? null : null,
+      qsToTrialRate: null,
+      qsToCustomerRate: null,
+    });
+  }
+
+  // Sort: highest spend first, then by name for $0-spend ties (so newly-
+  // launched campaigns with no spend yet group together at the bottom
+  // in a predictable order).
+  rows.sort((a, b) => {
+    if (b.spend !== a.spend) return b.spend - a.spend;
+    return a.campaign.localeCompare(b.campaign);
   });
 
   return { rows, since, until };
