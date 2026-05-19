@@ -51,7 +51,13 @@ export const CAMPAIGN_DEFS: {
 
 // ---- Bucketing ----
 
-function bucketMetaCampaign(name: string): string | null {
+/** Map a Meta campaign name to one of the 6 known bucket keys. Returns
+ *  null if no UTM substring rule matches (e.g. "Retargeting Ads").
+ *
+ *  Exported so the funnel API can resolve a user-submitted Meta name
+ *  back to the bucket that owns the HubSpot funnel data — without
+ *  duplicating the substring rules on the client. */
+export function bucketMetaCampaign(name: string): string | null {
   const n = name.toLowerCase();
   if (n.includes("airbnb optimization call")) return "Airbnb Optimization Call";
   if (n.includes("direct website call")) return "Direct Website Call";

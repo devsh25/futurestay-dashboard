@@ -3,18 +3,24 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { FunnelStage, PeriodFilter } from "@/lib/types";
+import { FunnelStage, MetaInsightsData, PeriodFilter } from "@/lib/types";
 
-// Same campaigns as Campaign Analysis. Hard-coded here to avoid the
-// FunnelCard hitting the Campaigns API just for the dropdown options.
-const CAMPAIGN_OPTIONS = [
-  "Airbnb Optimization Call",
-  "Direct Website Call",
-  "DW Booking — Static & Video",
-  "DW Booking — Subscribe Event",
-  "Airbnb Listing Opt — Subscribe Event",
-  "Airbnb Listing Opt — Static & Video",
-] as const;
+/** Strip Meta-naming boilerplate so the dropdown stays readable.
+ *  "05.03 | US & CA | Direct Website Booking | Static & Video Ads | Campaign"
+ *    → "05.03 | Direct Website Booking | Static & Video Ads"
+ *  Pipe-format names get the geo + "Campaign" suffix dropped; everything
+ *  else (paused-bucket names, "Retargeting Ads") passes through. Mirrors
+ *  the same helper in CampaignAnalysisCard / MetaSpendCard. */
+function shortCampaign(name: string): string {
+  const parts = name.split("|").map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 3) return name;
+  const filtered = parts.filter((p, i) => {
+    if (p.toLowerCase() === "us & ca") return false;
+    if (i === parts.length - 1 && p.toLowerCase() === "campaign") return false;
+    return true;
+  });
+  return filtered.join(" | ");
+}
 
 type Node = {
   key: string;
@@ -121,6 +127,31 @@ export default function FunnelCard({
   const [scopedFunnel, setScopedFunnel] = useState<FunnelStage[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Live Meta campaign roster for the dropdown. Fetched once on mount
+  // (independent of the period filter — we want to show ALL currently
+  // active campaigns regardless of which window the user picked, so the
+  // freshly-launched ones with zero spend in the window still appear).
+  const [campaignOptions, setCampaignOptions] = useState<{ name: string; display: string }[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    // "allTime" guarantees we pull the full active roster even if a
+    // newly-launched campaign hasn't spent anything yet — fetchMetaInsights
+    // server-side merges /campaigns?effective_status=ACTIVE into the
+    // response and filters test campaigns out.
+    fetch("/api/meta/insights?period=allTime")
+      .then((r) => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then((d: MetaInsightsData) => {
+        if (cancelled) return;
+        const opts = d.campaigns.map((c) => ({ name: c.name, display: shortCampaign(c.name) }));
+        // Sort alphabetically by display name so the dropdown is
+        // predictable regardless of spend within any one window.
+        opts.sort((a, b) => a.display.localeCompare(b.display));
+        setCampaignOptions(opts);
+      })
+      .catch(() => { /* dropdown stays empty on Meta API failure; "All campaigns" still works */ });
+    return () => { cancelled = true; };
+  }, []);
 
   // When campaign is null, use the prop-passed funnel (already
   // computed for the global cohort). When a campaign is selected,
@@ -287,8 +318,8 @@ export default function FunnelCard({
               disabled={loading}
             >
               <option value="">All campaigns</option>
-              {CAMPAIGN_OPTIONS.map((c) => (
-                <option key={c} value={c}>{c}</option>
+              {campaignOptions.map((c) => (
+                <option key={c.name} value={c.name} title={c.name}>{c.display}</option>
               ))}
             </select>
             {dqRow && (
@@ -306,7 +337,7 @@ export default function FunnelCard({
           Of qualified signups (contacts whose <code className="text-[#C9D1DC] text-[13px]">account_lifecycle</code> has reached <span className="text-white">signup</span> or beyond and whose <code className="text-[#C9D1DC] text-[13px]">createdate</code> falls in the window), what % reached each stage.{" "}
           {campaign ? (
             <span className="text-[#60A5FA] font-medium">
-              Filtered to <span className="text-white">{campaign}</span>.
+              Filtered to <span className="text-white" title={campaign}>{shortCampaign(campaign)}</span>.
             </span>
           ) : (
             <>Authorizing Airbnb auto-imports listings (the path most users take). 3 outcomes drop from Trial Started (In Trial = still active, Customer = real paid, Failed = cancelled before converting). Customer can further churn.</>
@@ -315,12 +346,16 @@ export default function FunnelCard({
 
         {error && (
           <div className="bg-[#11182B] border border-[#1F2937] rounded-xl p-3 text-[#C9D1DC] text-[12px] mb-4">
-            <p className="font-semibold text-white">Failed to scope funnel to {campaign}</p>
+            <p className="font-semibold text-white" title={campaign ?? undefined}>
+              Failed to scope funnel to {campaign ? shortCampaign(campaign) : "campaign"}
+            </p>
             <p className="text-[11px] mt-1 text-[#8B92A3]">{error}</p>
           </div>
         )}
         {loading && (
-          <p className="text-[12px] text-[#8B92A3] mb-3">Re-scoping funnel to {campaign}…</p>
+          <p className="text-[12px] text-[#8B92A3] mb-3" title={campaign ?? undefined}>
+            Re-scoping funnel to {campaign ? shortCampaign(campaign) : "campaign"}…
+          </p>
         )}
 
         <svg
