@@ -539,22 +539,14 @@ export async function computeCampaignAnalysis(
 
   // ---- Per-Meta-campaign row generation ----
   //
-  // Previously this card emitted ONE row per CAMPAIGN_DEFS bucket (6 rows
-  // total). Problem: when growth launches a new Meta campaign — say
-  // "18.05 | ... | Direct Website Call | Batch 2 Video Ads" — it gets
-  // silently rolled into the existing "Direct Website Call" bucket and
-  // is invisible to the user as a distinct campaign. They asked for all
-  // active Meta campaigns (except test) to surface.
-  //
-  // New model: one row PER Meta campaign. Spend is per-campaign (from
-  // Meta). HubSpot funnel data still aggregates at the bucket level (we
-  // can't attribute a HubSpot contact to a specific Meta campaign — only
-  // to a campaign family via UTM substring), then we split that bucket's
-  // counts among the bucket's Meta campaigns proportionally by spend.
-  // Largest-remainder rounding so per-campaign counts still sum to the
-  // bucket total. Unbucketed Meta campaigns (e.g. "Retargeting Ads",
-  // whose UTMs don't match any of our keywords) get their spend shown
-  // with HubSpot funnel = 0 / null.
+  // One row per active Meta campaign. HubSpot funnel counts come from
+  // Tier-1 exact UTM attribution ONLY — matching what an analyst gets
+  // by searching HubSpot for contacts whose utm_campaign starts with
+  // the Meta campaign name. Tier-2 residual (UTM-less contacts that
+  // still landed in the bucket via URL slug) is NOT split into the
+  // per-campaign rows — it surfaces as a separate "<bucket> —
+  // Unattributed" row so the unknown attribution is visible without
+  // being misallocated by a spend-proxy heuristic.
 
   // Group Meta campaigns by bucket
   const metaByBucket: Record<string, typeof metaInsights.campaigns> = {};
@@ -566,25 +558,6 @@ export async function computeCampaignAnalysis(
     } else {
       unbucketedMeta.push(m);
     }
-  }
-
-  // Largest-remainder integer split that preserves sum.
-  // Returns an array of integer shares of `total` weighted by `weights`.
-  function splitInt(total: number, weights: number[]): number[] {
-    const sumW = weights.reduce((a, b) => a + b, 0);
-    if (sumW === 0 || weights.length === 0 || total === 0) {
-      return weights.map(() => 0);
-    }
-    const raw = weights.map((w) => (total * w) / sumW);
-    const floors = raw.map((r) => Math.floor(r));
-    let remainder = total - floors.reduce((a, b) => a + b, 0);
-    const idxByFrac = raw
-      .map((r, i) => ({ i, frac: r - Math.floor(r) }))
-      .sort((a, b) => b.frac - a.frac);
-    for (let k = 0; k < idxByFrac.length && remainder > 0; k++, remainder--) {
-      floors[idxByFrac[k].i] += 1;
-    }
-    return floors;
   }
 
   // Map of bucket key → CAMPAIGN_DEFS entry, for type / optSignal lookup
@@ -652,59 +625,47 @@ export async function computeCampaignAnalysis(
     };
   }
 
-  // Assemble rows: exact UTM attribution per Meta campaign, plus
-  // proportional split of the residual (URL-fallback-only contacts).
+  // Assemble rows: exact UTM-only per Meta campaign + a separate
+  // residual row per bucket so the unattributed contacts are visible
+  // without being misallocated.
+  //
+  // Why not split the residual proportionally by spend? Because spend
+  // is a poor predictor of which specific Meta campaign drove a
+  // UTM-less contact within a family. Doing so undercounts
+  // high-converting small-spend campaigns and overcounts large-spend
+  // siblings (the original Syerena bug). The honest answer is "we
+  // don't know which one" — so we surface it as its own row.
   const rows: CampaignAnalysisRow[] = [];
 
+  // Emit exact-attribution rows for every active Meta campaign, in
+  // any bucket. Each row's count = ONLY contacts whose
+  // first_touch_utm_campaign matched this Meta name via prefix.
   for (const def of CAMPAIGN_DEFS) {
     const metas = metaByBucket[def.key] ?? [];
-
-    if (metas.length === 0) {
-      // No active Meta campaigns in this bucket — emit a residual-only
-      // row so any URL-fallback contacts still surface. The residual
-      // here EQUALS the bucket's full agg (no exact-UTM contacts split
-      // it off), preserving the historical paused-bucket display.
-      const resid = residualByBucket[def.key] ?? empty();
-      rows.push(buildRow(def, resid, spendByBucket[def.key] ?? 0));
-      continue;
-    }
-
-    // Per-Meta exact attribution + proportional split of bucket residual.
-    const resid = residualByBucket[def.key] ?? empty();
-    const spends = metas.map((m) => m.spend);
-    const residSplit = {
-      leads:           splitInt(resid.leads,            spends),
-      signups:         splitInt(resid.signups,          spends),
-      airbnbDq:        splitInt(resid.airbnbDq,         spends),
-      auth:            splitInt(resid.auth,             spends),
-      ready:           splitInt(resid.ready,            spends),
-      meeting:         splitInt(resid.meeting,          spends),
-      trial:           splitInt(resid.trial,            spends),
-      cust:            splitInt(resid.cust,             spends),
-      clsNoShow:       splitInt(resid.clsNoShow,        spends),
-      clsInterested:   splitInt(resid.clsInterested,    spends),
-      clsNotInterested:splitInt(resid.clsNotInterested, spends),
-      clsDq:           splitInt(resid.clsDq,            spends),
-    };
-
-    metas.forEach((m, i) => {
+    for (const m of metas) {
       const own = metaAgg[m.name] ?? empty();
-      const a_i = {
-        leads:            own.leads            + residSplit.leads[i],
-        signups:          own.signups          + residSplit.signups[i],
-        airbnbDq:         own.airbnbDq         + residSplit.airbnbDq[i],
-        auth:             own.auth             + residSplit.auth[i],
-        ready:            own.ready            + residSplit.ready[i],
-        meeting:          own.meeting          + residSplit.meeting[i],
-        trial:            own.trial            + residSplit.trial[i],
-        cust:             own.cust             + residSplit.cust[i],
-        clsNoShow:        own.clsNoShow        + residSplit.clsNoShow[i],
-        clsInterested:    own.clsInterested    + residSplit.clsInterested[i],
-        clsNotInterested: own.clsNotInterested + residSplit.clsNotInterested[i],
-        clsDq:            own.clsDq            + residSplit.clsDq[i],
-      };
-      rows.push(buildRow(def, a_i, m.spend, m.name));
-    });
+      rows.push(buildRow(def, own, m.spend, m.name));
+    }
+  }
+
+  // Emit one residual row per bucket that has UTM-less contacts. Label
+  // makes clear these are unattributed within the bucket family.
+  // This replaces what used to be the paused-bucket row (those also
+  // had no active Metas → all contacts were residual → same display).
+  for (const def of CAMPAIGN_DEFS) {
+    const resid = residualByBucket[def.key];
+    if (!resid) continue;
+    const hasAny = resid.leads + resid.signups + resid.trial + resid.cust + resid.meeting > 0;
+    if (!hasAny) continue;
+    rows.push(buildRow(
+      def,
+      resid,
+      // Residual rows carry the bucket's NOT-attributed spend (none —
+      // spend belongs to specific Meta campaigns) so cost/efficiency
+      // columns show as "—" rather than misleading.
+      0,
+      `${def.key} — Unattributed (no UTM)`,
+    ));
   }
 
   // Unbucketed active Meta campaigns (no UTM substring rule maps their
