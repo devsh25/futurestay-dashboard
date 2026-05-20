@@ -498,42 +498,30 @@ export async function computeCampaignAnalysis(
     clsNoShow: 0, clsInterested: 0, clsNotInterested: 0, clsDq: 0,
   });
 
-  const launchByBucket: Record<string, Date> = {};
-  for (const def of CAMPAIGN_DEFS) {
-    launchByBucket[def.key] = new Date(`${def.launch}T00:00:00.000Z`);
-  }
-
-  // ---- Two-tier attribution ----
+  // ---- Attribution model ----
   //
-  // Tier 1 (exact UTM → specific Meta campaign): When a contact's
-  // first_touch_utm_campaign starts with a Meta campaign's name (or
-  // vice versa — HubSpot sometimes truncates the UTM to ~60 chars),
-  // we attribute that contact directly to THAT Meta campaign. This
-  // is deterministic and matches what an analyst would do reading
-  // raw HubSpot.
+  // Single-tier exact attribution: a contact is bumped into a Meta
+  // campaign's aggregate iff matchContactToMetaCampaign returns the
+  // campaign's name (ref_source override → first_touch_utm_campaign
+  // prefix → hs_analytics_source_data_2 prefix). Contacts that fail
+  // all three are silently dropped from the campaign-analysis rows.
   //
-  // Tier 2 (bucket fallback for URL/source-only contacts): When the
-  // UTM is missing/garbage but the landing-page URL still places the
-  // contact in a campaign family (e.g. URL contains
-  // "direct-booking-website" but utm_campaign is blank), we attribute
-  // to the BUCKET. These contacts are genuinely unknown at the
-  // Meta-campaign level — they get split among the bucket's active
-  // Meta campaigns proportionally by spend (largest-remainder).
-  //
-  // Previously: ALL contacts went into the bucket aggregate and the
-  // whole thing was spend-split. That undercounted high-converting
-  // small-spend campaigns (e.g. Syerena: real 4 trials → dashboard 2)
-  // and overcounted low-converting large-spend campaigns in the same
-  // bucket.
+  // Why no bucket fallback: previously we surfaced a "— Unattributed
+  // (no UTM)" residual row per bucket for those URL-only / source-
+  // only landings, but the user found those rows noisy and asked us
+  // to drop them. The unattributed cohort still shows up in the
+  // dashboard's KPI tile (which is contact-level, not campaign-level)
+  // and in the funnel card when no campaign filter is selected.
 
   // Snapshot active Meta campaign names for the shared matcher.
   // (See matchContactToMetaCampaign at module top.)
   const activeMetaNames = metaInsights.campaigns.map((m) => m.name);
   const matchMetaCampaign = (c: HubSpotContact) => matchContactToMetaCampaign(c, activeMetaNames);
 
-  // Per-Meta-campaign exact attribution + per-bucket residual.
+  // Per-Meta-campaign exact attribution. UTM-less / bucket-residual
+  // contacts are no longer collected (the "— Unattributed (no UTM)"
+  // rows that used to be emitted were removed by user request).
   const metaAgg: Record<string, ReturnType<typeof empty>> = {};   // keyed by exact Meta name
-  const residualByBucket: Record<string, ReturnType<typeof empty>> = {};
 
   function bumpAgg(a: ReturnType<typeof empty>, c: HubSpotContact) {
     a.leads += 1;
@@ -558,40 +546,23 @@ export async function computeCampaignAnalysis(
     const created = parseDate(c.createdate);
     if (!created || created < start || created > end) continue;
 
-    // Tier 1: try exact Meta-campaign match via UTM / src2 / ref_source
-    // override. If hit, attribute to the SPECIFIC Meta campaign and
-    // stop — that contact is positively identified.
+    // Exact Meta-campaign match via UTM / src2 / ref_source override.
+    // If hit, attribute to the SPECIFIC Meta campaign. Otherwise the
+    // contact is silently dropped — no more bucket residual.
     const metaMatch = matchMetaCampaign(c);
-    if (metaMatch) {
-      (metaAgg[metaMatch] ||= empty());
-      bumpAgg(metaAgg[metaMatch], c);
-      continue;
-    }
-
-    // Tier 2: bucket fallback (URL/source-data attribution).
-    const bk = bucketContactToCampaign(c);
-    if (!bk) continue;
-
-    // Pre-launch fallback exclusion — applies only to UTM-less
-    // contacts (the URL slug-matched ones), since a UTM-tagged
-    // contact is positively identified above.
-    const launch = launchByBucket[bk];
-    if (launch && created < launch) continue;
-
-    (residualByBucket[bk] ||= empty());
-    bumpAgg(residualByBucket[bk], c);
+    if (!metaMatch) continue;
+    (metaAgg[metaMatch] ||= empty());
+    bumpAgg(metaAgg[metaMatch], c);
   }
 
   // ---- Per-Meta-campaign row generation ----
   //
   // One row per active Meta campaign. HubSpot funnel counts come from
-  // Tier-1 exact UTM attribution ONLY — matching what an analyst gets
-  // by searching HubSpot for contacts whose utm_campaign starts with
-  // the Meta campaign name. Tier-2 residual (UTM-less contacts that
-  // still landed in the bucket via URL slug) is NOT split into the
-  // per-campaign rows — it surfaces as a separate "<bucket> —
-  // Unattributed" row so the unknown attribution is visible without
-  // being misallocated by a spend-proxy heuristic.
+  // exact attribution (UTM / src2 / ref_source) — matching what an
+  // analyst gets by searching HubSpot for contacts whose first-touch
+  // signal points to the Meta campaign name. UTM-less / URL-only
+  // contacts are dropped from this table (per user request to remove
+  // "— Unattributed (no UTM)" rows).
 
   // Group Meta campaigns by bucket
   const metaByBucket: Record<string, typeof metaInsights.campaigns> = {};
@@ -693,25 +664,12 @@ export async function computeCampaignAnalysis(
     }
   }
 
-  // Emit one residual row per bucket that has UTM-less contacts. Label
-  // makes clear these are unattributed within the bucket family.
-  // This replaces what used to be the paused-bucket row (those also
-  // had no active Metas → all contacts were residual → same display).
-  for (const def of CAMPAIGN_DEFS) {
-    const resid = residualByBucket[def.key];
-    if (!resid) continue;
-    const hasAny = resid.leads + resid.signups + resid.trial + resid.cust + resid.meeting > 0;
-    if (!hasAny) continue;
-    rows.push(buildRow(
-      def,
-      resid,
-      // Residual rows carry the bucket's NOT-attributed spend (none —
-      // spend belongs to specific Meta campaigns) so cost/efficiency
-      // columns show as "—" rather than misleading.
-      0,
-      `${def.key} — Unattributed (no UTM)`,
-    ));
-  }
+  // (Removed: per-bucket "— Unattributed (no UTM)" residual rows.
+  // These were too noisy in the table. UTM-less contacts that fell
+  // through to bucket attribution are silently dropped from the
+  // visible rows; bucket-level totals are no longer reported here.
+  // If you need the residual cohort for diagnostics, use the funnel
+  // card with the bucket key selected, or check the HubSpot UI.)
 
   // Unbucketed active Meta campaigns (no UTM substring rule maps their
   // name to a CAMPAIGN_DEFS bucket — e.g. "Retargeting Ads"). They can
