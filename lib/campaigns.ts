@@ -424,38 +424,73 @@ export async function computeCampaignAnalysis(
     trial: 0, cust: 0,
     clsNoShow: 0, clsInterested: 0, clsNotInterested: 0, clsDq: 0,
   });
-  const agg: Record<string, Agg> = {};
 
   const launchByBucket: Record<string, Date> = {};
   for (const def of CAMPAIGN_DEFS) {
     launchByBucket[def.key] = new Date(`${def.launch}T00:00:00.000Z`);
   }
 
-  // Cohort-based aggregation: every metric is counted for contacts whose
-  // createdate falls in the window. This preserves the causal link between
-  // campaign spend and outcomes for that cohort. Note: recent leads (within
-  // ~14 days of the cohort end) may not have matured to customer yet —
-  // the dashboard surfaces a maturity warning when that's the case.
-  for (const c of contacts) {
-    // Standard exclusions
-    const ref = (c.referral_source || "").toUpperCase().trim();
-    if (ref === "WIX" || ref === "HOPPER") continue;
+  // ---- Two-tier attribution ----
+  //
+  // Tier 1 (exact UTM → specific Meta campaign): When a contact's
+  // first_touch_utm_campaign starts with a Meta campaign's name (or
+  // vice versa — HubSpot sometimes truncates the UTM to ~60 chars),
+  // we attribute that contact directly to THAT Meta campaign. This
+  // is deterministic and matches what an analyst would do reading
+  // raw HubSpot.
+  //
+  // Tier 2 (bucket fallback for URL/source-only contacts): When the
+  // UTM is missing/garbage but the landing-page URL still places the
+  // contact in a campaign family (e.g. URL contains
+  // "direct-booking-website" but utm_campaign is blank), we attribute
+  // to the BUCKET. These contacts are genuinely unknown at the
+  // Meta-campaign level — they get split among the bucket's active
+  // Meta campaigns proportionally by spend (largest-remainder).
+  //
+  // Previously: ALL contacts went into the bucket aggregate and the
+  // whole thing was spend-split. That undercounted high-converting
+  // small-spend campaigns (e.g. Syerena: real 4 trials → dashboard 2)
+  // and overcounted low-converting large-spend campaigns in the same
+  // bucket.
 
-    // Date range (cohort: filter by createdate)
-    const created = parseDate(c.createdate);
-    if (!created || created < start || created > end) continue;
+  function matchMetaCampaign(utmRaw: string | null): string | null {
+    if (!utmRaw) return null;
+    let u = utmRaw.trim();
+    if (!u || u === "{campaignname}") return null;  // unfilled placeholder
+    // URL-decode if it looks encoded (some integrations land the UTM
+    // value still url-escaped — e.g. "12.05%20%7C%20...").
+    if (u.includes("%")) {
+      try { u = decodeURIComponent(u); } catch { /* leave as-is */ }
+    }
+    const uLower = u.toLowerCase();
+    let best: string | null = null;
+    let bestLen = 0;
+    for (const m of metaInsights.campaigns) {
+      const n = m.name.toLowerCase();
+      // Match if EITHER is a prefix of the other (HubSpot may truncate
+      // the UTM string at ~60 chars, so the meta name will be longer).
+      // Require at least 10 chars of overlap to avoid false-positives
+      // from very short UTMs.
+      const minLen = Math.min(uLower.length, n.length);
+      if (minLen < 10) continue;
+      if (uLower.slice(0, minLen) === n.slice(0, minLen)) {
+        // Prefer the longest Meta name on a tie (handles cases where
+        // two campaigns start with the same prefix — e.g. two 16.03
+        // launches — and one's name is a strict prefix of the other).
+        if (m.name.length > bestLen) {
+          best = m.name;
+          bestLen = m.name.length;
+        }
+      }
+    }
+    return best;
+  }
 
-    // Bucket
-    const bk = bucketContactToCampaign(c);
-    if (!bk) continue;
+  // Per-Meta-campaign exact attribution + per-bucket residual.
+  const metaAgg: Record<string, ReturnType<typeof empty>> = {};   // keyed by exact Meta name
+  const residualByBucket: Record<string, ReturnType<typeof empty>> = {};
 
-    // Pre-launch fallback exclusion
-    const launch = launchByBucket[bk];
-    if (launch && created < launch) continue;
-
-    if (!agg[bk]) agg[bk] = empty();
-    const a = agg[bk];
-
+  function bumpAgg(a: ReturnType<typeof empty>, c: HubSpotContact) {
     a.leads += 1;
     if (SIGNUP_LIFECYCLES.has(c.account_lifecycle || "")) a.signups += 1;
     if ((c.airbnbdqreason || "").trim()) a.airbnbDq += 1;
@@ -464,14 +499,42 @@ export async function computeCampaignAnalysis(
     if (c.engagements_last_meeting_booked) a.meeting += 1;
     if (c.hs_v2_date_entered_opportunity || c.trial__start_date) a.trial += 1;
     if (c.hs_v2_date_entered_customer && hadPaidPlan(c) && !isQuickCancel(c)) a.cust += 1;
-
-    // Apply derived classification (call funnel only — uses 3-source classifier
-    // from classifyCallContacts: sales_call_outcome ∪ note keywords ∪ Aircall)
     const cls = callClassifications.get(c.id);
     if (cls === "no_show") a.clsNoShow += 1;
     else if (cls === "interested") a.clsInterested += 1;
     else if (cls === "not_interested") a.clsNotInterested += 1;
     else if (cls === "dq") a.clsDq += 1;
+  }
+
+  for (const c of contacts) {
+    const ref = (c.referral_source || "").toUpperCase().trim();
+    if (ref === "WIX" || ref === "HOPPER") continue;
+
+    const created = parseDate(c.createdate);
+    if (!created || created < start || created > end) continue;
+
+    // Tier 1: try exact Meta-campaign match via UTM. If hit, attribute
+    // to the SPECIFIC Meta campaign and stop — that contact is
+    // positively identified.
+    const metaMatch = matchMetaCampaign(c.first_touch_utm_campaign);
+    if (metaMatch) {
+      (metaAgg[metaMatch] ||= empty());
+      bumpAgg(metaAgg[metaMatch], c);
+      continue;
+    }
+
+    // Tier 2: bucket fallback (URL/source-data attribution).
+    const bk = bucketContactToCampaign(c);
+    if (!bk) continue;
+
+    // Pre-launch fallback exclusion — applies only to UTM-less
+    // contacts (the URL slug-matched ones), since a UTM-tagged
+    // contact is positively identified above.
+    const launch = launchByBucket[bk];
+    if (launch && created < launch) continue;
+
+    (residualByBucket[bk] ||= empty());
+    bumpAgg(residualByBucket[bk], c);
   }
 
   // ---- Per-Meta-campaign row generation ----
@@ -535,7 +598,7 @@ export async function computeCampaignAnalysis(
   // own efficiency.
   function buildRow(
     def: typeof CAMPAIGN_DEFS[number],
-    a: typeof agg[string],
+    a: Agg,
     sp: number,
     nameOverride?: string,
   ): CampaignAnalysisRow {
@@ -589,90 +652,105 @@ export async function computeCampaignAnalysis(
     };
   }
 
-  // Assemble rows: one per Meta campaign, per bucket.
+  // Assemble rows: exact UTM attribution per Meta campaign, plus
+  // proportional split of the residual (URL-fallback-only contacts).
   const rows: CampaignAnalysisRow[] = [];
 
   for (const def of CAMPAIGN_DEFS) {
-    const a = agg[def.key] ?? empty();
     const metas = metaByBucket[def.key] ?? [];
 
     if (metas.length === 0) {
-      // No active Meta campaigns currently in this family (window).
-      // Still emit the bucket row so the table doesn't suddenly drop
-      // historical rows on a window with no active spend.
-      rows.push(buildRow(def, a, spendByBucket[def.key] ?? 0));
+      // No active Meta campaigns in this bucket — emit a residual-only
+      // row so any URL-fallback contacts still surface. The residual
+      // here EQUALS the bucket's full agg (no exact-UTM contacts split
+      // it off), preserving the historical paused-bucket display.
+      const resid = residualByBucket[def.key] ?? empty();
+      rows.push(buildRow(def, resid, spendByBucket[def.key] ?? 0));
       continue;
     }
 
-    // Split bucket-level HubSpot counts across Meta campaigns by spend.
+    // Per-Meta exact attribution + proportional split of bucket residual.
+    const resid = residualByBucket[def.key] ?? empty();
     const spends = metas.map((m) => m.spend);
-    const split = {
-      leads:           splitInt(a.leads,            spends),
-      signups:         splitInt(a.signups,          spends),
-      airbnbDq:        splitInt(a.airbnbDq,         spends),
-      auth:            splitInt(a.auth,             spends),
-      ready:           splitInt(a.ready,            spends),
-      meeting:         splitInt(a.meeting,          spends),
-      trial:           splitInt(a.trial,            spends),
-      cust:            splitInt(a.cust,             spends),
-      clsNoShow:       splitInt(a.clsNoShow,        spends),
-      clsInterested:   splitInt(a.clsInterested,    spends),
-      clsNotInterested:splitInt(a.clsNotInterested, spends),
-      clsDq:           splitInt(a.clsDq,            spends),
+    const residSplit = {
+      leads:           splitInt(resid.leads,            spends),
+      signups:         splitInt(resid.signups,          spends),
+      airbnbDq:        splitInt(resid.airbnbDq,         spends),
+      auth:            splitInt(resid.auth,             spends),
+      ready:           splitInt(resid.ready,            spends),
+      meeting:         splitInt(resid.meeting,          spends),
+      trial:           splitInt(resid.trial,            spends),
+      cust:            splitInt(resid.cust,             spends),
+      clsNoShow:       splitInt(resid.clsNoShow,        spends),
+      clsInterested:   splitInt(resid.clsInterested,    spends),
+      clsNotInterested:splitInt(resid.clsNotInterested, spends),
+      clsDq:           splitInt(resid.clsDq,            spends),
     };
 
     metas.forEach((m, i) => {
+      const own = metaAgg[m.name] ?? empty();
       const a_i = {
-        leads: split.leads[i],
-        signups: split.signups[i],
-        airbnbDq: split.airbnbDq[i],
-        auth: split.auth[i],
-        ready: split.ready[i],
-        meeting: split.meeting[i],
-        trial: split.trial[i],
-        cust: split.cust[i],
-        clsNoShow: split.clsNoShow[i],
-        clsInterested: split.clsInterested[i],
-        clsNotInterested: split.clsNotInterested[i],
-        clsDq: split.clsDq[i],
+        leads:            own.leads            + residSplit.leads[i],
+        signups:          own.signups          + residSplit.signups[i],
+        airbnbDq:         own.airbnbDq         + residSplit.airbnbDq[i],
+        auth:             own.auth             + residSplit.auth[i],
+        ready:            own.ready            + residSplit.ready[i],
+        meeting:          own.meeting          + residSplit.meeting[i],
+        trial:            own.trial            + residSplit.trial[i],
+        cust:             own.cust             + residSplit.cust[i],
+        clsNoShow:        own.clsNoShow        + residSplit.clsNoShow[i],
+        clsInterested:    own.clsInterested    + residSplit.clsInterested[i],
+        clsNotInterested: own.clsNotInterested + residSplit.clsNotInterested[i],
+        clsDq:            own.clsDq            + residSplit.clsDq[i],
       };
       rows.push(buildRow(def, a_i, m.spend, m.name));
     });
   }
 
-  // Unbucketed active Meta campaigns: show their spend; HubSpot funnel
-  // metrics stay null/0 because no UTM substring rule attributes them.
-  // (To get full attribution, add a matcher in bucketContactToCampaign +
-  // bucketMetaCampaign + a CAMPAIGN_DEFS entry.)
+  // Unbucketed active Meta campaigns (no UTM substring rule maps their
+  // name to a CAMPAIGN_DEFS bucket — e.g. "Retargeting Ads"). They can
+  // STILL pick up HubSpot attribution if a contact's utm_campaign
+  // matches the Meta name exactly via Tier 1, so we surface metaAgg
+  // here. If the campaign also doesn't show up in any contact's UTM,
+  // the row reads zeros (honest result for an unbucketed campaign with
+  // no UTM coverage).
   for (const m of unbucketedMeta) {
     const isCall = /\bcall\b/i.test(m.name);
+    const a = metaAgg[m.name] ?? empty();
+    const sp = m.spend;
+    const cpa = (n: number) => (n > 0 ? sp / n : null);
+    const pct = (n: number, d: number) => (d > 0 ? (n / d) * 100 : 0);
+    const meetingsHeld = isCall ? Math.max(0, a.meeting - a.clsNoShow) : null;
+    const meetingToTrialRate = isCall && meetingsHeld && meetingsHeld > 0
+      ? (a.trial / meetingsHeld) * 100
+      : null;
     rows.push({
       campaign: m.name,
       type: isCall ? "call" : "self",
-      spend: m.spend,
+      spend: sp,
       optSignal: "unknown",
-      leads: 0,
-      meetingsBooked: isCall ? 0 : null,
-      meetingsHeld: isCall ? 0 : null,
-      signups: 0,
-      qualifiedSignups: 0,
-      airbnbConnected: 0,
-      readyToLaunch: 0,
-      airbnbDqRate: 0,
-      formToMeetingRate: isCall ? null : null,
-      costPerMeeting: isCall ? null : null,
-      noShowMtgRate: isCall ? null : null,
-      dqMtgRate: isCall ? null : null,
-      interestedMtgRate: isCall ? null : null,
-      notInterestedMtgRate: isCall ? null : null,
-      outcomeCoverage: isCall ? null : null,
-      trials: 0,
-      costPerTrial: null,
-      customers: 0,
-      costPerCustomer: null,
-      meetingToTrialRate: isCall ? null : null,
-      qsToTrialRate: null,
-      qsToCustomerRate: null,
+      leads: a.leads,
+      meetingsBooked: isCall ? a.meeting : null,
+      meetingsHeld,
+      signups: a.signups,
+      qualifiedSignups: a.signups - a.airbnbDq,
+      airbnbConnected: a.auth,
+      readyToLaunch: a.ready,
+      airbnbDqRate: pct(a.airbnbDq, a.leads),
+      formToMeetingRate: isCall ? pct(a.meeting, a.leads) : null,
+      costPerMeeting: isCall ? cpa(a.meeting) : null,
+      noShowMtgRate: isCall ? pct(a.clsNoShow, a.meeting) : null,
+      dqMtgRate: isCall ? pct(a.clsDq, a.meeting) : null,
+      interestedMtgRate: isCall ? pct(a.clsInterested, a.meeting) : null,
+      notInterestedMtgRate: isCall ? pct(a.clsNotInterested, a.meeting) : null,
+      outcomeCoverage: isCall ? pct(a.clsNoShow + a.clsInterested + a.clsNotInterested + a.clsDq, a.meeting) : null,
+      trials: a.trial,
+      costPerTrial: cpa(a.trial),
+      customers: a.cust,
+      costPerCustomer: cpa(a.cust),
+      meetingToTrialRate,
+      qsToTrialRate: (a.signups - a.airbnbDq) > 0 ? (a.trial / (a.signups - a.airbnbDq)) * 100 : null,
+      qsToCustomerRate: (a.signups - a.airbnbDq) > 0 ? (a.cust / (a.signups - a.airbnbDq)) * 100 : null,
     });
   }
 
