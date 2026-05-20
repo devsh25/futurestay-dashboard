@@ -10,7 +10,7 @@ import {
   DashboardData,
   PeriodFilter,
 } from "./types";
-import { bucketContactToCampaign } from "./campaigns";
+import { bucketContactToCampaign, matchContactToMetaCampaign } from "./campaigns";
 import {
   tzStartOfDay, tzEndOfDay, tzAddDays, tzStartOfWeek,
   tzStartOfMonth, tzStartOfQuarter, tzDateKey,
@@ -859,7 +859,14 @@ export function computeFunnelByCampaign(
   countries: string[],
   channels: string[],
   customStart?: string,
-  customEnd?: string
+  customEnd?: string,
+  // Optional list of currently-active Meta campaign names. When the
+  // submitted `campaign` matches one of these, we use the per-Meta
+  // attribution chain (ref_source / utm / src2) — same logic as
+  // Campaign Analysis — so e.g. a Syerena filter excludes 05.03's
+  // contacts that share the bucket. Falls back to bucket attribution
+  // for legacy bucket-key params.
+  activeMetaCampaigns: string[] = [],
 ): FunnelStage[] {
   const clean = excludePartnerSources(contacts);
   const { start, end } = resolvedDateRange(period, customStart, customEnd);
@@ -873,7 +880,22 @@ export function computeFunnelByCampaign(
 
   // Campaign filter — only applied if a campaign was specified.
   if (campaign) {
-    signupFiltered = signupFiltered.filter((c) => bucketContactToCampaign(c) === campaign);
+    // Two attribution paths:
+    //   1. The submitted name is an active Meta campaign → use the
+    //      per-Meta matcher (UTM/src2/ref_source). This excludes
+    //      sibling campaigns that share the same bucket, fixing the
+    //      "Syerena filter showed all DW Booking" bug.
+    //   2. The submitted name is a legacy bucket key (e.g. someone
+    //      hits /api/funnel?campaign=Direct%20Website%20Call) → fall
+    //      back to bucketContactToCampaign substring match.
+    const isMetaName = activeMetaCampaigns.includes(campaign);
+    if (isMetaName) {
+      signupFiltered = signupFiltered.filter(
+        (c) => matchContactToMetaCampaign(c, activeMetaCampaigns) === campaign,
+      );
+    } else {
+      signupFiltered = signupFiltered.filter((c) => bucketContactToCampaign(c) === campaign);
+    }
   }
 
   const qualifiedSignups = signupFiltered.filter((c) => !hasDQ(c));

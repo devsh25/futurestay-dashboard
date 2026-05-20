@@ -1,20 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchAllContacts } from "@/lib/hubspot";
 import { computeFunnelByCampaign } from "@/lib/funnel";
-import { bucketMetaCampaign } from "@/lib/campaigns";
+import { fetchMetaInsights } from "@/lib/meta";
 import { PeriodFilter } from "@/lib/types";
 
 /**
  * Per-campaign funnel scoping.
  *
- *   GET /api/funnel?period=custom&start=...&end=...&campaign=Airbnb%20Optimization%20Call
+ *   GET /api/funnel?period=custom&start=...&end=...&campaign=12.05%20%7C%20...
  *
- * Returns FunnelStage[] for contacts attributed to the named campaign
- * within the period. If campaign is omitted/empty, returns the funnel
- * for the full cohort (matches what /api/hubspot/contacts returns
- * under data.funnel).
+ * The `campaign` param is expected to be a full Meta campaign name
+ * (matches what the FunnelCard dropdown submits). We pass through the
+ * list of currently-active Meta campaigns so computeFunnelByCampaign
+ * can do per-Meta attribution (UTM / src2 / ref_source) — same logic
+ * as Campaign Analysis — and exclude sibling campaigns sharing the
+ * same bucket. If the submitted name doesn't match any active Meta
+ * campaign, it's treated as a bucket key for backward compat.
  *
- * Reuses the cached fetchAllContacts() so it's cheap on warm cache.
+ * Reuses cached fetchAllContacts() so warm-cache calls are cheap.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -29,33 +32,31 @@ export async function GET(request: NextRequest) {
     const countries = countriesParam ? countriesParam.split(",").filter(Boolean) : [];
     const channels = channelsParam ? channelsParam.split(",").filter(Boolean) : [];
 
-    // Resolve the campaign param. The FunnelCard dropdown now submits
-    // full Meta campaign names like "18.05 | US & CA | Direct Website
-    // Call | Batch 2 Video Ads | Campaign", so we translate to the
-    // bucket key the HubSpot attribution lives under. Backward compat:
-    // if the param is already a bucket key (e.g. "Direct Website
-    // Call"), bucketMetaCampaign returns the same string. If it
-    // matches no UTM rule (e.g. "Retargeting Ads"), we pass the raw
-    // string through — bucketContactToCampaign won't match any contact
-    // and the funnel returns zeros, which is the honest result for an
-    // unbucketed Meta campaign.
-    const campaign = campaignParam
-      ? (bucketMetaCampaign(campaignParam) ?? campaignParam)
-      : null;
+    // Pull contacts + the active Meta campaign list in parallel. The
+    // Meta list drives per-Meta attribution (no longer collapsing to
+    // bucket level). We use period=allTime so the list isn't tied to
+    // the filter window — a Syerena filter should work even when the
+    // user is looking at a window where Syerena had no spend.
+    const [contacts, metaInsights] = await Promise.all([
+      fetchAllContacts(),
+      fetchMetaInsights("2024-01-01", new Date().toISOString().slice(0, 10)).catch((err) => {
+        console.error("[funnel] fetchMetaInsights failed, falling back to bucket attribution:", err);
+        return { campaigns: [] as { name: string }[] };
+      }),
+    ]);
+    const activeMetaCampaigns = metaInsights.campaigns.map((m) => m.name);
 
-    const contacts = await fetchAllContacts();
     const funnel = computeFunnelByCampaign(
       contacts,
       period,
-      campaign,
+      campaignParam,
       countries,
       channels,
       customStart,
-      customEnd
+      customEnd,
+      activeMetaCampaigns,
     );
 
-    // Echo the user-submitted name (not the resolved bucket) so the
-    // UI shows what the user picked in their dropdown.
     return NextResponse.json({ funnel, campaign: campaignParam });
   } catch (error) {
     console.error("Funnel API error:", error);
