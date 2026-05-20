@@ -453,12 +453,29 @@ export async function computeCampaignAnalysis(
   // and overcounted low-converting large-spend campaigns in the same
   // bucket.
 
-  function matchMetaCampaign(utmRaw: string | null): string | null {
-    if (!utmRaw) return null;
-    let u = utmRaw.trim();
-    if (!u || u === "{campaignname}") return null;  // unfilled placeholder
-    // URL-decode if it looks encoded (some integrations land the UTM
-    // value still url-escaped — e.g. "12.05%20%7C%20...").
+  // Referral-source overrides for Tier 0 attribution. Landing pages
+  // for some campaigns (typically influencer / custom-LP campaigns)
+  // set a distinctive ref code that uniquely identifies the campaign.
+  // The first_touch_utm_campaign can later get overwritten by a
+  // sibling Meta ad click, while ref_source persists — so for these
+  // codes we trust ref_source over UTM.
+  //
+  // Add entries as new custom-LP campaigns launch.
+  //   key   = referral_source value (uppercase, trimmed)
+  //   value = case-insensitive substring that MUST appear in the
+  //           Meta campaign's name (so we still respect the active
+  //           campaign roster — if the targeted campaign isn't
+  //           currently active, the override is a no-op).
+  const REF_SOURCE_TO_CAMPAIGN_HINT: Record<string, string> = {
+    SORR: "Syerena",   // Syerena Orr influencer LP
+  };
+
+  // Prefix match a utm-shaped string against the active Meta names.
+  // Returns the longest matching Meta name, or null.
+  function tryPrefixMatch(raw: string | null | undefined): string | null {
+    if (!raw) return null;
+    let u = raw.trim();
+    if (!u || u === "{campaignname}" || u === "{{campaign.name}}") return null;
     if (u.includes("%")) {
       try { u = decodeURIComponent(u); } catch { /* leave as-is */ }
     }
@@ -468,15 +485,16 @@ export async function computeCampaignAnalysis(
     for (const m of metaInsights.campaigns) {
       const n = m.name.toLowerCase();
       // Match if EITHER is a prefix of the other (HubSpot may truncate
-      // the UTM string at ~60 chars, so the meta name will be longer).
-      // Require at least 10 chars of overlap to avoid false-positives
-      // from very short UTMs.
+      // these fields at ~60 chars, so the meta name will be longer).
+      // Require ≥10 chars of overlap to avoid false-positives from
+      // generic short tokens like "brand" or "signup".
       const minLen = Math.min(uLower.length, n.length);
       if (minLen < 10) continue;
       if (uLower.slice(0, minLen) === n.slice(0, minLen)) {
         // Prefer the longest Meta name on a tie (handles cases where
         // two campaigns start with the same prefix — e.g. two 16.03
-        // launches — and one's name is a strict prefix of the other).
+        // launches with different objectives — and one's name is a
+        // strict prefix of the other).
         if (m.name.length > bestLen) {
           best = m.name;
           bestLen = m.name.length;
@@ -484,6 +502,34 @@ export async function computeCampaignAnalysis(
       }
     }
     return best;
+  }
+
+  function matchMetaCampaign(c: HubSpotContact): string | null {
+    // Tier 0: referral_source override. Influencer LPs (e.g. Syerena's
+    // /syerena-orr page) set ref_source="SORR" — a persistent server-
+    // side signal that survives the user clicking through a sibling
+    // ad later (which would overwrite first_touch_utm_campaign). Trust
+    // ref_source for these known codes.
+    const ref = (c.referral_source || "").toUpperCase().trim();
+    if (ref && REF_SOURCE_TO_CAMPAIGN_HINT[ref]) {
+      const hint = REF_SOURCE_TO_CAMPAIGN_HINT[ref].toLowerCase();
+      for (const m of metaInsights.campaigns) {
+        if (m.name.toLowerCase().includes(hint)) return m.name;
+      }
+      // hint didn't match any active campaign — fall through to UTM.
+    }
+
+    // Tier 1a: prefix-match on first_touch_utm_campaign.
+    const utmMatch = tryPrefixMatch(c.first_touch_utm_campaign);
+    if (utmMatch) return utmMatch;
+
+    // Tier 1b: prefix-match on hs_analytics_source_data_2. Some
+    // contacts arrive with utm_campaign blank but src2 carrying the
+    // full Meta name (HubSpot's analytics pipeline captures both, but
+    // some sources only populate src2). Without this fallback, e.g.
+    // the 20.04 Direct Website Call cohort that has dozens of
+    // src2-only-tagged contacts gets dumped into Tier 2 residual.
+    return tryPrefixMatch(c.hs_analytics_source_data_2);
   }
 
   // Per-Meta-campaign exact attribution + per-bucket residual.
@@ -513,10 +559,10 @@ export async function computeCampaignAnalysis(
     const created = parseDate(c.createdate);
     if (!created || created < start || created > end) continue;
 
-    // Tier 1: try exact Meta-campaign match via UTM. If hit, attribute
-    // to the SPECIFIC Meta campaign and stop — that contact is
-    // positively identified.
-    const metaMatch = matchMetaCampaign(c.first_touch_utm_campaign);
+    // Tier 1: try exact Meta-campaign match via UTM / src2 / ref_source
+    // override. If hit, attribute to the SPECIFIC Meta campaign and
+    // stop — that contact is positively identified.
+    const metaMatch = matchMetaCampaign(c);
     if (metaMatch) {
       (metaAgg[metaMatch] ||= empty());
       bumpAgg(metaAgg[metaMatch], c);
