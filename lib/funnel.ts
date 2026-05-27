@@ -1028,7 +1028,16 @@ export function computeTimeSeries(contacts: HubSpotContact[]): TimeSeries {
   // the 300s function timeout). Simple calendar increment on the date
   // string is DST-safe — we're just enumerating calendar days, not
   // crossing time boundaries — and dramatically faster.
-  const startKey = tzDateKey(new Date(minTs));
+  //
+  // Floor the x-axis at RUN_RATE_START. The account has signups going
+  // back to January, but the chart is pinned to start March 1, 2026
+  // (the meaningful start of the current paid-growth era). Events
+  // before this date are dropped — they won't get a slot in dayIndex,
+  // so bucketIndex returns -1 and they're skipped. Lexicographic max
+  // works because both are YYYY-MM-DD.
+  const RUN_RATE_START = "2026-03-01";
+  const earliestKey = tzDateKey(new Date(minTs));
+  const startKey = earliestKey > RUN_RATE_START ? earliestKey : RUN_RATE_START;
   const endKey = tzDateKey(new Date(todayTs));
 
   const days: string[] = [];
