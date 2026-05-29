@@ -190,58 +190,12 @@
   transform-origin: 0 0;
 }
 
-/* ── PDF export (Download PDF button → window.print()) ──
-   The button triggers the browser's native print-to-PDF so the export
-   captures the real DOM: recharts SVGs, the dark theme, and every card.
-   These rules turn the on-screen dashboard into a clean printable doc. */
-@media print {
-  @page {
-    /* Landscape fits the multi-column card grids without cramping. */
-    size: A4 landscape;
-    margin: 12mm;
-  }
-
-  /* Force backgrounds/colors to print — the dashboard is a dark theme,
-     so without this most browsers would drop the bg and ruin contrast. */
-  *,
-  *::before,
-  *::after {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-
-  html,
-  body {
-    background: #0A0F1A !important;
-  }
-
-  /* Anything explicitly excluded from the export (the button itself, the
-     interactive filter controls, the indeterminate progress bar). */
-  .no-print,
-  .lp-progress-bar {
-    display: none !important;
-  }
-
-  /* Un-stick the header and drop the blur so it prints as a plain banner
-     at the very top of the first page instead of floating/overlapping. */
-  header.sticky {
-    position: static !important;
-    backdrop-filter: none !important;
-  }
-
-  /* Let the content use the full printable width and never get dimmed or
-     blocked by the on-screen refresh states. */
-  main {
-    max-width: none !important;
-  }
-  .opacity-60 {
-    opacity: 1 !important;
-  }
-
-  /* Keep each card (and section heading) whole — avoid splitting a card
-     across a page boundary, which would chop charts and tables in half. */
-  [data-slot="card"] {
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
+/* ── PDF export (Download PDF button) ──
+   The button rasterizes #dashboard-root with html2canvas-pro and lays it
+   into a landscape jsPDF. While the snapshot is being taken, the document
+   carries the `.pdf-capturing` class so the interactive chrome (the button
+   itself, the filter controls) is hidden from the captured image — only
+   the dashboard content and its header banner are exported. */
+.pdf-capturing .no-print {
+  display: none !important;
 }
