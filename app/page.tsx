@@ -16,6 +16,7 @@ import MetaSpendCard from "@/components/dashboard/MetaSpendCard";
 import CampaignAnalysisCard from "@/components/dashboard/CampaignAnalysisCard";
 import SectionHeading, { Icons } from "@/components/dashboard/SectionHeading";
 import ActiveFilterChips from "@/components/ActiveFilterChips";
+import DownloadPdfButton from "@/components/DownloadPdfButton";
 
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -115,19 +116,24 @@ export default function Dashboard() {
                 </span>
               )}
             </div>
-            <FilterBar
-              period={period}
-              onPeriodChange={setPeriod}
-              customStart={customStart}
-              customEnd={customEnd}
-              onCustomStartChange={setCustomStart}
-              onCustomEndChange={setCustomEnd}
-              countries={countries}
-              onCountriesChange={setCountries}
-              channels={channels}
-              onChannelsChange={setChannels}
-              loading={loading}
-            />
+            <div className="flex items-center gap-3">
+              <DownloadPdfButton />
+              <div className="no-print contents">
+                <FilterBar
+                  period={period}
+                  onPeriodChange={setPeriod}
+                  customStart={customStart}
+                  customEnd={customEnd}
+                  onCustomStartChange={setCustomStart}
+                  onCustomEndChange={setCustomEnd}
+                  countries={countries}
+                  onCountriesChange={setCountries}
+                  channels={channels}
+                  onChannelsChange={setChannels}
+                  loading={loading}
+                />
+              </div>
+            </div>
           </div>
         </div>
       </header>
