@@ -92,7 +92,7 @@ export default function Dashboard() {
   }, [fetchData]);
 
   return (
-    <div className="min-h-screen bg-[#0A0F1A] text-white antialiased">
+    <div id="dashboard-root" className="min-h-screen bg-[#0A0F1A] text-white antialiased">
       {/* Sticky header — Dashbrd X look: subtle blur + hairline divider,
           left cluster (logo + title + breadcrumb), right cluster (filters
           + qualified-signups chip). */}
