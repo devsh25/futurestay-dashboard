@@ -237,46 +237,42 @@ export default function RetentionCurveChart() {
               </div>
             </div>
 
-            {/* Segment summary chips — clickable to toggle that segment's
-                line on/off in the chart. Active = full colour + bright
-                bg; inactive = dim border + muted text. The last-active
-                chip is blocked from being deselected (toggleSegment
-                guards size <= 1) so the chart never goes empty. */}
-            <div className="flex flex-wrap gap-3 mb-5">
+            {/* Segment toggle chips — same pattern + styling as the
+                Run Rate chart's metric chips so clickability reads at
+                a glance. Click to hide that segment's line; click
+                again to bring it back. Last-visible chip is sticky
+                (toggleSegment no-ops on size<=1) so the chart never
+                empties. Cohort size + Wk1→final summary are inlined
+                as a single muted suffix on each chip. */}
+            <div className="flex flex-wrap items-center gap-2 mb-5">
+              <span className="text-[11px] uppercase tracking-wider text-[#5B6478] font-semibold mr-1">Toggle:</span>
               {data.segments.map((s) => {
                 const last = s.points[s.points.length - 1];
                 const wk1 = s.points.find((p) => p.day === 7);
                 const isOn = active?.has(s.segment) ?? true;
                 const color = SEGMENT_COLORS[s.segment] || "#FFF";
+                const summary = wk1 && last
+                  ? `n=${s.totalCohort} · ${wk1.retentionPct.toFixed(0)}%→${last.retentionPct.toFixed(0)}%`
+                  : `n=${s.totalCohort}`;
                 return (
                   <button
                     key={s.segment}
+                    type="button"
                     onClick={() => toggleSegment(s.segment)}
-                    className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border transition-colors text-left ${
-                      isOn
-                        ? "bg-[#1A2235] border-[#1F2937] hover:bg-[#1F2937]"
-                        : "bg-[#11182B] border-[#1F2937] opacity-50 hover:opacity-75"
-                    }`}
-                    title={isOn ? `Hide ${s.segment}` : `Show ${s.segment}`}
                     aria-pressed={isOn}
+                    title={isOn ? `Click to hide ${s.segment}` : `Click to show ${s.segment}`}
+                    className={`inline-flex items-center gap-2 h-8 px-3 rounded-full border text-[12px] font-medium transition-all cursor-pointer ${
+                      isOn
+                        ? "bg-[#1A2235] border-[#1F2937] text-white"
+                        : "bg-[#11182B] border-[#1F2937] text-[#5B6478] hover:text-[#C9D1DC]"
+                    }`}
                   >
                     <span
-                      className="h-2.5 w-2.5 rounded-full shrink-0"
+                      className="h-2 w-2 rounded-full"
                       style={{ backgroundColor: isOn ? color : "#1F2937" }}
                     />
-                    <div className="flex flex-col">
-                      <span className={`text-[13px] font-semibold ${isOn ? "text-white" : "text-[#5B6478]"}`}>
-                        {s.segment}{" "}
-                        <span className="text-[#8B92A3] font-normal text-[12px]">
-                          (n={s.totalCohort})
-                        </span>
-                      </span>
-                      {wk1 && last && (
-                        <span className="text-[11px] text-[#8B92A3] tabular-nums">
-                          Wk1 {wk1.retentionPct.toFixed(0)}% → {last.label} {last.retentionPct.toFixed(0)}%
-                        </span>
-                      )}
-                    </div>
+                    <span>{s.segment}</span>
+                    <span className="text-[11px] tabular-nums opacity-60">{summary}</span>
                   </button>
                 );
               })}
