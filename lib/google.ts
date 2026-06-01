@@ -19,7 +19,10 @@
 import type { CampaignRow } from "./types";
 
 // Bump this when Google rolls a new GA version. Quarterly cadence.
-const GOOGLE_ADS_API_VERSION = "v18";
+// v17/v18/v19 returned HTTP 404 in production probe (decommissioned);
+// v20/v21 are the active versions as of probe date. Sticking to v21
+// since it's the newer of the two — released 2025.
+const GOOGLE_ADS_API_VERSION = "v21";
 
 void ({} as CampaignRow);  // suppress unused-import nit until consumed by a card
 
