@@ -23,6 +23,10 @@ const CONTACT_PROPERTIES = [
   "don_t_use____plan_type",
   "don_t_use_____old_plan_type",
   "limited_access_previous_plan",
+  // Chargebee plan code: 100%-populated for paid customers and carries
+  // BOTH plan family AND billing cycle (e.g. "Futurestay-Amplify-USD-Yearly").
+  // Preferred source for retention-by-cycle segmentation.
+  "cb_product",
   "first_touch_utm_campaign",
   "first_touch_utm_source",
   "first_touch_utm_medium",
@@ -186,6 +190,7 @@ async function doFetchAllContacts(): Promise<HubSpotContact[]> {
         plan_type_legacy: p["don_t_use____plan_type"] || null,
         plan_type_old: p["don_t_use_____old_plan_type"] || null,
         limited_access_previous_plan: p.limited_access_previous_plan || null,
+        cb_product: p.cb_product || null,
         first_touch_utm_campaign: p.first_touch_utm_campaign || null,
         first_touch_utm_source: p.first_touch_utm_source || null,
         first_touch_utm_medium: p.first_touch_utm_medium || null,
@@ -302,6 +307,7 @@ async function doFetchAllCustomers(): Promise<HubSpotContact[]> {
         plan_type_legacy: p["don_t_use____plan_type"] || null,
         plan_type_old: p["don_t_use_____old_plan_type"] || null,
         limited_access_previous_plan: p.limited_access_previous_plan || null,
+        cb_product: p.cb_product || null,
         first_touch_utm_campaign: p.first_touch_utm_campaign || null,
         first_touch_utm_source: p.first_touch_utm_source || null,
         first_touch_utm_medium: p.first_touch_utm_medium || null,

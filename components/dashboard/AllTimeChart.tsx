@@ -22,7 +22,7 @@ function addDaysToKey(key: string, n: number): string {
   return `${yy}-${mm}-${dd}`;
 }
 
-type Granularity = "day" | "week";
+type Granularity = "day" | "week" | "month";
 
 type Series = {
   days: string[];
@@ -130,6 +130,71 @@ function bucketByWeek(data: Series): WeeklyData {
   };
 }
 
+/** Aggregate daily series into calendar months (Eastern Time).
+ *  Returns the same shape as bucketByWeek with `weekStart`/`weekEnd`
+ *  repurposed as month-start (1st) and month-end (last day) so the
+ *  downstream chart code (tooltips, partial flag, _solid/_dashed
+ *  split) doesn't need a parallel codepath. The `partial` flag is
+ *  true when the month has fewer real days of data than its calendar
+ *  length — that's the current (still-running) month at the trailing
+ *  edge, and the truncated month at the leading edge if the series
+ *  starts mid-month. */
+function bucketByMonth(data: Series): WeeklyData {
+  // `day` strings are YYYY-MM-DD ET keys. Month key = YYYY-MM.
+  type Row = { monthStart: string; monthEnd: string; days: Set<string>;
+               signups: number; airbnbConnects: number; readyToLaunch: number;
+               trials: number; customers: number; daysInMonth: number };
+  const buckets = new Map<string, Row>();
+  function lastDayOfMonth(y: number, m: number): number {
+    // m is 1-indexed; Date.UTC with day 0 returns last day of previous month
+    return new Date(Date.UTC(y, m, 0)).getUTCDate();
+  }
+  for (let i = 0; i < data.days.length; i++) {
+    const day = data.days[i];
+    const monthKey = day.slice(0, 7);                  // "2026-04"
+    const y = parseInt(monthKey.slice(0, 4), 10);
+    const m = parseInt(monthKey.slice(5, 7), 10);
+    if (!buckets.has(monthKey)) {
+      const last = lastDayOfMonth(y, m);
+      buckets.set(monthKey, {
+        monthStart: `${monthKey}-01`,
+        monthEnd:   `${monthKey}-${String(last).padStart(2, "0")}`,
+        days: new Set<string>(),
+        signups: 0, airbnbConnects: 0, readyToLaunch: 0, trials: 0, customers: 0,
+        daysInMonth: last,
+      });
+    }
+    const b = buckets.get(monthKey)!;
+    b.days.add(day);
+    b.signups       += data.signups[i];
+    b.airbnbConnects+= data.airbnbConnects[i];
+    b.readyToLaunch += data.readyToLaunch[i];
+    b.trials        += data.trials[i];
+    b.customers     += data.customers[i];
+  }
+  const sorted = Array.from(buckets.values()).sort((a, b) => a.monthStart.localeCompare(b.monthStart));
+  return {
+    weekStart: sorted.map((b) => b.monthStart),
+    weekEnd:   sorted.map((b) => b.monthEnd),
+    signups:   sorted.map((b) => b.signups),
+    airbnbConnects: sorted.map((b) => b.airbnbConnects),
+    readyToLaunch:  sorted.map((b) => b.readyToLaunch),
+    trials:    sorted.map((b) => b.trials),
+    customers: sorted.map((b) => b.customers),
+    // A month is "partial" if we don't have a row for every calendar
+    // day in it. Catches both the trailing current-month case (today
+    // < last day) and the leading mid-month-start case.
+    partial:   sorted.map((b) => b.days.size < b.daysInMonth),
+  };
+}
+
+/** "Mar '26" — short month + 2-digit year for monthly-mode ticks. */
+function shortMonth(iso: string): string {
+  const [y, m] = iso.split("-");
+  const months = ["", "Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${months[parseInt(m, 10)]} '${y.slice(2)}`;
+}
+
 /** "Apr 28" — short month + day for x-axis ticks. */
 function shortDate(iso: string): string {
   const [, m, d] = iso.split("-");
@@ -174,15 +239,17 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
   }, [onReady]);
 
   // Build chart-ready rows. Shape depends on granularity:
-  //   day:  one row per ET calendar day; values are the raw daily
-  //         counts (optionally 7-day smoothed for visual readability)
-  //   week: one row per Monday-Sunday ET week; values are the SUM of
-  //         that week's daily counts (smoothing N/A — aggregation is
-  //         already smoothing weekend dips into a single bar)
+  //   day:   one row per ET calendar day; values are the raw daily
+  //          counts (optionally 7-day smoothed for visual readability)
+  //   week:  one row per Monday-Sunday ET week; values are SUM per week
+  //          (smoothing N/A — aggregation already smooths weekend dips)
+  //   month: one row per calendar month; values are SUM per month
+  //          (current month and any mid-month-start month flagged
+  //          partial and rendered dashed)
   const rows = useMemo(() => {
     if (!data) return [];
-    if (granularity === "week") {
-      const w = bucketByWeek(data);
+    if (granularity === "week" || granularity === "month") {
+      const w = granularity === "week" ? bucketByWeek(data) : bucketByMonth(data);
       const N = w.weekStart.length;
 
       // Split each metric's values into two parallel arrays per row:
@@ -293,12 +360,16 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
         </CardTitle>
         <p className="text-[13px] text-[#8B92A3] mt-2 leading-relaxed">
           <span className="text-[#1E6FFF] font-medium">Period-based.</span>{" "}
-          {granularity === "week" ? "Weekly" : "Daily"} counts of each milestone since the
-          earliest signup, bucketed by Monday-Sunday ET week ({granularity === "week" ? "sum per week" : "one point per day"}). Signups / Airbnb Connects / Ready to Launch use{" "}
+          {granularity === "month" ? "Monthly" : granularity === "week" ? "Weekly" : "Daily"} counts of each milestone since March 1, 2026 (
+          {granularity === "month"
+            ? "sum per calendar month, ET"
+            : granularity === "week"
+              ? "sum per Monday–Sunday week, ET"
+              : "one point per ET calendar day"}). Signups / Airbnb Connects / Ready to Launch use{" "}
           <code className="text-[#C9D1DC]">createdate</code> (same-day proxy); Trialists use{" "}
           <code className="text-[#C9D1DC]">trial__start_date</code>; Customers use{" "}
           <code className="text-[#C9D1DC]">hs_v2_date_entered_customer</code>. Toggle metrics
-          with the chips below; switch Daily/Weekly with the toggle on the right.
+          with the chips below; switch Daily / Weekly / Monthly with the toggle on the right.
         </p>
       </CardHeader>
 
@@ -345,13 +416,13 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
               })}
 
               <div className="ml-auto flex items-center gap-3">
-                {/* Granularity toggle — Daily / Weekly. Weekly sums
-                    Monday-Sunday ET values into one point per week,
-                    which is the natural reporting cadence for most
-                    growth questions. Daily stays for spotting day-of-
-                    week patterns. */}
+                {/* Granularity toggle — Daily / Weekly / Monthly.
+                    Daily for spotting day-of-week patterns; Weekly
+                    (Mon-Sun ET) for the natural growth reporting
+                    cadence; Monthly for board-style cohort trends.
+                    Partial periods at either edge render dashed. */}
                 <div className="inline-flex rounded-full border border-[#1F2937] bg-[#0E1422] p-0.5 text-[11px] font-semibold">
-                  {(["day", "week"] as Granularity[]).map((g) => (
+                  {(["day", "week", "month"] as Granularity[]).map((g) => (
                     <button
                       key={g}
                       onClick={() => setGranularity(g)}
@@ -361,7 +432,7 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
                           : "text-[#8B92A3] hover:text-white"
                       }`}
                     >
-                      {g === "day" ? "Daily" : "Weekly"}
+                      {g === "day" ? "Daily" : g === "week" ? "Weekly" : "Monthly"}
                     </button>
                   ))}
                 </div>
@@ -394,8 +465,8 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
                     tick={{ fontSize: 10, fill: "#8B92A3" }}
                     axisLine={{ stroke: "#1F2937" }}
                     tickLine={false}
-                    minTickGap={granularity === "week" ? 40 : 60}
-                    tickFormatter={(v: string) => shortDate(v)}
+                    minTickGap={granularity === "month" ? 24 : granularity === "week" ? 40 : 60}
+                    tickFormatter={(v: string) => (granularity === "month" ? shortMonth(v) : shortDate(v))}
                   />
                   <YAxis
                     tick={{ fontSize: 10, fill: "#5B6478" }}
@@ -444,16 +515,27 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
                       const visible = METRICS.filter((m) => byKey[m.key]);
 
                       // Format the date label.
-                      // - Daily: "Apr 12, 2026"
-                      // - Weekly: "Apr 28 – May 4 (partial)" — pulled
-                      //   from the row's weekEnd + partial fields if
-                      //   present (only set in weekly aggregation).
+                      // - Daily:   "Apr 12, 2026"
+                      // - Weekly:  "Mon Apr 28 – Sun May 4 (partial week)"
+                      // - Monthly: "Mar 2026 (full)" / "May 2026 (partial month, 1-27)"
                       const labelStr = typeof label === "string" ? label : String(label ?? "");
                       const firstPayload = payload[0] as unknown as { payload?: { weekEnd?: string; partial?: boolean } } | undefined;
                       const weekEnd = firstPayload?.payload?.weekEnd;
                       const partial = firstPayload?.payload?.partial;
                       let dateStr: string = labelStr;
-                      if (granularity === "week" && weekEnd) {
+                      if (granularity === "month" && weekEnd) {
+                        // labelStr = "YYYY-MM-01" (first day), weekEnd = last calendar day.
+                        // For partial months we show "May 2026 (partial, through May 27)"
+                        // so the reader knows what window is summed.
+                        const baseLabel = shortMonth(labelStr);
+                        if (partial) {
+                          // Find the latest date we actually have data for — same calc
+                          // as the bucket's range but without re-walking the data.
+                          dateStr = `${baseLabel}  (partial month, through ${shortDate(weekEnd)})`;
+                        } else {
+                          dateStr = `${baseLabel}  (full month)`;
+                        }
+                      } else if (granularity === "week" && weekEnd) {
                         // "Mon Apr 27 – Sun May 3" so the reader can see
                         // at a glance the bucket matches the Mon-Sun
                         // convention used by the "Last week" filter.
@@ -558,15 +640,15 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
                     }}
                   />
                   {/* In daily mode: one solid Line per metric.
-                      In weekly mode: TWO lines per metric — the solid
-                      one covers full Mon-Sun weeks; the dashed one
-                      covers the leading-edge / trailing-edge partial
-                      week so the reader doesn't misread a half-week
-                      dip as a real drop. Both pull from null-padded
-                      arrays built in `rows`, so they only render where
-                      they should. */}
+                      In weekly / monthly mode: TWO lines per metric —
+                      solid covers full periods, dashed covers the
+                      leading-edge / trailing-edge partial period so
+                      the reader doesn't misread a half-period dip as
+                      a real drop. Both pull from null-padded arrays
+                      built in `rows`, so they only render where they
+                      should. */}
                   {METRICS.filter((m) => active.has(m.key)).flatMap((m) => {
-                    if (granularity === "week") {
+                    if (granularity !== "day") {
                       return [
                         <Line
                           key={m.key + "_solid"}

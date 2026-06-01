@@ -24,11 +24,23 @@ type RetentionData = {
   milestones: { day: number; label: string }[];
 };
 
-// Per-segment colour: Amplify = primary blue, Flex = light blue.
-// Stays inside the dashboard's blue-spectrum palette (no green/red).
+// Four segments: {Amplify, Flex} × {Yearly, Monthly}.
+// Visual encoding inside the blue palette:
+//   – Family = colour (Amplify = primary blue, Flex = light blue)
+//   – Cycle  = stroke style (Yearly = solid, Monthly = dashed)
+// This stays readable on dark bg and reinforces the hierarchy at a
+// glance: solid lines = annual commitments (higher LTV).
 const SEGMENT_COLORS: Record<string, string> = {
-  Amplify: "#1E6FFF",
-  Flex: "#60A5FA",
+  "Amplify Yearly":  "#1E6FFF",
+  "Amplify Monthly": "#1E6FFF",
+  "Flex Yearly":     "#60A5FA",
+  "Flex Monthly":    "#60A5FA",
+};
+const SEGMENT_DASH: Record<string, string | undefined> = {
+  "Amplify Yearly":  undefined,
+  "Amplify Monthly": "6 4",
+  "Flex Yearly":     undefined,
+  "Flex Monthly":    "6 4",
 };
 
 export default function RetentionCurveChart() {
@@ -80,27 +92,49 @@ export default function RetentionCurveChart() {
             As of {data?.asOf || "—"}
           </Badge>
         </CardTitle>
-        <p className="text-[13px] text-[#8B92A3] mt-2 leading-relaxed">
-          <span className="text-[#1E6FFF] font-medium">Single-cohort survival.</span>{" "}
-          Customers who entered customer status on or after{" "}
-          <span className="text-white">March 1, 2026</span>. For each plan family, the
-          cohort is the same group across every milestone — those with enough tenure
-          to be observed at the longest plotted milestone. Retention at each point
-          is the % of that fixed cohort still active. This guarantees a monotonically
-          decreasing curve (you can never gain retained customers as time passes).
-          Both entry and cancellation timestamps come from HubSpot&apos;s property
-          history (<code className="text-[#C9D1DC]">account_lifecycle</code> transitions),
-          since <code className="text-[#C9D1DC]">hs_v2_date_exited_customer</code> is
-          empty in this account and{" "}
-          <code className="text-[#C9D1DC]">hs_v2_date_entered_customer</code> is also
-          empty for many older contacts. Curve extends as far as the data supports a
-          cohort of ≥ 10 customers.{" "}
-          <span className="text-[#8B92A3] italic">
-            Note: Annual vs Monthly billing-cycle data is too sparse to segment by;
-            this view splits by plan family instead. Once cycle data is reliably
-            populated, this can switch to Annual vs Monthly without a refactor.
-          </span>
-        </p>
+        {/* Retention methodology — exact math written out so anyone reading
+            the chart can audit the numbers without leaving the page. */}
+        <div className="text-[13px] text-[#8B92A3] mt-2 leading-relaxed space-y-2.5">
+          <p>
+            <span className="text-[#1E6FFF] font-medium">Four segments:</span>{" "}
+            <span className="text-white">{`{Amplify, Flex} × {Yearly, Monthly}`}</span>.
+            Family + cycle come from Chargebee&apos;s{" "}
+            <code className="text-[#C9D1DC]">cb_product</code> plan code
+            (e.g. <code className="text-[#C9D1DC]">Futurestay-Amplify-USD-Yearly</code>).
+            Limited-Access SKUs fold back into their original plan family via{" "}
+            <code className="text-[#C9D1DC]">limited_access_previous_plan</code>.
+            Contacts without a <code className="text-[#C9D1DC]">cb_product</code> cycle
+            marker are dropped from this chart (no guessing).
+          </p>
+          <p>
+            <span className="text-[#1E6FFF] font-medium">Cohort definition (same for all 4 segments):</span>{" "}
+            paying customers (lifecycle ∈ <code className="text-[#C9D1DC]">customer / former.customer / Customer&#47;Limited Access</code>)
+            who entered customer status on or after{" "}
+            <span className="text-white">March 1, 2026</span>, excluding WIX/HOPPER partner
+            referrals. The plotted x-axis stops at the longest milestone where the
+            segment still has ≥ 10 customers with that much tenure — beyond that the
+            line would be statistical noise.
+          </p>
+          <p>
+            <span className="text-[#1E6FFF] font-medium">Survival math (single-cohort, monotonic):</span>{" "}
+            For each segment, the anchor cohort = customers with tenure ≥ the segment&apos;s
+            horizon milestone. At every plotted milestone <code className="text-[#C9D1DC]">W</code>:{" "}
+            <span className="text-white">retention(W) = (customers in anchor cohort who had NOT
+            cancelled before day W) ÷ (anchor cohort size)</span>. The denominator is fixed,
+            so the curve is guaranteed to decrease — you can never gain retained
+            customers as time passes. Entry &amp; cancellation timestamps come from
+            HubSpot&apos;s <code className="text-[#C9D1DC]">account_lifecycle</code> property
+            history (<code className="text-[#C9D1DC]">hs_v2_date_exited_customer</code> is empty
+            in this account, so history is the only reliable source).
+          </p>
+          <p className="text-[12px] text-[#5B6478]">
+            Visual key: <span className="text-[#1E6FFF]">━</span>{" "}
+            Amplify Yearly &nbsp;·&nbsp;{" "}
+            <span className="text-[#1E6FFF]">┄ ┄</span> Amplify Monthly &nbsp;·&nbsp;{" "}
+            <span className="text-[#60A5FA]">━</span> Flex Yearly &nbsp;·&nbsp;{" "}
+            <span className="text-[#60A5FA]">┄ ┄</span> Flex Monthly.
+          </p>
+        </div>
       </CardHeader>
 
       <CardContent className="pt-5">
@@ -232,6 +266,7 @@ export default function RetentionCurveChart() {
                       name={s.segment}
                       stroke={SEGMENT_COLORS[s.segment] || "#FFF"}
                       strokeWidth={2.5}
+                      strokeDasharray={SEGMENT_DASH[s.segment]}
                       dot={{ r: 4, strokeWidth: 0, fill: SEGMENT_COLORS[s.segment] || "#FFF" }}
                       activeDot={{ r: 6, strokeWidth: 0, fill: SEGMENT_COLORS[s.segment] || "#FFF" }}
                       isAnimationActive={false}

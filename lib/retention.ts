@@ -61,21 +61,67 @@ export interface RetentionData {
   milestones: { day: number; label: string }[];
 }
 
-/** Plan family classifier. Searches multiple plan fields because plan
- *  data is scattered (plan_name often empty, plan_type_legacy more
- *  populated, limited_access_previous_plan covers historical paid
- *  customers, etc.). */
+/** Four-way plan segment classifier: {Amplify, Flex} × {Yearly, Monthly}.
+ *
+ *  Primary source is the Chargebee `cb_product` plan code, which is
+ *  100% populated for paid customers in this account and carries
+ *  BOTH family and cycle (e.g., "Futurestay-Amplify-USD-Yearly",
+ *  "Futurestay-Flex-USD-Monthly"). Limited-Access SKUs fall back to
+ *  the customer's previous plan and assume Monthly (LA contracts in
+ *  this account are all monthly).
+ *
+ *  Fallback for the rare contact without cb_product: legacy fields
+ *  (plan_name, plan_type_legacy, etc.). Cycle defaults to null in
+ *  that case — the contact is excluded from the retention chart
+ *  (we don't want to misclassify by guessing). */
+export type PlanSegment =
+  | "Amplify Yearly"
+  | "Amplify Monthly"
+  | "Flex Yearly"
+  | "Flex Monthly";
+
+function planSegment(c: HubSpotContact): PlanSegment | null {
+  // Tier 1: cb_product (preferred)
+  const cb = (c.cb_product || "").toLowerCase();
+  if (cb) {
+    const cycle: "Yearly" | "Monthly" | null = cb.includes("yearly") || cb.includes("annual")
+      ? "Yearly"
+      : cb.includes("monthly")
+        ? "Monthly"
+        : null;
+    if (cycle) {
+      if (cb.includes("amplify")) return `Amplify ${cycle}`;
+      if (cb.includes("flex"))    return `Flex ${cycle}`;
+      // Limited-Access SKU: classify by previous plan, cycle stays whatever
+      // the LA SKU says (which is usually Monthly in this account).
+      if (cb.includes("limited-access")) {
+        const prev = (c.limited_access_previous_plan || "").toLowerCase();
+        if (prev.includes("amplify")) return `Amplify ${cycle}`;
+        if (prev.includes("flex"))    return `Flex ${cycle}`;
+      }
+    }
+  }
+  // Tier 2: legacy plan fields — family only, no cycle. Returns null
+  // because we don't want to fake a cycle classification.
+  return null;
+}
+
+/** Plan family ignoring cycle — used for the "ever a paid customer"
+ *  test, which doesn't care about cycle. Has a wider fallback chain
+ *  to catch legacy contacts whose cb_product never got synced. */
 function planFamily(c: HubSpotContact): "Amplify" | "Flex" | null {
+  const cb = (c.cb_product || "").toLowerCase();
+  if (cb.includes("amplify")) return "Amplify";
+  if (cb.includes("flex"))    return "Flex";
+  if (cb.includes("limited-access")) {
+    const prev = (c.limited_access_previous_plan || "").toLowerCase();
+    if (prev.includes("amplify")) return "Amplify";
+    if (prev.includes("flex"))    return "Flex";
+  }
   const blob = [
-    c.plan_name,
-    c.plan_type_legacy,
-    c.plan_type_old,
-    c.limited_access_previous_plan,
-    c.subscription_type,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
+    c.plan_name, c.plan_type_legacy, c.plan_type_old,
+    c.limited_access_previous_plan, c.subscription_type,
+  ].filter(Boolean).join(" ").toLowerCase();
   if (blob.includes("flex")) return "Flex";
   if (blob.includes("amplify")) return "Amplify";
   return null;
@@ -212,12 +258,20 @@ export async function computeRetention(
   const allIds = paidCustomers.map((c) => c.id);
   const lifecycleTimes = await fetchLifecycleTimes(allIds);
 
-  // Group customers by plan family + compute retention curves
+  // Group customers by (plan family × billing cycle) and compute one
+  // retention curve per segment. Limited-Access SKUs are folded back
+  // into their previous plan family by `planSegment`. Contacts without
+  // a cb_product cycle marker are dropped from this chart entirely so
+  // we don't misclassify them — the totals shown elsewhere on the
+  // dashboard still count them as customers.
   const today = Date.now();
   const segments: RetentionSegment[] = [];
 
-  for (const family of ["Amplify", "Flex"] as const) {
-    const customers = paidCustomers.filter((c) => planFamily(c) === family);
+  const SEGMENTS: PlanSegment[] = [
+    "Amplify Yearly", "Amplify Monthly", "Flex Yearly", "Flex Monthly",
+  ];
+  for (const segName of SEGMENTS) {
+    const customers = paidCustomers.filter((c) => planSegment(c) === segName);
     const totalCohort = customers.length;
 
     // For each customer: derive (entryMs, cancelMs).
@@ -291,7 +345,7 @@ export async function computeRetention(
       });
     }
 
-    segments.push({ segment: family, totalCohort, points });
+    segments.push({ segment: segName, totalCohort, points });
   }
 
   return {
