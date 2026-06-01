@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchAllContacts } from "@/lib/hubspot";
 import { computeFunnelByCampaign } from "@/lib/funnel";
 import { fetchMetaInsights } from "@/lib/meta";
+import { fetchActiveGoogleCampaigns } from "@/lib/google";
 import { PeriodFilter } from "@/lib/types";
 
 /**
@@ -32,19 +33,26 @@ export async function GET(request: NextRequest) {
     const countries = countriesParam ? countriesParam.split(",").filter(Boolean) : [];
     const channels = channelsParam ? channelsParam.split(",").filter(Boolean) : [];
 
-    // Pull contacts + the active Meta campaign list in parallel. The
-    // Meta list drives per-Meta attribution (no longer collapsing to
-    // bucket level). We use period=allTime so the list isn't tied to
-    // the filter window — a Syerena filter should work even when the
-    // user is looking at a window where Syerena had no spend.
-    const [contacts, metaInsights] = await Promise.all([
+    // Pull contacts + the active Meta + active Google campaign lists
+    // in parallel. The Meta list drives per-Meta attribution; the
+    // Google list resolves a submitted Google campaign NAME → numeric
+    // ID for the utm_campaign match. Both campaign-list calls are
+    // wrapped in .catch so a downed external API doesn't take the
+    // whole funnel offline — the affected attribution path just goes
+    // inert (the filter option becomes a no-op) while the rest works.
+    const [contacts, metaInsights, googleCampaigns] = await Promise.all([
       fetchAllContacts(),
       fetchMetaInsights("2024-01-01", new Date().toISOString().slice(0, 10)).catch((err) => {
         console.error("[funnel] fetchMetaInsights failed, falling back to bucket attribution:", err);
         return { campaigns: [] as { name: string }[] };
       }),
+      fetchActiveGoogleCampaigns().catch((err) => {
+        console.error("[funnel] fetchActiveGoogleCampaigns failed:", err);
+        return [] as { id: string; name: string; status: string }[];
+      }),
     ]);
     const activeMetaCampaigns = metaInsights.campaigns.map((m) => m.name);
+    const activeGoogleCampaigns = googleCampaigns.map((g) => ({ id: g.id, name: g.name }));
 
     const funnel = computeFunnelByCampaign(
       contacts,
@@ -55,6 +63,7 @@ export async function GET(request: NextRequest) {
       customStart,
       customEnd,
       activeMetaCampaigns,
+      activeGoogleCampaigns,
     );
 
     return NextResponse.json({ funnel, campaign: campaignParam });

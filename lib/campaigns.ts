@@ -124,6 +124,56 @@ export function matchContactToMetaCampaign(
   return tryPrefix(c.first_touch_utm_campaign) || tryPrefix(c.hs_analytics_source_data_2);
 }
 
+/** Attribute a HubSpot contact to a specific Google Ads campaign.
+ *
+ *  Google's HubSpot UTM convention (post tracking-template fix on
+ *  ~May 25): `first_touch_utm_campaign` holds the numeric Google
+ *  Ads campaign ID, and `first_touch_utm_source` is literally
+ *  "google". We match the numeric ID directly against the live
+ *  Google Ads campaign roster and return the campaign's human-
+ *  readable name.
+ *
+ *  Edge cases not handled here:
+ *    - utm_campaign = "brand" — manually-labelled Brand campaign;
+ *      attributable to "Google (all)" via utm_source but not to a
+ *      specific Google campaign (no ID to match against). Falls
+ *      through to null and the contact still flows into the
+ *      `@all-google` filter.
+ *    - utm_campaign = "{campaignname}" — pre-fix placeholder. Also
+ *      returns null. Contact still counts in `@all-google`. */
+export function matchContactToGoogleCampaign(
+  c: HubSpotContact,
+  activeGoogleCampaigns: { id: string; name: string }[],
+): string | null {
+  const src = (c.first_touch_utm_source || "").toLowerCase().trim();
+  if (src !== "google") return null;
+  const utmCampaign = (c.first_touch_utm_campaign || "").trim();
+  if (!utmCampaign || utmCampaign === "{campaignname}" || utmCampaign === "{campaignid}") return null;
+  // Only numeric IDs are valid Google campaign references. "brand" and
+  // other labels are intentionally not matched — they'd require a
+  // separate manual mapping.
+  if (!/^\d{8,}$/.test(utmCampaign)) return null;
+  const match = activeGoogleCampaigns.find((g) => g.id === utmCampaign);
+  return match ? match.name : null;
+}
+
+/** Did the contact come from Google Ads at all? Used for the
+ *  "Google (all campaigns)" funnel filter, which doesn't require
+ *  matching to a specific campaign — just the source field. */
+export function isGoogleSourcedContact(c: HubSpotContact): boolean {
+  return (c.first_touch_utm_source || "").toLowerCase().trim() === "google";
+}
+
+/** Did the contact come from any active Meta campaign? Used for the
+ *  "Meta (all campaigns)" filter. Different from matchContactToMetaCampaign
+ *  only in that it doesn't care WHICH campaign, just that one matches. */
+export function isMetaAttributedContact(
+  c: HubSpotContact,
+  activeMetaCampaignNames: string[],
+): boolean {
+  return matchContactToMetaCampaign(c, activeMetaCampaignNames) !== null;
+}
+
 /** Map a Meta campaign name to one of the 6 known bucket keys. Returns
  *  null if no UTM substring rule matches (e.g. "Retargeting Ads").
  *

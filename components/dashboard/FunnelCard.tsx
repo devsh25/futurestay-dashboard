@@ -127,29 +127,46 @@ export default function FunnelCard({
   const [scopedFunnel, setScopedFunnel] = useState<FunnelStage[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Live Meta campaign roster for the dropdown. Fetched once on mount
-  // (independent of the period filter — we want to show ALL currently
-  // active campaigns regardless of which window the user picked, so the
-  // freshly-launched ones with zero spend in the window still appear).
-  const [campaignOptions, setCampaignOptions] = useState<{ name: string; display: string }[]>([]);
+  // Live Meta + Google rosters for the dropdown. Fetched once on
+  // mount, independent of the period filter — we want to show ALL
+  // currently active campaigns regardless of window so freshly-
+  // launched ones with zero spend still appear.
+  const [metaOptions, setMetaOptions] = useState<{ name: string; display: string }[]>([]);
+  const [googleOptions, setGoogleOptions] = useState<{ name: string; display: string }[]>([]);
+
+  // Sentinel values — must match lib/funnel.ts. Hardcoding the string
+  // here rather than importing because that import would pull the
+  // server-only funnel module into a client bundle.
+  const ALL_META_SENTINEL = "@all-meta";
+  const ALL_GOOGLE_SENTINEL = "@all-google";
 
   useEffect(() => {
     let cancelled = false;
-    // "allTime" guarantees we pull the full active roster even if a
-    // newly-launched campaign hasn't spent anything yet — fetchMetaInsights
-    // server-side merges /campaigns?effective_status=ACTIVE into the
-    // response and filters test campaigns out.
+    // Meta — server-side merges /campaigns?effective_status=ACTIVE into
+    // the insights response and filters test campaigns out.
     fetch("/api/meta/insights?period=allTime")
       .then((r) => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
       .then((d: MetaInsightsData) => {
         if (cancelled) return;
         const opts = d.campaigns.map((c) => ({ name: c.name, display: shortCampaign(c.name) }));
-        // Sort alphabetically by display name so the dropdown is
-        // predictable regardless of spend within any one window.
         opts.sort((a, b) => a.display.localeCompare(b.display));
-        setCampaignOptions(opts);
+        setMetaOptions(opts);
       })
-      .catch(() => { /* dropdown stays empty on Meta API failure; "All campaigns" still works */ });
+      .catch(() => { /* dropdown's Meta section stays empty on API failure */ });
+
+    // Google — separate endpoint. Returns [] (not an error) if the
+    // Ads API is disconnected, so the Google section just becomes
+    // empty while the rest of the dropdown still works.
+    fetch("/api/google/campaigns")
+      .then((r) => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then((d: { campaigns: { id: string; name: string }[] }) => {
+        if (cancelled) return;
+        const opts = d.campaigns.map((c) => ({ name: c.name, display: c.name }));
+        opts.sort((a, b) => a.display.localeCompare(b.display));
+        setGoogleOptions(opts);
+      })
+      .catch(() => { /* Google section silently empty on failure */ });
+
     return () => { cancelled = true; };
   }, []);
 
@@ -318,9 +335,26 @@ export default function FunnelCard({
               disabled={loading}
             >
               <option value="">All campaigns</option>
-              {campaignOptions.map((c) => (
-                <option key={c.name} value={c.name} title={c.name}>{c.display}</option>
-              ))}
+              {metaOptions.length > 0 && (
+                <option value={ALL_META_SENTINEL}>All Meta campaigns</option>
+              )}
+              {googleOptions.length > 0 && (
+                <option value={ALL_GOOGLE_SENTINEL}>All Google campaigns</option>
+              )}
+              {metaOptions.length > 0 && (
+                <optgroup label="Meta — individual">
+                  {metaOptions.map((c) => (
+                    <option key={`meta-${c.name}`} value={c.name} title={c.name}>{c.display}</option>
+                  ))}
+                </optgroup>
+              )}
+              {googleOptions.length > 0 && (
+                <optgroup label="Google — individual">
+                  {googleOptions.map((c) => (
+                    <option key={`google-${c.name}`} value={c.name} title={c.name}>{c.display}</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
             {dqRow && (
               <Badge className="bg-[#1A2235] text-[#8B92A3] border-[#1F2937] text-[11px] font-medium">
@@ -337,7 +371,15 @@ export default function FunnelCard({
           Of qualified signups (contacts whose <code className="text-[#C9D1DC] text-[13px]">account_lifecycle</code> has reached <span className="text-white">signup</span> or beyond and whose <code className="text-[#C9D1DC] text-[13px]">createdate</code> falls in the window), what % reached each stage.{" "}
           {campaign ? (
             <span className="text-[#60A5FA] font-medium">
-              Filtered to <span className="text-white" title={campaign}>{shortCampaign(campaign)}</span>.
+              Filtered to{" "}
+              <span className="text-white" title={campaign}>
+                {campaign === ALL_META_SENTINEL
+                  ? "All Meta campaigns"
+                  : campaign === ALL_GOOGLE_SENTINEL
+                    ? "All Google campaigns"
+                    : shortCampaign(campaign)}
+              </span>
+              .
             </span>
           ) : (
             <>Authorizing Airbnb auto-imports listings (the path most users take). 3 outcomes drop from Trial Started (In Trial = still active, Customer = real paid, Failed = cancelled before converting). Customer can further churn.</>

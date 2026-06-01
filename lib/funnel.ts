@@ -10,7 +10,19 @@ import {
   DashboardData,
   PeriodFilter,
 } from "./types";
-import { bucketContactToCampaign, matchContactToMetaCampaign } from "./campaigns";
+import {
+  bucketContactToCampaign,
+  matchContactToMetaCampaign,
+  matchContactToGoogleCampaign,
+  isGoogleSourcedContact,
+  isMetaAttributedContact,
+} from "./campaigns";
+
+/** Sentinel campaign values for the Funnel filter dropdown.
+ *  Prefixed with "@" so they never collide with a real Meta or
+ *  Google campaign name. */
+export const ALL_META_SENTINEL = "@all-meta";
+export const ALL_GOOGLE_SENTINEL = "@all-google";
 import {
   tzStartOfDay, tzEndOfDay, tzAddDays, tzStartOfWeek,
   tzStartOfMonth, tzStartOfQuarter, tzDateKey,
@@ -867,6 +879,13 @@ export function computeFunnelByCampaign(
   // contacts that share the bucket. Falls back to bucket attribution
   // for legacy bucket-key params.
   activeMetaCampaigns: string[] = [],
+  // Live Google Ads campaign roster — used to resolve a submitted
+  // Google campaign NAME back to its numeric ID (which is what
+  // HubSpot stores in first_touch_utm_campaign for Google-sourced
+  // contacts post-template-fix). Pass an empty array if the Google
+  // API isn't connected — the dropdown's Google entries silently
+  // become inert in that case.
+  activeGoogleCampaigns: { id: string; name: string }[] = [],
 ): FunnelStage[] {
   const clean = excludePartnerSources(contacts);
   const { start, end } = resolvedDateRange(period, customStart, customEnd);
@@ -880,16 +899,25 @@ export function computeFunnelByCampaign(
 
   // Campaign filter — only applied if a campaign was specified.
   if (campaign) {
-    // Two attribution paths:
-    //   1. The submitted name is an active Meta campaign → use the
-    //      per-Meta matcher (UTM/src2/ref_source). This excludes
-    //      sibling campaigns that share the same bucket, fixing the
-    //      "Syerena filter showed all DW Booking" bug.
-    //   2. The submitted name is a legacy bucket key (e.g. someone
-    //      hits /api/funnel?campaign=Direct%20Website%20Call) → fall
-    //      back to bucketContactToCampaign substring match.
-    const isMetaName = activeMetaCampaigns.includes(campaign);
-    if (isMetaName) {
+    // Five attribution paths, checked in priority order:
+    //   1. @all-meta sentinel → contacts matched by ANY active Meta
+    //   2. @all-google sentinel → contacts whose utm_source = google
+    //   3. Exact match against an active Google campaign name → utm_source
+    //      + utm_campaign-ID lookup
+    //   4. Exact match against an active Meta campaign name → per-Meta
+    //      matcher (utm / src2 / ref_source override)
+    //   5. Legacy bucket key → bucketContactToCampaign substring match
+    if (campaign === ALL_META_SENTINEL) {
+      signupFiltered = signupFiltered.filter((c) =>
+        isMetaAttributedContact(c, activeMetaCampaigns),
+      );
+    } else if (campaign === ALL_GOOGLE_SENTINEL) {
+      signupFiltered = signupFiltered.filter(isGoogleSourcedContact);
+    } else if (activeGoogleCampaigns.some((g) => g.name === campaign)) {
+      signupFiltered = signupFiltered.filter(
+        (c) => matchContactToGoogleCampaign(c, activeGoogleCampaigns) === campaign,
+      );
+    } else if (activeMetaCampaigns.includes(campaign)) {
       signupFiltered = signupFiltered.filter(
         (c) => matchContactToMetaCampaign(c, activeMetaCampaigns) === campaign,
       );
