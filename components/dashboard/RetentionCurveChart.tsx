@@ -349,10 +349,54 @@ export default function RetentionCurveChart() {
                     }}
                   />
                   <Legend
-                    iconType="line"
-                    iconSize={14}
                     wrapperStyle={{ paddingTop: 12, fontSize: 11 }}
-                    formatter={(value) => <span className="text-[#C9D1DC]">{value}</span>}
+                    // Fully custom legend renderer so we can:
+                    //   1) list ALL 4 segments (not just visible ones —
+                    //      otherwise hidden segments would have no
+                    //      affordance to bring back from the legend)
+                    //   2) make each entry clickable to toggle
+                    //   3) visually mark hidden segments (line-through
+                    //      + dimmed colour + "(hidden)" suffix)
+                    // Same state as the pill chips above; click either
+                    // location and the chart stays in sync.
+                    content={() => (
+                      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 pt-2 text-[11px] select-none">
+                        {data.segments.map((s) => {
+                          const isOn = active === null || active.has(s.segment);
+                          const color = SEGMENT_COLORS[s.segment] || "#FFF";
+                          const dashed = SEGMENT_DASH[s.segment];
+                          return (
+                            <button
+                              key={s.segment}
+                              type="button"
+                              onClick={() => toggleSegment(s.segment)}
+                              aria-pressed={isOn}
+                              title={isOn ? `Hide ${s.segment}` : `Show ${s.segment}`}
+                              className="inline-flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition-opacity bg-transparent border-0 p-0"
+                            >
+                              <svg width="20" height="6" aria-hidden>
+                                <line
+                                  x1="0" y1="3" x2="20" y2="3"
+                                  stroke={isOn ? color : "#3B4357"}
+                                  strokeWidth={2.5}
+                                  strokeDasharray={dashed}
+                                />
+                              </svg>
+                              <span
+                                className={
+                                  isOn
+                                    ? "text-[#C9D1DC]"
+                                    : "text-[#5B6478] line-through"
+                                }
+                              >
+                                {s.segment}
+                                {!isOn && " (hidden)"}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   />
                   {data.segments
                     // Visible segments only — clicking a chip above
