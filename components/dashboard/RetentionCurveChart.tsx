@@ -22,6 +22,15 @@ type RetentionData = {
   asOf: string;
   segments: RetentionSegment[];
   milestones: { day: number; label: string }[];
+  failedTrialists: {
+    days: number;
+    total: number;
+    bySegment: Record<string, number>;
+  };
+  planSwitchers: {
+    total: number;
+    bySegment: Record<string, number>;
+  };
 };
 
 // Four segments: {Amplify, Flex} × {Yearly, Monthly}.
@@ -111,9 +120,12 @@ export default function RetentionCurveChart() {
             paying customers (lifecycle ∈ <code className="text-[#C9D1DC]">customer / former.customer / Customer&#47;Limited Access</code>)
             who entered customer status on or after{" "}
             <span className="text-white">March 1, 2026</span>, excluding WIX/HOPPER partner
-            referrals. The plotted x-axis stops at the longest milestone where the
-            segment still has ≥ 10 customers with that much tenure — beyond that the
-            line would be statistical noise.
+            referrals. Customers who exited within{" "}
+            <span className="text-white">{data?.failedTrialists.days ?? 4} days</span>{" "}
+            of entry are reclassified as failed trialists, removed from every curve,
+            and reported as a separate count above. The plotted x-axis stops at the
+            longest milestone where the segment still has ≥ 10 customers with that
+            much tenure — beyond that the line would be statistical noise.
           </p>
           <p>
             <span className="text-[#1E6FFF] font-medium">Survival math (single-cohort, monotonic):</span>{" "}
@@ -150,6 +162,49 @@ export default function RetentionCurveChart() {
 
         {data && (
           <>
+            {/* Two callouts above the segment chips: count of failed
+                trialists (customers excluded from the curves because
+                they exited within the 4-day cutoff) and count of plan
+                switchers (cohort customers whose cb_product history
+                has ≥2 distinct values). Both are surfaced because
+                they materially affect how the curves are read. */}
+            <div className="flex flex-wrap gap-3 mb-4">
+              <div className="flex items-center gap-3 px-4 py-2.5 bg-[#11182B] border border-[#1F2937] rounded-xl">
+                <span className="h-2.5 w-2.5 rounded-full shrink-0 bg-[#5B6478]" />
+                <div className="flex flex-col">
+                  <span className="text-[13px] font-semibold text-white">
+                    Failed trialists (≤{data.failedTrialists.days}d, excluded)
+                    {" "}
+                    <span className="text-white font-bold ml-1">{data.failedTrialists.total}</span>
+                  </span>
+                  <span className="text-[11px] text-[#8B92A3] tabular-nums">
+                    {Object.entries(data.failedTrialists.bySegment)
+                      .filter(([, n]) => n > 0)
+                      .map(([k, n]) => `${k.replace("Amplify ", "A·").replace("Flex ", "F·")} ${n}`)
+                      .join(" · ") || "none in any segment"}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 px-4 py-2.5 bg-[#11182B] border border-[#1F2937] rounded-xl">
+                <span className="h-2.5 w-2.5 rounded-full shrink-0 bg-[#60A5FA]" />
+                <div className="flex flex-col">
+                  <span className="text-[13px] font-semibold text-white">
+                    Plan switchers in cohort
+                    {" "}
+                    <span className="text-white font-bold ml-1">{data.planSwitchers.total}</span>
+                  </span>
+                  <span className="text-[11px] text-[#8B92A3] tabular-nums">
+                    {Object.entries(data.planSwitchers.bySegment)
+                      .filter(([, n]) => n > 0)
+                      .map(([k, n]) => `${k.replace("Amplify ", "A·").replace("Flex ", "F·")} ${n}`)
+                      .join(" · ") || "no switches"}
+                    {" "}
+                    <span className="text-[#5B6478]">— ≥2 distinct cb_product values</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
             {/* Segment summary chips: shows total cohort + key drop-off */}
             <div className="flex flex-wrap gap-3 mb-5">
               {data.segments.map((s) => {

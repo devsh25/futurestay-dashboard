@@ -49,8 +49,9 @@ export interface RetentionPoint {
 }
 
 export interface RetentionSegment {
-  segment: string;       // e.g., "Amplify", "Flex"
-  totalCohort: number;   // total customers in this plan family ever
+  segment: string;       // e.g., "Amplify Yearly", "Flex Monthly"
+  totalCohort: number;   // customers in this segment who are CHARTED
+                         //   (post-March 2026 paid, NOT failed trialists)
   points: RetentionPoint[];
 }
 
@@ -59,6 +60,22 @@ export interface RetentionData {
   segments: RetentionSegment[];
   /** Milestone days the curve is sampled at. */
   milestones: { day: number; label: string }[];
+  /** Customers who cancelled within FAILED_TRIALIST_DAYS of entry —
+   *  treated as failed trialists, removed from the retention curves,
+   *  reported as their own number on the chart. */
+  failedTrialists: {
+    days: number;          // threshold used (e.g. 4)
+    total: number;         // across all 4 segments
+    bySegment: Record<string, number>;
+  };
+  /** Customers in the chart cohort (post-March, paid, not failed
+   *  trialists) who switched plans at least once — i.e., whose
+   *  cb_product history holds ≥2 distinct values. Helps explain
+   *  why per-segment cohort sizes change over time. */
+  planSwitchers: {
+    total: number;
+    bySegment: Record<string, number>;
+  };
 }
 
 /** Four-way plan segment classifier: {Amplify, Flex} × {Yearly, Monthly}.
@@ -137,25 +154,30 @@ function wasPaidCustomer(c: HubSpotContact): boolean {
   return false;
 }
 
-/** Per-contact lifecycle dates derived from HubSpot's property history.
+/** Per-contact history snapshot used by the retention curve.
  *  - entryMs: most-recent transition INTO a customer-style lifecycle
  *    (customer / Customer/Limited Access). Used to recover entry-date
  *    for the ~270 old contacts whose hs_v2_date_entered_customer is
  *    not populated.
  *  - cancelMs: most-recent transition into former.customer. Null if
  *    the contact has never cancelled (currently active customer).
+ *  - cbProductValues: full chronological list of distinct cb_product
+ *    values the contact has held. Length ≥ 2 ⇒ they switched plans.
+ *    (We collapse adjacent duplicates so syncing noise doesn't get
+ *    counted as a switch.)
  *
- *  Both are taken from the SAME history array, which HubSpot returns
- *  newest-first by default. */
-interface LifecycleTimes {
+ *  All three come from one batch-read call so the cost is the same
+ *  as fetching lifecycle history alone. */
+interface ContactHistory {
   entryMs: number | null;
   cancelMs: number | null;
+  cbProductValues: string[];
 }
 
-async function fetchLifecycleTimes(
+async function fetchContactHistory(
   contactIds: string[]
-): Promise<Map<string, LifecycleTimes>> {
-  const result = new Map<string, LifecycleTimes>();
+): Promise<Map<string, ContactHistory>> {
+  const result = new Map<string, ContactHistory>();
   if (contactIds.length === 0) return result;
 
   // HubSpot batch-read with propertiesWithHistory has a *50-per-request*
@@ -167,7 +189,9 @@ async function fetchLifecycleTimes(
     const chunk = contactIds.slice(i, i + CHUNK);
     const body = {
       inputs: chunk.map((id) => ({ id })),
-      propertiesWithHistory: ["account_lifecycle"],
+      // Both properties pulled in the same call — same network cost
+      // as the lifecycle-only fetch we used to do.
+      propertiesWithHistory: ["account_lifecycle", "cb_product"],
     };
 
     const res = await fetch(`${HS_BASE}/crm/v3/objects/contacts/batch/read`, {
@@ -190,17 +214,18 @@ async function fetchLifecycleTimes(
         id: string;
         propertiesWithHistory?: {
           account_lifecycle?: Array<{ value: string; timestamp: string }>;
+          cb_product?: Array<{ value: string; timestamp: string }>;
         };
       }>;
     };
     const d = (await res.json()) as Resp;
     for (const row of d.results ?? []) {
-      const history = row.propertiesWithHistory?.account_lifecycle ?? [];
+      const lcHistory = row.propertiesWithHistory?.account_lifecycle ?? [];
       let entryMs: number | null = null;
       let cancelMs: number | null = null;
       // Iterate newest → oldest. Take the most-recent transition for
       // each target lifecycle value.
-      for (const h of history) {
+      for (const h of lcHistory) {
         if (cancelMs === null && h.value === "former.customer") {
           const t = new Date(h.timestamp).getTime();
           if (!isNaN(t)) cancelMs = t;
@@ -211,7 +236,21 @@ async function fetchLifecycleTimes(
         }
         if (entryMs !== null && cancelMs !== null) break;
       }
-      result.set(row.id, { entryMs, cancelMs });
+
+      // Build chronologically-ordered list of cb_product values with
+      // adjacent duplicates collapsed. HubSpot returns history newest-
+      // first, so we walk it in REVERSE to get oldest → newest order.
+      const cbHistory = row.propertiesWithHistory?.cb_product ?? [];
+      const cbProductValues: string[] = [];
+      for (let j = cbHistory.length - 1; j >= 0; j--) {
+        const v = (cbHistory[j].value || "").trim();
+        if (!v) continue;
+        if (cbProductValues[cbProductValues.length - 1] !== v) {
+          cbProductValues.push(v);
+        }
+      }
+
+      result.set(row.id, { entryMs, cancelMs, cbProductValues });
     }
   }
 
@@ -241,6 +280,20 @@ const MIN_COHORT_SIZE = 10;
  *  multi-year survivorship from a different product era. */
 const COHORT_START_MS = new Date("2026-03-01T00:00:00.000Z").getTime();
 
+/** Tenure threshold (in days) below which a cancellation is treated
+ *  as a FAILED TRIALIST, not a real retention event. Per product
+ *  rule: anyone who entered Customer and exited within this window
+ *  is essentially a trial-to-paid funnel failure, not a churn — and
+ *  they distort the retention curve catastrophically because most of
+ *  them concentrate in days 0-3. They're surfaced as their own count
+ *  on the chart and excluded from every per-segment curve.
+ *
+ *  Note: the dashboard's main KPI tile uses 2 days for its own
+ *  isQuickCancel check (different lens — that one's about
+ *  conservative customer counting). This 4-day rule is retention-
+ *  specific. */
+const FAILED_TRIALIST_DAYS = 4;
+
 export async function computeRetention(
   contacts: HubSpotContact[]
 ): Promise<RetentionData> {
@@ -252,11 +305,11 @@ export async function computeRetention(
     return wasPaidCustomer(c);
   });
 
-  // Fetch property history for EVERY paying customer — not just the
-  // former.customers — so we can recover entry-date for the ~270
-  // legacy contacts whose hs_v2_date_entered_customer is empty.
+  // Fetch property history (lifecycle + cb_product) for EVERY paying
+  // customer — not just former.customers — so we can recover
+  // entry-date for legacy contacts AND detect plan switches.
   const allIds = paidCustomers.map((c) => c.id);
-  const lifecycleTimes = await fetchLifecycleTimes(allIds);
+  const contactHistory = await fetchContactHistory(allIds);
 
   // Group customers by (plan family × billing cycle) and compute one
   // retention curve per segment. Limited-Access SKUs are folded back
@@ -266,13 +319,21 @@ export async function computeRetention(
   // dashboard still count them as customers.
   const today = Date.now();
   const segments: RetentionSegment[] = [];
+  const failedBySegment: Record<string, number> = {};
+  const switchersBySegment: Record<string, number> = {};
+  let failedTotal = 0;
+  let switchersTotal = 0;
 
   const SEGMENTS: PlanSegment[] = [
     "Amplify Yearly", "Amplify Monthly", "Flex Yearly", "Flex Monthly",
   ];
+
+  const FAILED_MS = FAILED_TRIALIST_DAYS * 86_400_000;
+
   for (const segName of SEGMENTS) {
     const customers = paidCustomers.filter((c) => planSegment(c) === segName);
-    const totalCohort = customers.length;
+    let segFailed = 0;
+    let segSwitchers = 0;
 
     // For each customer: derive (entryMs, cancelMs).
     //   entryMs:  prefer hs_v2_date_entered_customer (more accurate
@@ -285,9 +346,13 @@ export async function computeRetention(
     //             former.customer — re-subscribers (currently customer
     //             but were former.customer in the past) are treated
     //             as active, which is correct: they ARE active again.
+    // Failed-trialist exclusion: if cancelMs - entryMs < FAILED_MS,
+    // bump the segment's failed-trialist counter and drop the record.
+    // Plan switcher count: contactHistory has the chronologically-
+    // ordered list of distinct cb_product values; length ≥ 2 = switched.
     const records: { entryMs: number; cancelMs: number | null }[] = customers
       .map((c) => {
-        const history = lifecycleTimes.get(c.id);
+        const history = contactHistory.get(c.id);
         // Prefer the property field; fall back to history.
         let entryMs: number | null = null;
         if (c.hs_v2_date_entered_customer) {
@@ -307,9 +372,31 @@ export async function computeRetention(
             ? history?.cancelMs ?? null
             : null;
 
+        // Failed-trialist rule: cancelled within 4 days of entering
+        // Customer status. Counted separately and dropped from
+        // retention.
+        if (cancelMs !== null && cancelMs - entryMs < FAILED_MS) {
+          segFailed += 1;
+          return null;
+        }
+
+        // Plan-switcher: chronologically distinct cb_product values ≥ 2.
+        // We count switchers WITHIN the chart cohort (post-March,
+        // non-failed-trialist) so the number is comparable to the
+        // cohort sizes shown on the curve.
+        if ((history?.cbProductValues.length ?? 0) >= 2) {
+          segSwitchers += 1;
+        }
+
         return { entryMs, cancelMs };
       })
       .filter((r): r is { entryMs: number; cancelMs: number | null } => r !== null);
+
+    const totalCohort = records.length;
+    failedBySegment[segName] = segFailed;
+    failedTotal += segFailed;
+    switchersBySegment[segName] = segSwitchers;
+    switchersTotal += segSwitchers;
 
     // Step 1: find the longest milestone for which we have a usable
     // cohort (≥ MIN_COHORT_SIZE customers with that tenure).
@@ -352,5 +439,14 @@ export async function computeRetention(
     asOf: new Date().toISOString().slice(0, 10),
     segments,
     milestones: MILESTONES,
+    failedTrialists: {
+      days: FAILED_TRIALIST_DAYS,
+      total: failedTotal,
+      bySegment: failedBySegment,
+    },
+    planSwitchers: {
+      total: switchersTotal,
+      bySegment: switchersBySegment,
+    },
   };
 }
