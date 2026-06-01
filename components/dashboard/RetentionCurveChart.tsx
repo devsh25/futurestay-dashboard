@@ -56,6 +56,38 @@ export default function RetentionCurveChart() {
   const [data, setData] = useState<RetentionData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Which segments are currently visible on the chart. Click a segment
+  // chip to toggle. Default: all on. Stored as a Set for O(1) lookup
+  // during render; we coerce to/from arrays at the React boundaries.
+  // Initialized from the data once it arrives (the segment names come
+  // from the API response, not hardcoded).
+  const [active, setActive] = useState<Set<string> | null>(null);
+
+  useEffect(() => {
+    // Initialise the visibility set the first time data arrives — all
+    // segments visible. Subsequent data refreshes don't reset visibility
+    // (so a refresh-on-filter-change doesn't blow away the user's selection).
+    if (data && active === null) {
+      setActive(new Set(data.segments.map((s) => s.segment)));
+    }
+  }, [data, active]);
+
+  function toggleSegment(name: string) {
+    setActive((prev) => {
+      const base = prev ?? new Set<string>();
+      const next = new Set(base);
+      if (next.has(name)) {
+        // Block deselecting the LAST visible segment — empty chart is
+        // useless and the user has to triple-click to recover. Better
+        // to just no-op the last toggle.
+        if (next.size <= 1) return next;
+        next.delete(name);
+      } else {
+        next.add(name);
+      }
+      return next;
+    });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -205,22 +237,35 @@ export default function RetentionCurveChart() {
               </div>
             </div>
 
-            {/* Segment summary chips: shows total cohort + key drop-off */}
+            {/* Segment summary chips — clickable to toggle that segment's
+                line on/off in the chart. Active = full colour + bright
+                bg; inactive = dim border + muted text. The last-active
+                chip is blocked from being deselected (toggleSegment
+                guards size <= 1) so the chart never goes empty. */}
             <div className="flex flex-wrap gap-3 mb-5">
               {data.segments.map((s) => {
                 const last = s.points[s.points.length - 1];
                 const wk1 = s.points.find((p) => p.day === 7);
+                const isOn = active?.has(s.segment) ?? true;
+                const color = SEGMENT_COLORS[s.segment] || "#FFF";
                 return (
-                  <div
+                  <button
                     key={s.segment}
-                    className="flex items-center gap-3 px-4 py-2.5 bg-[#1A2235] border border-[#1F2937] rounded-xl"
+                    onClick={() => toggleSegment(s.segment)}
+                    className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border transition-colors text-left ${
+                      isOn
+                        ? "bg-[#1A2235] border-[#1F2937] hover:bg-[#1F2937]"
+                        : "bg-[#11182B] border-[#1F2937] opacity-50 hover:opacity-75"
+                    }`}
+                    title={isOn ? `Hide ${s.segment}` : `Show ${s.segment}`}
+                    aria-pressed={isOn}
                   >
                     <span
                       className="h-2.5 w-2.5 rounded-full shrink-0"
-                      style={{ backgroundColor: SEGMENT_COLORS[s.segment] || "#FFF" }}
+                      style={{ backgroundColor: isOn ? color : "#1F2937" }}
                     />
                     <div className="flex flex-col">
-                      <span className="text-[13px] font-semibold text-white">
+                      <span className={`text-[13px] font-semibold ${isOn ? "text-white" : "text-[#5B6478]"}`}>
                         {s.segment}{" "}
                         <span className="text-[#8B92A3] font-normal text-[12px]">
                           (n={s.totalCohort})
@@ -232,7 +277,7 @@ export default function RetentionCurveChart() {
                         </span>
                       )}
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -313,20 +358,26 @@ export default function RetentionCurveChart() {
                     wrapperStyle={{ paddingTop: 12, fontSize: 11 }}
                     formatter={(value) => <span className="text-[#C9D1DC]">{value}</span>}
                   />
-                  {data.segments.map((s) => (
-                    <Line
-                      key={s.segment}
-                      type="monotone"
-                      dataKey={s.segment}
-                      name={s.segment}
-                      stroke={SEGMENT_COLORS[s.segment] || "#FFF"}
-                      strokeWidth={2.5}
-                      strokeDasharray={SEGMENT_DASH[s.segment]}
-                      dot={{ r: 4, strokeWidth: 0, fill: SEGMENT_COLORS[s.segment] || "#FFF" }}
-                      activeDot={{ r: 6, strokeWidth: 0, fill: SEGMENT_COLORS[s.segment] || "#FFF" }}
-                      isAnimationActive={false}
-                    />
-                  ))}
+                  {data.segments
+                    // Visible segments only — clicking a chip above
+                    // toggles inclusion here. Y-axis stays pinned at
+                    // 0–100% so the curve doesn't rescale awkwardly
+                    // when one segment is hidden.
+                    .filter((s) => active === null || active.has(s.segment))
+                    .map((s) => (
+                      <Line
+                        key={s.segment}
+                        type="monotone"
+                        dataKey={s.segment}
+                        name={s.segment}
+                        stroke={SEGMENT_COLORS[s.segment] || "#FFF"}
+                        strokeWidth={2.5}
+                        strokeDasharray={SEGMENT_DASH[s.segment]}
+                        dot={{ r: 4, strokeWidth: 0, fill: SEGMENT_COLORS[s.segment] || "#FFF" }}
+                        activeDot={{ r: 6, strokeWidth: 0, fill: SEGMENT_COLORS[s.segment] || "#FFF" }}
+                        isAnimationActive={false}
+                      />
+                    ))}
                 </LineChart>
               </ResponsiveContainer>
             </div>
