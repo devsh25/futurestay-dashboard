@@ -97,8 +97,13 @@ async function googleAdsSearch(query: string): Promise<Record<string, unknown>[]
   const devToken    = process.env.GOOGLE_ADS_DEVELOPER_TOKEN;
   const customerId  = (process.env.GOOGLE_ADS_CUSTOMER_ID || "").replace(/-/g, "");
   const loginCustId = (process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || "").replace(/-/g, "");
-  if (!devToken || !customerId) {
-    throw new Error("Missing GOOGLE_ADS_DEVELOPER_TOKEN or GOOGLE_ADS_CUSTOMER_ID");
+  // Specific error so we know exactly which var is missing in prod
+  // (Vercel hides values; we can only diagnose by name).
+  const missing: string[] = [];
+  if (!devToken)   missing.push("GOOGLE_ADS_DEVELOPER_TOKEN");
+  if (!customerId) missing.push("GOOGLE_ADS_CUSTOMER_ID");
+  if (missing.length > 0) {
+    throw new Error(`Missing env var(s): ${missing.join(", ")}`);
   }
   const accessToken = await getAccessToken();
   const headers: Record<string, string> = {
