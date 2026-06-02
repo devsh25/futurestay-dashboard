@@ -332,6 +332,24 @@ function isFailedTrialist(c: HubSpotContact): boolean {
   return !hadPaidPlan(c);
 }
 
+// "Ever became a real paid customer" — entered the Customer stage on a paid
+// (Amplify/Flex) plan and did NOT quick-cancel within 2 days. UNLIKE
+// isCustomer, this ignores the *current* lifecycle stage, so someone who
+// converted and later churned (now former.customer) still counts as a
+// conversion, keyed by their customer-entry date.
+//
+// Use this for conversion metrics (Run Rate customers line, Trial→Customer %,
+// Signup→Customer %, per-campaign / per-geo / per-rep conversion). Use
+// isCustomer only where "currently a paying customer" is meant — e.g. the
+// churn-rate denominator and the funnel's current-state Customer node (which
+// has its own separate Churned branch, so counting churns there too would
+// double-count them).
+function everBecameRealCustomer(c: HubSpotContact): boolean {
+  if (!everBecameCustomer(c)) return false;
+  if (isQuickCancel(c)) return false;
+  return hadPaidPlan(c);
+}
+
 // ---- Date-based trial/customer detection (using HubSpot lifecycle dates) ----
 
 function getTrialEnteredDate(c: HubSpotContact): Date | null {
@@ -435,12 +453,14 @@ function computeKPIs(
     return td && td >= start && td <= end;
   }).length;
 
-  // Customers = entered customer during this period AND not a quick cancel (<2 days).
-  // Per Data Guide + product rule: cancellations within 2 days aren't real conversions.
+  // Customers = entered customer during this period AND became a real paid
+  // customer (Amplify/Flex, not a <2-day quick cancel). Counts conversions by
+  // entry date regardless of current lifecycle, so since-churned customers
+  // still count. Per Data Guide + product rule.
   const totalCustomers = allContacts.filter((c) => {
     const cd = getCustomerEnteredDate(c);
     if (!cd || cd < start || cd > end) return false;
-    return !isQuickCancel(c);
+    return everBecameRealCustomer(c);
   }).length;
 
   // In Trial = entered trial during this period AND still currently in trial
@@ -496,9 +516,10 @@ function computeKPIs(
       // In Trial: entered AND still Trialist
       if (isInTrial(c) && idx >= 0) inTrialDaily[idx]++;
     }
-    // Customers entered
+    // Customers entered — real paid conversions (incl. since-churned),
+    // matching the totalCustomers tile so the sparkline agrees with it.
     const cd = getCustomerEnteredDate(c);
-    if (cd) {
+    if (cd && everBecameRealCustomer(c)) {
       const idx = dayIndex(cd);
       if (idx >= 0) customersDaily[idx]++;
     }
@@ -528,7 +549,7 @@ function computeKPIs(
   const prevRawSignups = countInRange(allContacts, createdateOf, prevStart, prevEnd, isSignup);
   const prevSignups = countInRange(allContacts, createdateOf, prevStart, prevEnd, (c) => isSignup(c) && !hasDQ(c));
   const prevTrials = countInRange(allContacts, getTrialEnteredDate, prevStart, prevEnd);
-  const prevCustomers = countInRange(allContacts, getCustomerEnteredDate, prevStart, prevEnd);
+  const prevCustomers = countInRange(allContacts, getCustomerEnteredDate, prevStart, prevEnd, everBecameRealCustomer);
   const prevInTrial = countInRange(allContacts, getTrialEnteredDate, prevStart, prevEnd, isInTrial);
 
   const delta = (current: number, previous: number) => ({
@@ -599,9 +620,11 @@ function computeCohort(contacts: HubSpotContact[]): CohortData {
   const ready = contacts.filter(isReadyToLaunch).length;
   const trials = contacts.filter(everTrialed).length;
   const inTrial = contacts.filter(isInTrial).length;
-  // Customers = current "customer" OR "Customer/Limited Access" — both count
-  // per Data Guide 3.0. isCustomer already matches CUSTOMER_LIFECYCLES.
-  const customers = contacts.filter(isCustomer).length;
+  // Customers (conversion sense) = ever became a real paid customer, including
+  // those who have since churned. This is a "did this cohort convert?" count,
+  // so it must NOT gate on current lifecycle — otherwise churned customers
+  // vanish from the numerator while still sitting in the trials denominator.
+  const customers = contacts.filter(everBecameRealCustomer).length;
   const churned = contacts.filter(isRealChurn).length;
   const failedTrialists = contacts.filter(isFailedTrialist).length;
   const limitedAccess = contacts.filter(isLimitedAccess).length;
@@ -633,8 +656,9 @@ function computeCohort(contacts: HubSpotContact[]): CohortData {
     failedTrialistRate: n > 0 ? (failedTrialists / n) * 100 : 0,
     limitedAccessRate: n > 0 ? (limitedAccess / n) * 100 : 0,
     // Trial → Customer conversion (Data Guide): of those who started a trial,
-    // what % became a real customer? Excludes failed trialists and quick cancels
-    // naturally because `customers` uses current customer lifecycle.
+    // what % became a real paid customer? `customers` here counts everyone who
+    // ever converted (incl. since-churned) and excludes failed trialists and
+    // ≤2-day quick cancels — so churn doesn't deflate the conversion rate.
     trialToCustomerRate: trials > 0 ? (customers / trials) * 100 : 0,
   };
 }
@@ -656,7 +680,8 @@ function computeCampaigns(contacts: HubSpotContact[]): CampaignRow[] {
       const signups = cs.length;
       const trials = cs.filter(everTrialed).length;
       const inTrial = cs.filter(isInTrial).length;
-      const customers = cs.filter(isCustomer).length;
+      // Conversion count: ever became a real paid customer (incl. since-churned).
+      const customers = cs.filter(everBecameRealCustomer).length;
       const source = cs[0]?.first_touch_utm_source?.toLowerCase() || "unknown";
       return {
         campaign: campaign.length > 65 ? campaign.slice(0, 62) + "..." : campaign,
@@ -697,7 +722,7 @@ function computeGeo(contacts: HubSpotContact[]): GeoRow[] {
       const launch = cs.filter(clickedLaunch).length;
       const trials = cs.filter(everTrialed).length;
       const inTrial = cs.filter(isInTrial).length;
-      const customers = cs.filter(isCustomer).length;
+      const customers = cs.filter(everBecameRealCustomer).length;
 
       const cityGroups: Record<string, HubSpotContact[]> = {};
       for (const c2 of cs) {
@@ -711,7 +736,7 @@ function computeGeo(contacts: HubSpotContact[]): GeoRow[] {
           city, signups: cityCs.length,
           trials: cityCs.filter(everTrialed).length,
           inTrial: cityCs.filter(isInTrial).length,
-          customers: cityCs.filter(isCustomer).length,
+          customers: cityCs.filter(everBecameRealCustomer).length,
         }))
         .sort((a, b) => b.signups - a.signups).slice(0, 20);
 
@@ -754,10 +779,11 @@ function computeReps(
         return td && td >= start && td <= end;
       }).length;
 
-      // Customers = entered customer stage during this period
+      // Customers = entered customer stage during this period AND became a real
+      // paid customer (incl. since-churned; excludes <2-day quick cancels).
       const customers = cs.filter((c) => {
         const cd = getCustomerEnteredDate(c);
-        return cd && cd >= start && cd <= end;
+        return cd && cd >= start && cd <= end && everBecameRealCustomer(c);
       }).length;
 
       // In Trial = entered trial during period AND currently still in trial
@@ -1040,7 +1066,11 @@ export function computeTimeSeries(contacts: HubSpotContact[]): TimeSeries {
     // lifecycle. The Run Rate has to match or the chart and the KPI
     // tile disagree on the same week.
     consider(c.hs_v2_date_entered_opportunity || c.trial__start_date);
-    if (isCustomer(c)) consider(c.hs_v2_date_entered_customer);
+    // Conversions are keyed by customer-entry date and count anyone who ever
+    // became a real paid customer — including those who later churned (see
+    // everBecameRealCustomer). Gating on current lifecycle (isCustomer) here
+    // would silently drop every churned customer from their entry date.
+    if (everBecameRealCustomer(c)) consider(c.hs_v2_date_entered_customer);
   }
 
   if (!isFinite(minTs)) {
@@ -1135,8 +1165,10 @@ export function computeTimeSeries(contacts: HubSpotContact[]): TimeSeries {
       const i = bucketIndex(trialDate);
       if (i >= 0) trials[i]++;
     }
-    // Customers — by actual customer entry date.
-    if (isCustomer(c)) {
+    // Customers — by actual customer entry date. Counts everyone who ever
+    // became a real paid customer (incl. since-churned), not just those
+    // currently in the customer lifecycle.
+    if (everBecameRealCustomer(c)) {
       const i = bucketIndex(c.hs_v2_date_entered_customer);
       if (i >= 0) customers[i]++;
     }

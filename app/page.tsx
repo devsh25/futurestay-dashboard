@@ -164,6 +164,7 @@ export default function Dashboard() {
             during refreshes so the user knows the numbers are about
             to update. */}
         <div
+          id="dashboard-content"
           className={`transition-opacity duration-200 space-y-6 ${
             !firstFoldReady ? "hidden" : isRefreshing ? "opacity-60 pointer-events-none" : "opacity-100"
           }`}
