@@ -105,10 +105,13 @@ async function googleAdsSearch(query: string): Promise<Record<string, unknown>[]
   if (missing.length > 0) {
     throw new Error(`Missing env var(s): ${missing.join(", ")}`);
   }
+  // After the guard above, devToken is guaranteed present — assert so TS
+  // narrows it from `string | undefined` to `string` for the header below.
+  const developerToken: string = devToken!;
   const accessToken = await getAccessToken();
   const headers: Record<string, string> = {
     Authorization: `Bearer ${accessToken}`,
-    "developer-token": devToken,
+    "developer-token": developerToken,
     "Content-Type": "application/json",
   };
   if (loginCustId) headers["login-customer-id"] = loginCustId;

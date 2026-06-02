@@ -23,6 +23,7 @@ function addDaysToKey(key: string, n: number): string {
 }
 
 type Granularity = "day" | "week" | "month";
+type Mode = "count" | "percent";
 
 type Series = {
   days: string[];
@@ -211,6 +212,10 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
   );
   const [smoothed, setSmoothed] = useState(true);
   const [granularity, setGranularity] = useState<Granularity>("day");
+  // "count"  → raw daily/weekly/monthly volumes.
+  // "percent"→ each milestone as a % of Qualified Signups in the SAME bucket,
+  //            i.e. funnel conversion rates over time (Qualified Signups = 100%).
+  const [mode, setMode] = useState<Mode>("count");
 
   useEffect(() => {
     let cancelled = false;
@@ -248,9 +253,35 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
   //          partial and rendered dashed)
   const rows = useMemo(() => {
     if (!data) return [];
+    const asPercent = mode === "percent";
+    // Each milestone as a % of Qualified Signups in the SAME bucket. Null when
+    // the bucket has no signups (avoids divide-by-zero / a spurious point) —
+    // Recharts then leaves a gap there.
+    const toPercentOf = (arr: number[], denom: number[]): (number | null)[] =>
+      arr.map((v, i) => (denom[i] > 0 ? (v / denom[i]) * 100 : null));
+
     if (granularity === "week" || granularity === "month") {
       const w = granularity === "week" ? bucketByWeek(data) : bucketByMonth(data);
       const N = w.weekStart.length;
+
+      // Plotted value per metric: raw period sums, or the period's conversion
+      // rate (metric / signups). The % uses each bucket's own sums so it lines
+      // up with the week/month the reader sees.
+      const vals: Record<MetricKey, (number | null)[]> = asPercent
+        ? {
+            signups: toPercentOf(w.signups, w.signups),
+            airbnbConnects: toPercentOf(w.airbnbConnects, w.signups),
+            readyToLaunch: toPercentOf(w.readyToLaunch, w.signups),
+            trials: toPercentOf(w.trials, w.signups),
+            customers: toPercentOf(w.customers, w.signups),
+          }
+        : {
+            signups: w.signups,
+            airbnbConnects: w.airbnbConnects,
+            readyToLaunch: w.readyToLaunch,
+            trials: w.trials,
+            customers: w.customers,
+          };
 
       // Split each metric's values into two parallel arrays per row:
       //   metric_solid   = value on full weeks, null on partial weeks
@@ -259,7 +290,7 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
       // its value copied into the other array so the line actually
       // *connects* through the transition instead of leaving a gap.
       const partial = w.partial;
-      function split(values: number[]) {
+      function split(values: (number | null)[]) {
         const solid: (number | null)[] = new Array(N).fill(null);
         const dashed: (number | null)[] = new Array(N).fill(null);
         for (let i = 0; i < N; i++) {
@@ -279,22 +310,22 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
         return { solid, dashed };
       }
 
-      const split_signups        = split(w.signups);
-      const split_airbnbConnects = split(w.airbnbConnects);
-      const split_readyToLaunch  = split(w.readyToLaunch);
-      const split_trials         = split(w.trials);
-      const split_customers      = split(w.customers);
+      const split_signups        = split(vals.signups);
+      const split_airbnbConnects = split(vals.airbnbConnects);
+      const split_readyToLaunch  = split(vals.readyToLaunch);
+      const split_trials         = split(vals.trials);
+      const split_customers      = split(vals.customers);
 
       return w.weekStart.map((ws, i) => ({
         day: ws,                  // x-axis key, named `day` for continuity with daily mode
         weekEnd: w.weekEnd[i],
         partial: w.partial[i],
-        // Raw values — used by the tooltip (read directly from row.payload)
-        signups: w.signups[i],
-        airbnbConnects: w.airbnbConnects[i],
-        readyToLaunch: w.readyToLaunch[i],
-        trials: w.trials[i],
-        customers: w.customers[i],
+        // Plotted values — used by the tooltip (read directly from row.payload)
+        signups: vals.signups[i],
+        airbnbConnects: vals.airbnbConnects[i],
+        readyToLaunch: vals.readyToLaunch[i],
+        trials: vals.trials[i],
+        customers: vals.customers[i],
         // Split values — used by the two Line components per metric
         signups_solid: split_signups.solid[i],
         signups_dashed: split_signups.dashed[i],
@@ -308,14 +339,26 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
         customers_dashed: split_customers.dashed[i],
       }));
     }
-    // Daily mode (existing behaviour)
-    const series: Record<MetricKey, number[]> = {
-      signups: smoothed ? smooth(data.signups) : data.signups,
-      airbnbConnects: smoothed ? smooth(data.airbnbConnects) : data.airbnbConnects,
-      readyToLaunch: smoothed ? smooth(data.readyToLaunch) : data.readyToLaunch,
-      trials: smoothed ? smooth(data.trials) : data.trials,
-      customers: smoothed ? smooth(data.customers) : data.customers,
+    // Daily mode. Smooth the counts first (if enabled), then take the ratio —
+    // dividing two smoothed series is far less jumpy than smoothing a noisy
+    // day-by-day ratio of small numbers.
+    const rawOrSmooth = (a: number[]) => (smoothed ? smooth(a) : a);
+    const base: Record<MetricKey, number[]> = {
+      signups: rawOrSmooth(data.signups),
+      airbnbConnects: rawOrSmooth(data.airbnbConnects),
+      readyToLaunch: rawOrSmooth(data.readyToLaunch),
+      trials: rawOrSmooth(data.trials),
+      customers: rawOrSmooth(data.customers),
     };
+    const series: Record<MetricKey, (number | null)[]> = asPercent
+      ? {
+          signups: toPercentOf(base.signups, base.signups),
+          airbnbConnects: toPercentOf(base.airbnbConnects, base.signups),
+          readyToLaunch: toPercentOf(base.readyToLaunch, base.signups),
+          trials: toPercentOf(base.trials, base.signups),
+          customers: toPercentOf(base.customers, base.signups),
+        }
+      : base;
     return data.days.map((day, i) => ({
       day,
       signups: series.signups[i],
@@ -324,7 +367,7 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
       trials: series.trials[i],
       customers: series.customers[i],
     }));
-  }, [data, smoothed, granularity]);
+  }, [data, smoothed, granularity, mode]);
 
   // Headline totals shown in the card header — full series sums, not
   // smoothed (smoothing is just for the visual line).
@@ -370,6 +413,14 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
           <code className="text-[#C9D1DC]">trial__start_date</code>; Customers use{" "}
           <code className="text-[#C9D1DC]">hs_v2_date_entered_customer</code>. Toggle metrics
           with the chips below; switch Daily / Weekly / Monthly with the toggle on the right.
+          {mode === "percent" && (
+            <>
+              {" "}Showing each milestone as a{" "}
+              <span className="text-[#60A5FA]">% of Qualified Signups</span> in the same
+              bucket — funnel conversion rates over time, with Qualified Signups as the
+              100% baseline.
+            </>
+          )}
         </p>
       </CardHeader>
 
@@ -416,6 +467,32 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
               })}
 
               <div className="ml-auto flex items-center gap-3">
+                {/* Value-mode toggle — Counts (raw volumes) vs. % of
+                    Qualified Signups (conversion rate over time). */}
+                <div className="inline-flex rounded-full border border-[#1F2937] bg-[#0E1422] p-0.5 text-[11px] font-semibold">
+                  {([
+                    ["count", "Counts"],
+                    ["percent", "% of signups"],
+                  ] as [Mode, string][]).map(([md, label]) => (
+                    <button
+                      key={md}
+                      onClick={() => setMode(md)}
+                      className={`px-3 py-1 rounded-full transition-colors ${
+                        mode === md
+                          ? "bg-[#1E6FFF] text-white"
+                          : "text-[#8B92A3] hover:text-white"
+                      }`}
+                      title={
+                        md === "percent"
+                          ? "Show each milestone as a % of Qualified Signups in the same bucket"
+                          : "Show raw counts"
+                      }
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
                 {/* Granularity toggle — Daily / Weekly / Monthly.
                     Daily for spotting day-of-week patterns; Weekly
                     (Mon-Sun ET) for the natural growth reporting
@@ -475,8 +552,10 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
                     width={48}
                     // Round y-axis ticks to integers — fractional people
                     // don't make sense even when the underlying line is a
-                    // 7-day moving average.
-                    tickFormatter={(v: number) => Math.round(v).toLocaleString()}
+                    // 7-day moving average. In percent mode, show "NN%".
+                    tickFormatter={(v: number) =>
+                      mode === "percent" ? `${Math.round(v)}%` : Math.round(v).toLocaleString()
+                    }
                     allowDecimals={false}
                   />
                   <Tooltip
@@ -589,7 +668,9 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
                                 />
                                 <span style={{ flex: 1 }}>{m.label}</span>
                                 <span style={{ fontVariantNumeric: "tabular-nums", color: "#FFFFFF", fontWeight: 600 }}>
-                                  {Math.round(row.value).toLocaleString()}
+                                  {mode === "percent"
+                                    ? `${row.value.toFixed(1)}%`
+                                    : Math.round(row.value).toLocaleString()}
                                 </span>
                               </div>
                             );
