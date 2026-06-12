@@ -137,8 +137,10 @@ export default function FunnelCard({
   // Sentinel values — must match lib/funnel.ts. Hardcoding the string
   // here rather than importing because that import would pull the
   // server-only funnel module into a client bundle.
-  const ALL_META_SENTINEL = "@all-meta";
-  const ALL_GOOGLE_SENTINEL = "@all-google";
+  const ALL_META_SENTINEL     = "@all-meta";
+  const ALL_GOOGLE_SENTINEL   = "@all-google";
+  const GOOGLE_PMAX_SENTINEL  = "@google-pmax";
+  const GOOGLE_BRAND_SENTINEL = "@google-brand";
 
   useEffect(() => {
     let cancelled = false;
@@ -341,6 +343,16 @@ export default function FunnelCard({
               {googleOptions.length > 0 && (
                 <option value={ALL_GOOGLE_SENTINEL}>All Google campaigns</option>
               )}
+              {/* Google family shortcuts — only render when there's at
+                  least one campaign whose name matches the regex.
+                  Avoids confusing empty filters when the account has
+                  no Pmax / no Brand campaigns. Same regex as lib/funnel.ts. */}
+              {googleOptions.some((c) => /(^|[^a-z])pmax([^a-z]|$)/i.test(c.name)) && (
+                <option value={GOOGLE_PMAX_SENTINEL}>All Google Pmax campaigns</option>
+              )}
+              {googleOptions.some((c) => /(^|[^a-z])brand([^a-z]|$)/i.test(c.name)) && (
+                <option value={GOOGLE_BRAND_SENTINEL}>All Google Brand campaigns</option>
+              )}
               {metaOptions.length > 0 && (
                 <optgroup label="Meta — individual">
                   {metaOptions.map((c) => (
@@ -373,11 +385,11 @@ export default function FunnelCard({
             <span className="text-[#60A5FA] font-medium">
               Filtered to{" "}
               <span className="text-white" title={campaign}>
-                {campaign === ALL_META_SENTINEL
-                  ? "All Meta campaigns"
-                  : campaign === ALL_GOOGLE_SENTINEL
-                    ? "All Google campaigns"
-                    : shortCampaign(campaign)}
+                {campaign === ALL_META_SENTINEL     ? "All Meta campaigns"
+                : campaign === ALL_GOOGLE_SENTINEL   ? "All Google campaigns"
+                : campaign === GOOGLE_PMAX_SENTINEL  ? "All Google Pmax campaigns"
+                : campaign === GOOGLE_BRAND_SENTINEL ? "All Google Brand campaigns"
+                : shortCampaign(campaign)}
               </span>
               .
             </span>

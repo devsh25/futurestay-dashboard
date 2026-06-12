@@ -102,7 +102,7 @@ async function googleAdsSearch(query: string): Promise<Record<string, unknown>[]
   const missing: string[] = [];
   if (!devToken)   missing.push("GOOGLE_ADS_DEVELOPER_TOKEN");
   if (!customerId) missing.push("GOOGLE_ADS_CUSTOMER_ID");
-  if (missing.length > 0) {
+  if (missing.length > 0 || !devToken || !customerId) {
     throw new Error(`Missing env var(s): ${missing.join(", ")}`);
   }
   // After the guard above, devToken is guaranteed present — assert so TS
