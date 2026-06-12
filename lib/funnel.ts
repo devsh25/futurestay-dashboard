@@ -17,6 +17,10 @@ import {
   isGoogleSourcedContact,
   isMetaAttributedContact,
 } from "./campaigns";
+import {
+  tzStartOfDay, tzEndOfDay, tzAddDays, tzStartOfWeek,
+  tzStartOfMonth, tzStartOfQuarter, tzDateKey,
+} from "./timezone";
 
 /** Sentinel campaign values for the Funnel filter dropdown.
  *  Prefixed with "@" so they never collide with a real Meta or
@@ -38,10 +42,6 @@ export const GOOGLE_BRAND_SENTINEL = "@google-brand";
  *  ones (e.g. "@google-search", "@google-display"). */
 const GOOGLE_PMAX_NAME_REGEX  = /(^|[^a-z])pmax([^a-z]|$)/i;
 const GOOGLE_BRAND_NAME_REGEX = /(^|[^a-z])brand([^a-z]|$)/i;
-import {
-  tzStartOfDay, tzEndOfDay, tzAddDays, tzStartOfWeek,
-  tzStartOfMonth, tzStartOfQuarter, tzDateKey,
-} from "./timezone";
 
 // ---- Date helpers ----
 
