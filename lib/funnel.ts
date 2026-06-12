@@ -20,9 +20,24 @@ import {
 
 /** Sentinel campaign values for the Funnel filter dropdown.
  *  Prefixed with "@" so they never collide with a real Meta or
- *  Google campaign name. */
-export const ALL_META_SENTINEL = "@all-meta";
-export const ALL_GOOGLE_SENTINEL = "@all-google";
+ *  Google campaign name.
+ *
+ *  PMAX / BRAND group all Google campaigns matching a name pattern
+ *  (any "Pmax …" / any "Brand …" campaign). Useful because Google
+ *  Ads campaigns are typically named by type-prefix in this account,
+ *  so a single dropdown choice lets the user scope to a whole class
+ *  rather than picking individual campaigns. */
+export const ALL_META_SENTINEL     = "@all-meta";
+export const ALL_GOOGLE_SENTINEL   = "@all-google";
+export const GOOGLE_PMAX_SENTINEL  = "@google-pmax";
+export const GOOGLE_BRAND_SENTINEL = "@google-brand";
+
+/** Name predicates for the Google-family sentinels. Both case-
+ *  insensitive, word-boundary-anchored so "PMax-Search-Brand"
+ *  matches both. Kept side-by-side so it's obvious how to add new
+ *  ones (e.g. "@google-search", "@google-display"). */
+const GOOGLE_PMAX_NAME_REGEX  = /(^|[^a-z])pmax([^a-z]|$)/i;
+const GOOGLE_BRAND_NAME_REGEX = /(^|[^a-z])brand([^a-z]|$)/i;
 import {
   tzStartOfDay, tzEndOfDay, tzAddDays, tzStartOfWeek,
   tzStartOfMonth, tzStartOfQuarter, tzDateKey,
@@ -470,6 +485,13 @@ function computeKPIs(
   }).length;
 
   const dqCount = signupFiltered.filter(hasDQ).length;
+  // Airbnb-DQ rate denominated against successful Airbnb connects:
+  // of contacts who completed OAuth (auth COMPLETED/REVOKED) within
+  // the period's signup cohort, what % were subsequently
+  // disqualified during Airbnb listing validation? This measures
+  // the "Airbnb connect → Ready to Launch" loss specifically.
+  const authedInWindow = signupFiltered.filter(isAuth).length;
+  const dqAmongAuthed = signupFiltered.filter((c) => isAuth(c) && hasDQ(c)).length;
 
   // ---- Sparkline (14 daily buckets ending at period end) ----
   const SPARKLINE_DAYS = 14;
@@ -592,6 +614,7 @@ function computeKPIs(
     trialToPayRate: totalTrials > 0 ? (totalCustomers / totalTrials) * 100 : 0,
     churnRate,
     dqRate: totalSignups > 0 ? (dqCount / totalSignups) * 100 : 0,
+    airbnbDqRate: authedInWindow > 0 ? (dqAmongAuthed / authedInWindow) * 100 : 0,
     sparkline: {
       rawSignups: rawSignupsDaily,
       signups: signupsDaily,
@@ -925,20 +948,33 @@ export function computeFunnelByCampaign(
 
   // Campaign filter — only applied if a campaign was specified.
   if (campaign) {
-    // Five attribution paths, checked in priority order:
-    //   1. @all-meta sentinel → contacts matched by ANY active Meta
-    //   2. @all-google sentinel → contacts whose utm_source = google
-    //   3. Exact match against an active Google campaign name → utm_source
-    //      + utm_campaign-ID lookup
-    //   4. Exact match against an active Meta campaign name → per-Meta
-    //      matcher (utm / src2 / ref_source override)
-    //   5. Legacy bucket key → bucketContactToCampaign substring match
+    // Seven attribution paths, checked in priority order:
+    //   1. @all-meta        → contacts matched by ANY active Meta campaign
+    //   2. @all-google      → contacts whose utm_source = google
+    //   3. @google-pmax     → contacts attributed to any Google campaign
+    //                         whose NAME matches the Pmax regex
+    //   4. @google-brand    → same, for Brand campaigns
+    //   5. Exact Google campaign name → utm_source + utm_campaign-ID lookup
+    //   6. Exact Meta campaign name   → per-Meta matcher
+    //   7. Legacy bucket key          → bucketContactToCampaign substring
     if (campaign === ALL_META_SENTINEL) {
       signupFiltered = signupFiltered.filter((c) =>
         isMetaAttributedContact(c, activeMetaCampaigns),
       );
     } else if (campaign === ALL_GOOGLE_SENTINEL) {
       signupFiltered = signupFiltered.filter(isGoogleSourcedContact);
+    } else if (campaign === GOOGLE_PMAX_SENTINEL || campaign === GOOGLE_BRAND_SENTINEL) {
+      // Filter Google campaigns by name regex, then match contacts
+      // attributed to ANY of those campaigns. utm_source must also
+      // be "google" (already enforced by matchContactToGoogleCampaign).
+      const re = campaign === GOOGLE_PMAX_SENTINEL ? GOOGLE_PMAX_NAME_REGEX : GOOGLE_BRAND_NAME_REGEX;
+      const targetNames = new Set(
+        activeGoogleCampaigns.filter((g) => re.test(g.name)).map((g) => g.name),
+      );
+      signupFiltered = signupFiltered.filter((c) => {
+        const match = matchContactToGoogleCampaign(c, activeGoogleCampaigns);
+        return match !== null && targetNames.has(match);
+      });
     } else if (activeGoogleCampaigns.some((g) => g.name === campaign)) {
       signupFiltered = signupFiltered.filter(
         (c) => matchContactToGoogleCampaign(c, activeGoogleCampaigns) === campaign,

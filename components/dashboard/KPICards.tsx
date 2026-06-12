@@ -193,7 +193,7 @@ export default function KPICards({
       </div>
 
       {/* Conversion-rate cards — smaller, one per metric. */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
         <RateCard
           label="QS → Ready"
           value={cohort.readyToLaunchRate}
@@ -223,6 +223,11 @@ export default function KPICards({
           label="DQ Rate"
           value={kpis.dqRate}
           color={kpis.dqRate < 10 ? "good" : kpis.dqRate < 20 ? "warn" : "bad"}
+        />
+        <RateCard
+          label="Airbnb DQ Rate"
+          value={kpis.airbnbDqRate}
+          color={kpis.airbnbDqRate < 10 ? "good" : kpis.airbnbDqRate < 20 ? "warn" : "bad"}
         />
       </div>
     </div>

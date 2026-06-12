@@ -118,6 +118,13 @@ export interface KPIs {
   trialToPayRate: number;
   churnRate: number;         // Churned / (Active Customers + Churned) — excludes failed trialists
   dqRate: number;
+  /** DQ rate denominated against successful Airbnb connects (rather
+   *  than total signups). Measures the "Airbnb connect → Ready to
+   *  Launch" loss specifically — of contacts who completed OAuth,
+   *  what % were disqualified during the listing-validation step
+   *  (UNSUPPORTED_COUNTRY / INCOMPLETE_ADDRESS / NO_PUBLISHED_LISTINGS_FOUND
+   *  / UNPUBLISHED_LISTING / OTHER). */
+  airbnbDqRate: number;
   sparkline: SparklineSeries;
   deltas: {
     rawSignups: TrendDelta; // total signups incl. DQ'd
