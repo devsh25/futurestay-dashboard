@@ -187,15 +187,20 @@ export async function fetchGoogleAdsDaily(
     WHERE segments.date BETWEEN '${since}' AND '${until}'
   `;
   const results = await googleAdsSearch(query);
+  // Note: the GAQL query uses snake_case field names (metrics.cost_micros)
+  // but Google's REST response converts everything to camelCase
+  // (metrics.costMicros). Reading the snake_case form here returns
+  // undefined and silently zeros out spend — that single oversight cost
+  // a day of debugging when Basic Access was first turned on.
   const byDate = new Map<string, number>();
   for (const r of results) {
     const seg = (r.segments || {}) as { date?: string };
-    const m   = (r.metrics  || {}) as { cost_micros?: string | number };
+    const m   = (r.metrics  || {}) as { costMicros?: string | number };
     const date = seg.date;
     if (!date) continue;
-    const micros = typeof m.cost_micros === "number"
-      ? m.cost_micros
-      : parseFloat(String(m.cost_micros ?? "0"));
+    const micros = typeof m.costMicros === "number"
+      ? m.costMicros
+      : parseFloat(String(m.costMicros ?? "0"));
     if (isNaN(micros)) continue;
     byDate.set(date, (byDate.get(date) || 0) + micros / 1_000_000);
   }
@@ -228,12 +233,15 @@ export async function fetchGoogleAdsInsights(
   const byId = new Map<string, GoogleAdsCampaignInsight>();
   for (const r of results) {
     const camp = (r.campaign || {}) as { id?: string | number; name?: string; status?: string };
+    // Same snake_case-vs-camelCase gotcha as fetchGoogleAdsDaily: GAQL
+    // selects use cost_micros / conversions_value but the JSON response
+    // keys those as costMicros / conversionsValue.
     const m = (r.metrics || {}) as {
-      cost_micros?: string | number;
+      costMicros?: string | number;
       impressions?: string | number;
       clicks?: string | number;
       conversions?: string | number;
-      conversions_value?: string | number;
+      conversionsValue?: string | number;
     };
     const id = String(camp.id ?? "");
     if (!id || isTestCampaign(camp.name || "")) continue;
@@ -248,11 +256,11 @@ export async function fetchGoogleAdsInsights(
       };
       byId.set(id, row);
     }
-    row.cost            += n(m.cost_micros) / 1_000_000;
+    row.cost            += n(m.costMicros) / 1_000_000;
     row.impressions     += n(m.impressions);
     row.clicks          += n(m.clicks);
     row.conversions     += n(m.conversions);
-    row.conversionValue += n(m.conversions_value);
+    row.conversionValue += n(m.conversionsValue);
   }
   for (const r of byId.values()) {
     r.ctr = r.impressions > 0 ? (r.clicks / r.impressions) * 100 : 0;
