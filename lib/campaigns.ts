@@ -3,6 +3,7 @@
 
 import { HubSpotContact, CampaignAnalysisRow, CampaignAnalysisData } from "./types";
 import { fetchMetaInsights } from "./meta";
+import { fetchActiveGoogleCampaigns, fetchGoogleAdsInsights } from "./google";
 
 // HubSpot Notes API token reused from env
 const HUBSPOT_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN!;
@@ -510,8 +511,39 @@ export async function computeCampaignAnalysis(
   const start = new Date(`${since}T00:00:00.000Z`);
   const end = new Date(`${until}T23:59:59.999Z`);
 
-  // Fetch Meta spend for the same window
-  const metaInsights = await fetchMetaInsights(since, until);
+  // Fetch Meta spend + Google spend (roster + insights) in parallel.
+  // Google failures degrade gracefully — we just show no Google rows
+  // rather than killing the whole Campaign Analysis card.
+  const [metaInsights, googleRoster, googleInsightsRaw] = await Promise.all([
+    fetchMetaInsights(since, until),
+    fetchActiveGoogleCampaigns().catch((err) => {
+      console.error("[campaigns] fetchActiveGoogleCampaigns failed:", err);
+      return [] as { id: string; name: string; status: string }[];
+    }),
+    fetchGoogleAdsInsights(since, until).catch((err) => {
+      console.error("[campaigns] fetchGoogleAdsInsights failed:", err);
+      return [] as Awaited<ReturnType<typeof fetchGoogleAdsInsights>>;
+    }),
+  ]);
+
+  // Merge Google insights with active roster — same pattern as Meta:
+  // active campaigns missing from insights (zero spend in window) are
+  // surfaced so freshly-launched campaigns still appear in the table.
+  const googleInsightsById = new Map(googleInsightsRaw.map((g) => [g.id, g]));
+  type GoogleCampaignRecord = { id: string; name: string; spend: number };
+  const googleCampaigns: GoogleCampaignRecord[] = googleRoster.map((r) => {
+    const ins = googleInsightsById.get(r.id);
+    return { id: r.id, name: r.name, spend: ins?.cost ?? 0 };
+  });
+  // Also include any campaign that appeared in insights but not the
+  // current ENABLED roster (e.g. paused this morning but spent yesterday).
+  const rosterIds = new Set(googleRoster.map((r) => r.id));
+  for (const ins of googleInsightsRaw) {
+    if (!rosterIds.has(ins.id) && ins.cost > 0) {
+      googleCampaigns.push({ id: ins.id, name: ins.name, spend: ins.cost });
+    }
+  }
+  const activeGoogleCampaigns = googleCampaigns.map((g) => ({ id: g.id, name: g.name }));
 
   // Aggregate Meta spend per bucket
   const spendByBucket: Record<string, number> = {};
@@ -572,6 +604,9 @@ export async function computeCampaignAnalysis(
   // contacts are no longer collected (the "— Unattributed (no UTM)"
   // rows that used to be emitted were removed by user request).
   const metaAgg: Record<string, ReturnType<typeof empty>> = {};   // keyed by exact Meta name
+  // Per-Google-campaign exact attribution (utm_source=google +
+  // utm_campaign matches the numeric Google campaign ID).
+  const googleAgg: Record<string, ReturnType<typeof empty>> = {}; // keyed by exact Google name
 
   function bumpAgg(a: ReturnType<typeof empty>, c: HubSpotContact) {
     a.leads += 1;
@@ -597,12 +632,23 @@ export async function computeCampaignAnalysis(
     if (!created || created < start || created > end) continue;
 
     // Exact Meta-campaign match via UTM / src2 / ref_source override.
-    // If hit, attribute to the SPECIFIC Meta campaign. Otherwise the
-    // contact is silently dropped — no more bucket residual.
+    // If hit, attribute to the SPECIFIC Meta campaign and stop.
     const metaMatch = matchMetaCampaign(c);
-    if (!metaMatch) continue;
-    (metaAgg[metaMatch] ||= empty());
-    bumpAgg(metaAgg[metaMatch], c);
+    if (metaMatch) {
+      (metaAgg[metaMatch] ||= empty());
+      bumpAgg(metaAgg[metaMatch], c);
+      continue;
+    }
+    // Then try Google: utm_source = "google" + utm_campaign matches
+    // a numeric Google campaign ID in the active roster.
+    const googleMatch = matchContactToGoogleCampaign(c, activeGoogleCampaigns);
+    if (googleMatch) {
+      (googleAgg[googleMatch] ||= empty());
+      bumpAgg(googleAgg[googleMatch], c);
+      continue;
+    }
+    // Neither matched — drop. (Same "no residual rows" behaviour as
+    // before. The unattributed cohort is visible in the funnel card.)
   }
 
   // ---- Per-Meta-campaign row generation ----
@@ -763,6 +809,47 @@ export async function computeCampaignAnalysis(
       customers: a.cust,
       costPerCustomer: cpa(a.cust),
       meetingToTrialRate,
+      qsToTrialRate: (a.signups - a.airbnbDq) > 0 ? (a.trial / (a.signups - a.airbnbDq)) * 100 : null,
+      qsToCustomerRate: (a.signups - a.airbnbDq) > 0 ? (a.cust / (a.signups - a.airbnbDq)) * 100 : null,
+    });
+  }
+
+  // Google campaigns — one row each. All are treated as type="self"
+  // since they're search / display / Pmax (no equivalent of the Meta
+  // "call campaigns" path). optSignal = "google" so the table column
+  // shows a clear platform distinction. Same column set as Meta self-
+  // serve rows — Airbnb Connected, Ready to Launch, Trials, Customers
+  // all read from HubSpot, so they apply uniformly across platforms.
+  for (const g of googleCampaigns) {
+    const a = googleAgg[g.name] ?? empty();
+    const sp = g.spend;
+    const cpa = (n: number) => (n > 0 ? sp / n : null);
+    const pct = (n: number, d: number) => (d > 0 ? (n / d) * 100 : 0);
+    rows.push({
+      campaign: g.name,
+      type: "self",
+      spend: sp,
+      optSignal: "google",
+      leads: a.leads,
+      meetingsBooked: null,   // not applicable — Google funnels are self-serve here
+      meetingsHeld: null,
+      signups: a.signups,
+      qualifiedSignups: a.signups - a.airbnbDq,
+      airbnbConnected: a.auth,
+      readyToLaunch: a.ready,
+      airbnbDqRate: pct(a.airbnbDq, a.leads),
+      formToMeetingRate: null,
+      costPerMeeting: null,
+      noShowMtgRate: null,
+      dqMtgRate: null,
+      interestedMtgRate: null,
+      notInterestedMtgRate: null,
+      outcomeCoverage: null,
+      trials: a.trial,
+      costPerTrial: cpa(a.trial),
+      customers: a.cust,
+      costPerCustomer: cpa(a.cust),
+      meetingToTrialRate: null,
       qsToTrialRate: (a.signups - a.airbnbDq) > 0 ? (a.trial / (a.signups - a.airbnbDq)) * 100 : null,
       qsToCustomerRate: (a.signups - a.airbnbDq) > 0 ? (a.cust / (a.signups - a.airbnbDq)) * 100 : null,
     });

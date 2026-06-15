@@ -33,7 +33,15 @@ const OPT_LABEL: Record<string, string> = {
   meetings: "meetings",
   signups: "signups",
   airbnb_connected: "airbnb_conn",
+  google: "google ads",  // Google rows use this optSignal as a platform tag
 };
+
+/** True if the row is a Google Ads campaign — distinguished by its
+ *  optSignal value rather than a separate platform field, since
+ *  CAMPAIGN_DEFS doesn't carry platform metadata. */
+function isGoogleRow(optSignal: string) {
+  return optSignal === "google";
+}
 
 function dqColor(rate: number) {
   if (rate >= 20) return "text-[#F87171]";
@@ -63,20 +71,27 @@ function shortCampaign(name: string): string {
 }
 
 function CampaignRow({ r }: { r: CampaignAnalysisRow }) {
-  const tb = TYPE_BADGE[r.type];
+  // Google rows render with a violet platform badge (matches the
+  // Run Rate chart's Google line + the Google Ads card's violet
+  // accent). Meta rows use the existing call/self palette.
+  const isGoogle = isGoogleRow(r.optSignal);
+  const tb = isGoogle
+    ? { bg: "bg-[#A78BFA]/15", text: "text-[#A78BFA]", border: "border-[#A78BFA]/30" }
+    : TYPE_BADGE[r.type];
+  const typeLabel = isGoogle ? "google" : r.type;
   return (
     <TableRow className="border-[#1F2937] hover:bg-[#0E1422] transition-colors">
       {/* No max-w cap: the table is already in an overflow-x-auto
           container, so letting the column auto-size to its longest
           (cleaned) name keeps everything one-line + readable. Tooltip
-          preserves the original Meta name for users who need the
+          preserves the original campaign name for users who need the
           full string. */}
       <TableCell className="font-medium text-[12px] text-white whitespace-nowrap" title={r.campaign}>
         {shortCampaign(r.campaign)}
       </TableCell>
       <TableCell>
         <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded border ${tb.bg} ${tb.text} ${tb.border}`}>
-          {r.type}
+          {typeLabel}
         </span>
       </TableCell>
       <TableCell className="text-right font-mono text-[12px] tabular-nums text-white">{fmtMoney(r.spend)}</TableCell>

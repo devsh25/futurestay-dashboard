@@ -245,6 +245,39 @@ export interface CampaignAnalysisData {
   until: string;  // YYYY-MM-DD
 }
 
+// ---- Google Ads ----
+
+export interface GoogleAdsCampaignRow {
+  id: string;
+  name: string;
+  status: string;          // ENABLED / PAUSED / REMOVED (we filter to ENABLED)
+  spend: number;           // $ cost over the window
+  impressions: number;
+  clicks: number;
+  ctr: number;             // derived %
+  cpc: number;             // derived $
+  conversions: number;     // count of conversion actions Google attributes
+  conversionValue: number; // $ value (if value tracking is set up on the conversion action)
+  costPerConversion: number; // derived $
+}
+
+export interface GoogleAdsInsightsData {
+  since: string;
+  until: string;
+  summary: {
+    spend: number;
+    impressions: number;
+    clicks: number;
+    conversions: number;
+    ctr: number;          // derived %
+    cpc: number;          // derived $
+    cpm: number;          // derived $ per 1000 impr
+    costPerConversion: number; // derived $
+    campaignCount: number;
+  };
+  campaigns: GoogleAdsCampaignRow[];
+}
+
 // ---- Meta Ads ----
 
 export interface MetaCampaignRow {

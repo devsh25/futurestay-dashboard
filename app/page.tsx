@@ -13,6 +13,7 @@ import GeoCard from "@/components/dashboard/GeoCard";
 import RepCard from "@/components/dashboard/RepCard";
 import DQChartCard from "@/components/dashboard/DQChartCard";
 import MetaSpendCard from "@/components/dashboard/MetaSpendCard";
+import GoogleAdsCard from "@/components/dashboard/GoogleAdsCard";
 import CampaignAnalysisCard from "@/components/dashboard/CampaignAnalysisCard";
 import SectionHeading, { Icons } from "@/components/dashboard/SectionHeading";
 import ActiveFilterChips from "@/components/ActiveFilterChips";
@@ -231,11 +232,19 @@ export default function Dashboard() {
                 customEnd={customEnd}
               />
 
-              {/* Meta Ads card lives at the end of the funnel section so
-                  the spend numbers sit next to the campaign performance
-                  table they relate to, rather than splitting the funnel
-                  story in half. */}
+              {/* Meta + Google spend cards at the end of the funnel
+                  section so the spend numbers sit next to the campaign
+                  performance table they relate to, rather than
+                  splitting the funnel story in half. Stacked vertically
+                  rather than side-by-side because each card has its
+                  own per-campaign table — full width gives both the
+                  room they need without column-cramped numbers. */}
               <MetaSpendCard
+                period={period}
+                customStart={customStart}
+                customEnd={customEnd}
+              />
+              <GoogleAdsCard
                 period={period}
                 customStart={customStart}
                 customEnd={customEnd}
