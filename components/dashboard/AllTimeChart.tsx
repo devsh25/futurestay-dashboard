@@ -32,12 +32,22 @@ type Series = {
   readyToLaunch: number[];
   trials: number[];
   customers: number[];
-  /** Daily total ad spend (Meta + Google) in $. May read as 0 for
-   *  Google portion until Basic Access is granted on the dev token. */
-  spend: number[];
+  /** Daily Meta ad spend in $. */
+  metaSpend: number[];
+  /** Daily Google Ads spend in $. Returns 0 until the developer
+   *  token is upgraded from Explorer to Basic Access (Google gates
+   *  metrics.cost_micros behind Basic). */
+  googleSpend: number[];
 };
 
-type MetricKey = "signups" | "airbnbConnects" | "readyToLaunch" | "trials" | "customers" | "spend";
+type MetricKey =
+  | "signups"
+  | "airbnbConnects"
+  | "readyToLaunch"
+  | "trials"
+  | "customers"
+  | "metaSpend"
+  | "googleSpend";
 
 const METRICS: { key: MetricKey; label: string; color: string; description: string; isCurrency?: boolean }[] = [
   { key: "signups",        label: "Qualified Signups",  color: "#1E6FFF", description: "createdate, Airbnb DQ excluded" },
@@ -45,10 +55,12 @@ const METRICS: { key: MetricKey; label: string; color: string; description: stri
   { key: "readyToLaunch",  label: "Ready to Launch",    color: "#93C5FD", description: "property_ready_to_launch=true" },
   { key: "trials",         label: "Trialists",          color: "#FFFFFF", description: "by actual trial start date" },
   { key: "customers",      label: "Customers",          color: "#10B981", description: "by actual customer entry date" },
-  // Plotted on the secondary $ axis (right side) as a dotted line so
-  // it visually reads as a budget overlay, not a funnel-stage count.
-  // Excluded from step-to-step conversion math in the tooltip.
-  { key: "spend",          label: "Budget Spent",       color: "#F59E0B", description: "Daily Meta + Google ad spend ($)", isCurrency: true },
+  // Two spend lines on the secondary $ axis. Amber for Meta, violet
+  // for Google — distinct hues so they're easy to tell apart on the
+  // same axis. Both dotted so they visually read as "spend overlay"
+  // distinct from the count metrics. Excluded from step-to-step conv.
+  { key: "metaSpend",      label: "Meta Spent",         color: "#F59E0B", description: "Daily Meta ad spend ($)",   isCurrency: true },
+  { key: "googleSpend",    label: "Google Spent",       color: "#A78BFA", description: "Daily Google Ads spend ($)", isCurrency: true },
 ];
 
 /** 7-day moving average — the daily volumes are too spiky on weekends
@@ -78,8 +90,9 @@ type WeeklyData = {
   readyToLaunch: number[];
   trials: number[];
   customers: number[];
-  /** Sum of daily ad spend ($) within the bucket. */
-  spend: number[];
+  /** Sums of daily ad spend ($) within the bucket, split per platform. */
+  metaSpend: number[];
+  googleSpend: number[];
   /** Whether each week is "partial" — only true for the most recent
    *  week if today < its Sunday. Lets the chart mark it visually so
    *  the dip from an incomplete week isn't misread as a real drop. */
@@ -92,7 +105,7 @@ type WeeklyData = {
  *  incomplete so the UI can render them differently. */
 function bucketByWeek(data: Series): WeeklyData {
   // Map week-start (Mon ET, YYYY-MM-DD) → aggregated row
-  const buckets = new Map<string, { weekStart: string; weekEnd: string; signups: number; airbnbConnects: number; readyToLaunch: number; trials: number; customers: number; spend: number; daysSeen: number; lastDay: string }>();
+  const buckets = new Map<string, { weekStart: string; weekEnd: string; signups: number; airbnbConnects: number; readyToLaunch: number; trials: number; customers: number; metaSpend: number; googleSpend: number; daysSeen: number; lastDay: string }>();
 
   for (let i = 0; i < data.days.length; i++) {
     const day = data.days[i];
@@ -111,7 +124,7 @@ function bucketByWeek(data: Series): WeeklyData {
         weekStart: weekKey,
         weekEnd: sundayKey,
         signups: 0, airbnbConnects: 0, readyToLaunch: 0, trials: 0, customers: 0,
-        spend: 0,
+        metaSpend: 0, googleSpend: 0,
         daysSeen: 0, lastDay: day,
       });
     }
@@ -121,7 +134,8 @@ function bucketByWeek(data: Series): WeeklyData {
     b.readyToLaunch += data.readyToLaunch[i];
     b.trials += data.trials[i];
     b.customers += data.customers[i];
-    b.spend += data.spend?.[i] ?? 0;
+    b.metaSpend   += data.metaSpend?.[i]   ?? 0;
+    b.googleSpend += data.googleSpend?.[i] ?? 0;
     b.daysSeen += 1;
     if (day > b.lastDay) b.lastDay = day;
   }
@@ -138,7 +152,8 @@ function bucketByWeek(data: Series): WeeklyData {
     readyToLaunch: sorted.map((b) => b.readyToLaunch),
     trials: sorted.map((b) => b.trials),
     customers: sorted.map((b) => b.customers),
-    spend: sorted.map((b) => b.spend),
+    metaSpend: sorted.map((b) => b.metaSpend),
+    googleSpend: sorted.map((b) => b.googleSpend),
     partial: sorted.map((b) => b.daysSeen < 7),
   };
 }
@@ -156,7 +171,8 @@ function bucketByMonth(data: Series): WeeklyData {
   // `day` strings are YYYY-MM-DD ET keys. Month key = YYYY-MM.
   type Row = { monthStart: string; monthEnd: string; days: Set<string>;
                signups: number; airbnbConnects: number; readyToLaunch: number;
-               trials: number; customers: number; spend: number; daysInMonth: number };
+               trials: number; customers: number; metaSpend: number; googleSpend: number;
+               daysInMonth: number };
   const buckets = new Map<string, Row>();
   function lastDayOfMonth(y: number, m: number): number {
     // m is 1-indexed; Date.UTC with day 0 returns last day of previous month
@@ -174,7 +190,7 @@ function bucketByMonth(data: Series): WeeklyData {
         monthEnd:   `${monthKey}-${String(last).padStart(2, "0")}`,
         days: new Set<string>(),
         signups: 0, airbnbConnects: 0, readyToLaunch: 0, trials: 0, customers: 0,
-        spend: 0,
+        metaSpend: 0, googleSpend: 0,
         daysInMonth: last,
       });
     }
@@ -185,7 +201,8 @@ function bucketByMonth(data: Series): WeeklyData {
     b.readyToLaunch += data.readyToLaunch[i];
     b.trials        += data.trials[i];
     b.customers     += data.customers[i];
-    b.spend         += data.spend?.[i] ?? 0;
+    b.metaSpend     += data.metaSpend?.[i]   ?? 0;
+    b.googleSpend   += data.googleSpend?.[i] ?? 0;
   }
   const sorted = Array.from(buckets.values()).sort((a, b) => a.monthStart.localeCompare(b.monthStart));
   return {
@@ -196,7 +213,8 @@ function bucketByMonth(data: Series): WeeklyData {
     readyToLaunch:  sorted.map((b) => b.readyToLaunch),
     trials:    sorted.map((b) => b.trials),
     customers: sorted.map((b) => b.customers),
-    spend:     sorted.map((b) => b.spend),
+    metaSpend: sorted.map((b) => b.metaSpend),
+    googleSpend: sorted.map((b) => b.googleSpend),
     // A month is "partial" if we don't have a row for every calendar
     // day in it. Catches both the trailing current-month case (today
     // < last day) and the leading mid-month-start case.
@@ -223,7 +241,7 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState<Set<MetricKey>>(
-    new Set(["signups", "airbnbConnects", "trials", "customers", "spend"])
+    new Set(["signups", "airbnbConnects", "trials", "customers", "metaSpend", "googleSpend"])
   );
   const [smoothed, setSmoothed] = useState(true);
   const [granularity, setGranularity] = useState<Granularity>("day");
@@ -283,10 +301,11 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
       // rate (metric / signups). The % uses each bucket's own sums so it lines
       // up with the week/month the reader sees.
       // Funnel-stage values get %-of-signups (when asPercent) or raw
-      // counts. Spend is excluded from this map because it's not a
-      // count and not a % — it renders separately on the right $ axis
-      // as a single dotted line (no partial-period split).
-      const vals: Record<Exclude<MetricKey, "spend">, (number | null)[]> = asPercent
+      // counts. Spend (both platforms) is excluded from this map
+      // because it's not a count and not a % — each renders separately
+      // on the right $ axis as a single dotted line (no partial-period
+      // split).
+      const vals: Record<Exclude<MetricKey, "metaSpend" | "googleSpend">, (number | null)[]> = asPercent
         ? {
             signups: toPercentOf(w.signups, w.signups),
             airbnbConnects: toPercentOf(w.airbnbConnects, w.signups),
@@ -345,9 +364,10 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
         readyToLaunch: vals.readyToLaunch[i],
         trials: vals.trials[i],
         customers: vals.customers[i],
-        // Budget Spent — always raw $, single continuous line on the
-        // right $ y-axis. Not split into solid/dashed.
-        spend: w.spend[i],
+        // Meta + Google Spent — always raw $, single continuous line
+        // each on the right $ y-axis. Not split into solid/dashed.
+        metaSpend:   w.metaSpend[i],
+        googleSpend: w.googleSpend[i],
         // Split values — used by the two Line components per metric
         signups_solid: split_signups.solid[i],
         signups_dashed: split_signups.dashed[i],
@@ -365,7 +385,7 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
     // dividing two smoothed series is far less jumpy than smoothing a noisy
     // day-by-day ratio of small numbers.
     const rawOrSmooth = (a: number[]) => (smoothed ? smooth(a) : a);
-    const base: Record<Exclude<MetricKey, "spend">, number[]> = {
+    const base: Record<Exclude<MetricKey, "metaSpend" | "googleSpend">, number[]> = {
       signups: rawOrSmooth(data.signups),
       airbnbConnects: rawOrSmooth(data.airbnbConnects),
       readyToLaunch: rawOrSmooth(data.readyToLaunch),
@@ -374,8 +394,9 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
     };
     // Spend gets the same smoothing treatment as counts (daily $ is
     // also spiky weekend-vs-weekday) but always reads as raw $, not %.
-    const spendSeries = rawOrSmooth(data.spend || new Array(data.days.length).fill(0));
-    const series: Record<Exclude<MetricKey, "spend">, (number | null)[]> = asPercent
+    const metaSpendSeries   = rawOrSmooth(data.metaSpend   || new Array(data.days.length).fill(0));
+    const googleSpendSeries = rawOrSmooth(data.googleSpend || new Array(data.days.length).fill(0));
+    const series: Record<Exclude<MetricKey, "metaSpend" | "googleSpend">, (number | null)[]> = asPercent
       ? {
           signups: toPercentOf(base.signups, base.signups),
           airbnbConnects: toPercentOf(base.airbnbConnects, base.signups),
@@ -391,7 +412,8 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
       readyToLaunch: series.readyToLaunch[i],
       trials: series.trials[i],
       customers: series.customers[i],
-      spend: spendSeries[i],
+      metaSpend:   metaSpendSeries[i],
+      googleSpend: googleSpendSeries[i],
     }));
   }, [data, smoothed, granularity, mode]);
 
@@ -406,7 +428,8 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
       readyToLaunch: sum(data.readyToLaunch),
       trials: sum(data.trials),
       customers: sum(data.customers),
-      spend: sum(data.spend || []),
+      metaSpend:   sum(data.metaSpend   || []),
+      googleSpend: sum(data.googleSpend || []),
     };
   }, [data]);
 
@@ -781,19 +804,19 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
                       built in `rows`, so they only render where they
                       should. */}
                   {METRICS.filter((m) => active.has(m.key)).flatMap((m) => {
-                    // Budget Spent — always a single dotted line on the
-                    // right ($) y-axis, regardless of granularity. We
-                    // don't split it into solid/dashed for partial
-                    // periods because it's ALREADY dotted; the doubled
-                    // dash treatment would be visually confusing.
-                    if (m.key === "spend") {
+                    // Meta / Google Spent — each a single dotted line on
+                    // the right ($) y-axis, regardless of granularity.
+                    // We don't split into solid/dashed for partial
+                    // periods because they're ALREADY dotted; the
+                    // doubled dash treatment would be visually confusing.
+                    if (m.isCurrency) {
                       return [
                         <Line
-                          key="spend"
+                          key={m.key}
                           yAxisId="right"
                           type="monotone"
                           name={m.key}
-                          dataKey="spend"
+                          dataKey={m.key}
                           stroke={m.color}
                           strokeWidth={2}
                           strokeDasharray="6 4"

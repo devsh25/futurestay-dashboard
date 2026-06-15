@@ -11,11 +11,12 @@ import { fetchGoogleAdsDaily } from "@/lib/google";
  * are integer counts indexed by the same day. Frontend chart toggles
  * which series to render.
  *
- * Also returns `spend[]` — the daily sum of Meta + Google ad spend,
- * aligned to `days[]`. Used by the Run Rate chart's "Budget Spent"
- * line (dotted, on a secondary $ y-axis). Either ad-API call
- * failing falls back to a zero-filled slice so the rest of the chart
- * keeps working regardless of credential / quota state.
+ * Also returns `metaSpend[]` and `googleSpend[]` — daily ad-spend
+ * arrays per platform, both aligned to `days[]`. Used by the Run
+ * Rate chart's two "Spent" lines (dotted, on a secondary $ y-axis,
+ * one amber for Meta one violet for Google). Either ad-API call
+ * failing zero-fills its own array so the other platform + the
+ * funnel metrics keep working regardless of credential state.
  *
  * Reuses the cached `fetchAllContacts()` so this endpoint is cheap to
  * call alongside /api/hubspot/contacts.
@@ -41,14 +42,17 @@ export async function GET() {
       }),
     ]);
 
-    // Sum spend per date across both platforms.
-    const spendByDate = new Map<string, number>();
-    for (const d of metaDaily)   spendByDate.set(d.date, (spendByDate.get(d.date) || 0) + d.spend);
-    for (const d of googleDaily) spendByDate.set(d.date, (spendByDate.get(d.date) || 0) + d.cost);
+    // Build per-platform daily-spend maps, then align both to days[].
+    const metaByDate = new Map<string, number>();
+    for (const d of metaDaily) metaByDate.set(d.date, (metaByDate.get(d.date) || 0) + d.spend);
+    const googleByDate = new Map<string, number>();
+    for (const d of googleDaily) googleByDate.set(d.date, (googleByDate.get(d.date) || 0) + d.cost);
 
-    const spend = series.days.map((day) => Math.round((spendByDate.get(day) || 0) * 100) / 100);
+    const round = (v: number) => Math.round(v * 100) / 100;
+    const metaSpend   = series.days.map((day) => round(metaByDate.get(day)   || 0));
+    const googleSpend = series.days.map((day) => round(googleByDate.get(day) || 0));
 
-    return NextResponse.json({ ...series, spend });
+    return NextResponse.json({ ...series, metaSpend, googleSpend });
   } catch (error) {
     console.error("Timeseries API error:", error);
     return NextResponse.json(
