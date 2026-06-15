@@ -162,6 +162,48 @@ export async function fetchActiveGoogleCampaigns(): Promise<GoogleAdsCampaign[]>
     .filter((c) => c.id && c.name && !isTestCampaign(c.name));
 }
 
+// ---- Public: daily account-level spend (for Run Rate budget line) ----
+
+export interface GoogleAdsDailyPoint {
+  date: string; // YYYY-MM-DD (Google account's reporting timezone)
+  cost: number; // $ spend (micros ÷ 1e6)
+}
+
+export async function fetchGoogleAdsDaily(
+  since: string,  // YYYY-MM-DD
+  until: string,  // YYYY-MM-DD inclusive
+): Promise<GoogleAdsDailyPoint[]> {
+  // Query the customer resource (account-level aggregate across all
+  // campaigns) segmented by date — one row per day. Used by the
+  // Run Rate chart's "Budget Spent" line, summed with the Meta side
+  // to show daily total ad spend.
+  //
+  // NOTE: under Explorer access metrics.cost_micros returns 0 (Google
+  // gates cost behind Basic Access). The dashboard will read 0 here
+  // until Basic Access is granted; once it is, no code change needed.
+  const query = `
+    SELECT segments.date, metrics.cost_micros
+    FROM customer
+    WHERE segments.date BETWEEN '${since}' AND '${until}'
+  `;
+  const results = await googleAdsSearch(query);
+  const byDate = new Map<string, number>();
+  for (const r of results) {
+    const seg = (r.segments || {}) as { date?: string };
+    const m   = (r.metrics  || {}) as { cost_micros?: string | number };
+    const date = seg.date;
+    if (!date) continue;
+    const micros = typeof m.cost_micros === "number"
+      ? m.cost_micros
+      : parseFloat(String(m.cost_micros ?? "0"));
+    if (isNaN(micros)) continue;
+    byDate.set(date, (byDate.get(date) || 0) + micros / 1_000_000);
+  }
+  return Array.from(byDate.entries())
+    .map(([date, cost]) => ({ date, cost }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
 // ---- Public: campaign-level performance over a date window ----
 
 export async function fetchGoogleAdsInsights(

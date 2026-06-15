@@ -32,16 +32,23 @@ type Series = {
   readyToLaunch: number[];
   trials: number[];
   customers: number[];
+  /** Daily total ad spend (Meta + Google) in $. May read as 0 for
+   *  Google portion until Basic Access is granted on the dev token. */
+  spend: number[];
 };
 
-type MetricKey = "signups" | "airbnbConnects" | "readyToLaunch" | "trials" | "customers";
+type MetricKey = "signups" | "airbnbConnects" | "readyToLaunch" | "trials" | "customers" | "spend";
 
-const METRICS: { key: MetricKey; label: string; color: string; description: string }[] = [
+const METRICS: { key: MetricKey; label: string; color: string; description: string; isCurrency?: boolean }[] = [
   { key: "signups",        label: "Qualified Signups",  color: "#1E6FFF", description: "createdate, Airbnb DQ excluded" },
   { key: "airbnbConnects", label: "Airbnb Connects",    color: "#60A5FA", description: "auth status COMPLETED/REVOKED" },
   { key: "readyToLaunch",  label: "Ready to Launch",    color: "#93C5FD", description: "property_ready_to_launch=true" },
   { key: "trials",         label: "Trialists",          color: "#FFFFFF", description: "by actual trial start date" },
   { key: "customers",      label: "Customers",          color: "#10B981", description: "by actual customer entry date" },
+  // Plotted on the secondary $ axis (right side) as a dotted line so
+  // it visually reads as a budget overlay, not a funnel-stage count.
+  // Excluded from step-to-step conversion math in the tooltip.
+  { key: "spend",          label: "Budget Spent",       color: "#F59E0B", description: "Daily Meta + Google ad spend ($)", isCurrency: true },
 ];
 
 /** 7-day moving average — the daily volumes are too spiky on weekends
@@ -71,6 +78,8 @@ type WeeklyData = {
   readyToLaunch: number[];
   trials: number[];
   customers: number[];
+  /** Sum of daily ad spend ($) within the bucket. */
+  spend: number[];
   /** Whether each week is "partial" — only true for the most recent
    *  week if today < its Sunday. Lets the chart mark it visually so
    *  the dip from an incomplete week isn't misread as a real drop. */
@@ -83,7 +92,7 @@ type WeeklyData = {
  *  incomplete so the UI can render them differently. */
 function bucketByWeek(data: Series): WeeklyData {
   // Map week-start (Mon ET, YYYY-MM-DD) → aggregated row
-  const buckets = new Map<string, { weekStart: string; weekEnd: string; signups: number; airbnbConnects: number; readyToLaunch: number; trials: number; customers: number; daysSeen: number; lastDay: string }>();
+  const buckets = new Map<string, { weekStart: string; weekEnd: string; signups: number; airbnbConnects: number; readyToLaunch: number; trials: number; customers: number; spend: number; daysSeen: number; lastDay: string }>();
 
   for (let i = 0; i < data.days.length; i++) {
     const day = data.days[i];
@@ -102,6 +111,7 @@ function bucketByWeek(data: Series): WeeklyData {
         weekStart: weekKey,
         weekEnd: sundayKey,
         signups: 0, airbnbConnects: 0, readyToLaunch: 0, trials: 0, customers: 0,
+        spend: 0,
         daysSeen: 0, lastDay: day,
       });
     }
@@ -111,6 +121,7 @@ function bucketByWeek(data: Series): WeeklyData {
     b.readyToLaunch += data.readyToLaunch[i];
     b.trials += data.trials[i];
     b.customers += data.customers[i];
+    b.spend += data.spend?.[i] ?? 0;
     b.daysSeen += 1;
     if (day > b.lastDay) b.lastDay = day;
   }
@@ -127,6 +138,7 @@ function bucketByWeek(data: Series): WeeklyData {
     readyToLaunch: sorted.map((b) => b.readyToLaunch),
     trials: sorted.map((b) => b.trials),
     customers: sorted.map((b) => b.customers),
+    spend: sorted.map((b) => b.spend),
     partial: sorted.map((b) => b.daysSeen < 7),
   };
 }
@@ -144,7 +156,7 @@ function bucketByMonth(data: Series): WeeklyData {
   // `day` strings are YYYY-MM-DD ET keys. Month key = YYYY-MM.
   type Row = { monthStart: string; monthEnd: string; days: Set<string>;
                signups: number; airbnbConnects: number; readyToLaunch: number;
-               trials: number; customers: number; daysInMonth: number };
+               trials: number; customers: number; spend: number; daysInMonth: number };
   const buckets = new Map<string, Row>();
   function lastDayOfMonth(y: number, m: number): number {
     // m is 1-indexed; Date.UTC with day 0 returns last day of previous month
@@ -162,6 +174,7 @@ function bucketByMonth(data: Series): WeeklyData {
         monthEnd:   `${monthKey}-${String(last).padStart(2, "0")}`,
         days: new Set<string>(),
         signups: 0, airbnbConnects: 0, readyToLaunch: 0, trials: 0, customers: 0,
+        spend: 0,
         daysInMonth: last,
       });
     }
@@ -172,6 +185,7 @@ function bucketByMonth(data: Series): WeeklyData {
     b.readyToLaunch += data.readyToLaunch[i];
     b.trials        += data.trials[i];
     b.customers     += data.customers[i];
+    b.spend         += data.spend?.[i] ?? 0;
   }
   const sorted = Array.from(buckets.values()).sort((a, b) => a.monthStart.localeCompare(b.monthStart));
   return {
@@ -182,6 +196,7 @@ function bucketByMonth(data: Series): WeeklyData {
     readyToLaunch:  sorted.map((b) => b.readyToLaunch),
     trials:    sorted.map((b) => b.trials),
     customers: sorted.map((b) => b.customers),
+    spend:     sorted.map((b) => b.spend),
     // A month is "partial" if we don't have a row for every calendar
     // day in it. Catches both the trailing current-month case (today
     // < last day) and the leading mid-month-start case.
@@ -208,7 +223,7 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState<Set<MetricKey>>(
-    new Set(["signups", "airbnbConnects", "trials", "customers"])
+    new Set(["signups", "airbnbConnects", "trials", "customers", "spend"])
   );
   const [smoothed, setSmoothed] = useState(true);
   const [granularity, setGranularity] = useState<Granularity>("day");
@@ -267,7 +282,11 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
       // Plotted value per metric: raw period sums, or the period's conversion
       // rate (metric / signups). The % uses each bucket's own sums so it lines
       // up with the week/month the reader sees.
-      const vals: Record<MetricKey, (number | null)[]> = asPercent
+      // Funnel-stage values get %-of-signups (when asPercent) or raw
+      // counts. Spend is excluded from this map because it's not a
+      // count and not a % — it renders separately on the right $ axis
+      // as a single dotted line (no partial-period split).
+      const vals: Record<Exclude<MetricKey, "spend">, (number | null)[]> = asPercent
         ? {
             signups: toPercentOf(w.signups, w.signups),
             airbnbConnects: toPercentOf(w.airbnbConnects, w.signups),
@@ -326,6 +345,9 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
         readyToLaunch: vals.readyToLaunch[i],
         trials: vals.trials[i],
         customers: vals.customers[i],
+        // Budget Spent — always raw $, single continuous line on the
+        // right $ y-axis. Not split into solid/dashed.
+        spend: w.spend[i],
         // Split values — used by the two Line components per metric
         signups_solid: split_signups.solid[i],
         signups_dashed: split_signups.dashed[i],
@@ -343,14 +365,17 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
     // dividing two smoothed series is far less jumpy than smoothing a noisy
     // day-by-day ratio of small numbers.
     const rawOrSmooth = (a: number[]) => (smoothed ? smooth(a) : a);
-    const base: Record<MetricKey, number[]> = {
+    const base: Record<Exclude<MetricKey, "spend">, number[]> = {
       signups: rawOrSmooth(data.signups),
       airbnbConnects: rawOrSmooth(data.airbnbConnects),
       readyToLaunch: rawOrSmooth(data.readyToLaunch),
       trials: rawOrSmooth(data.trials),
       customers: rawOrSmooth(data.customers),
     };
-    const series: Record<MetricKey, (number | null)[]> = asPercent
+    // Spend gets the same smoothing treatment as counts (daily $ is
+    // also spiky weekend-vs-weekday) but always reads as raw $, not %.
+    const spendSeries = rawOrSmooth(data.spend || new Array(data.days.length).fill(0));
+    const series: Record<Exclude<MetricKey, "spend">, (number | null)[]> = asPercent
       ? {
           signups: toPercentOf(base.signups, base.signups),
           airbnbConnects: toPercentOf(base.airbnbConnects, base.signups),
@@ -366,6 +391,7 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
       readyToLaunch: series.readyToLaunch[i],
       trials: series.trials[i],
       customers: series.customers[i],
+      spend: spendSeries[i],
     }));
   }, [data, smoothed, granularity, mode]);
 
@@ -380,6 +406,7 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
       readyToLaunch: sum(data.readyToLaunch),
       trials: sum(data.trials),
       customers: sum(data.customers),
+      spend: sum(data.spend || []),
     };
   }, [data]);
 
@@ -460,7 +487,9 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
                     />
                     <span>{m.label}</span>
                     <span className="text-[11px] tabular-nums opacity-60">
-                      {totals[m.key].toLocaleString()}
+                      {m.isCurrency
+                        ? `$${Math.round(totals[m.key]).toLocaleString()}`
+                        : totals[m.key].toLocaleString()}
                     </span>
                   </button>
                 );
@@ -546,6 +575,7 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
                     tickFormatter={(v: string) => (granularity === "month" ? shortMonth(v) : shortDate(v))}
                   />
                   <YAxis
+                    yAxisId="left"
                     tick={{ fontSize: 10, fill: "#5B6478" }}
                     axisLine={false}
                     tickLine={false}
@@ -555,6 +585,21 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
                     // 7-day moving average. In percent mode, show "NN%".
                     tickFormatter={(v: number) =>
                       mode === "percent" ? `${Math.round(v)}%` : Math.round(v).toLocaleString()
+                    }
+                    allowDecimals={false}
+                  />
+                  {/* Secondary $ axis for the Budget Spent line.
+                      Independent scale so the spend curve (hundreds–thousands $)
+                      doesn't squash the funnel-stage counts (0–50 typical). */}
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    tick={{ fontSize: 10, fill: "#F59E0B" }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={56}
+                    tickFormatter={(v: number) =>
+                      v >= 1000 ? `$${(v / 1000).toFixed(v >= 10_000 ? 0 : 1)}K` : `$${Math.round(v)}`
                     }
                     allowDecimals={false}
                   />
@@ -668,19 +713,25 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
                                 />
                                 <span style={{ flex: 1 }}>{m.label}</span>
                                 <span style={{ fontVariantNumeric: "tabular-nums", color: "#FFFFFF", fontWeight: 600 }}>
-                                  {mode === "percent"
-                                    ? `${row.value.toFixed(1)}%`
-                                    : Math.round(row.value).toLocaleString()}
+                                  {m.isCurrency
+                                    ? `$${Math.round(row.value).toLocaleString()}`
+                                    : mode === "percent"
+                                      ? `${row.value.toFixed(1)}%`
+                                      : Math.round(row.value).toLocaleString()}
                                 </span>
                               </div>
                             );
                           })}
 
                           {/* Step-to-step conversion rates between adjacent
-                              visible metrics in funnel order. Lets the
-                              reader see "Trials/QS = 16%" without doing
-                              the arithmetic in their head. */}
-                          {visible.length >= 2 && (
+                              visible funnel metrics. Excludes "spend"
+                              since "$1.5K / 32 trials" is meaningless as a
+                              percentage — that ratio would belong on a
+                              cost-per-X card, not this funnel tooltip. */}
+                          {(() => {
+                            const funnelMetrics = visible.filter((m) => !m.isCurrency);
+                            if (funnelMetrics.length < 2) return null;
+                            return (
                             <div
                               style={{
                                 marginTop: 8,
@@ -690,8 +741,8 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
                                 fontSize: 11,
                               }}
                             >
-                              {visible.slice(0, -1).map((m, i) => {
-                                const next = visible[i + 1];
+                              {funnelMetrics.slice(0, -1).map((m, i) => {
+                                const next = funnelMetrics[i + 1];
                                 const a = byKey[m.key].value;
                                 const b = byKey[next.key].value;
                                 if (!a || a === 0) return null;
@@ -706,7 +757,8 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
                                 );
                               })}
                             </div>
-                          )}
+                            );
+                          })()}
                         </div>
                       );
                     }}
@@ -729,10 +781,34 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
                       built in `rows`, so they only render where they
                       should. */}
                   {METRICS.filter((m) => active.has(m.key)).flatMap((m) => {
+                    // Budget Spent — always a single dotted line on the
+                    // right ($) y-axis, regardless of granularity. We
+                    // don't split it into solid/dashed for partial
+                    // periods because it's ALREADY dotted; the doubled
+                    // dash treatment would be visually confusing.
+                    if (m.key === "spend") {
+                      return [
+                        <Line
+                          key="spend"
+                          yAxisId="right"
+                          type="monotone"
+                          name={m.key}
+                          dataKey="spend"
+                          stroke={m.color}
+                          strokeWidth={2}
+                          strokeDasharray="6 4"
+                          dot={false}
+                          activeDot={{ r: 4, strokeWidth: 0, fill: m.color }}
+                          isAnimationActive={false}
+                          connectNulls={false}
+                        />,
+                      ];
+                    }
                     if (granularity !== "day") {
                       return [
                         <Line
                           key={m.key + "_solid"}
+                          yAxisId="left"
                           type="monotone"
                           name={m.key}
                           dataKey={m.key + "_solid"}
@@ -745,6 +821,7 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
                         />,
                         <Line
                           key={m.key + "_dashed"}
+                          yAxisId="left"
                           type="monotone"
                           name={m.key + "__dashed"}
                           dataKey={m.key + "_dashed"}
@@ -763,6 +840,7 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
                     return [
                       <Line
                         key={m.key}
+                        yAxisId="left"
                         type="monotone"
                         dataKey={m.key}
                         stroke={m.color}
