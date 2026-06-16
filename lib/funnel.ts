@@ -934,7 +934,7 @@ export function computeFunnelByCampaign(
   // contacts post-template-fix). Pass an empty array if the Google
   // API isn't connected — the dropdown's Google entries silently
   // become inert in that case.
-  activeGoogleCampaigns: { id: string; name: string }[] = [],
+  activeGoogleCampaigns: { id: string; name: string; landingPages?: string[] }[] = [],
 ): FunnelStage[] {
   const clean = excludePartnerSources(contacts);
   const { start, end } = resolvedDateRange(period, customStart, customEnd);

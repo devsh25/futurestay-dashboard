@@ -51,11 +51,13 @@ export async function GET(request: NextRequest) {
       // correct individual campaign.
       fetchRecentGoogleCampaigns(6).catch((err) => {
         console.error("[funnel] fetchRecentGoogleCampaigns failed:", err);
-        return [] as { id: string; name: string; status: string }[];
+        return [] as Awaited<ReturnType<typeof fetchRecentGoogleCampaigns>>;
       }),
     ]);
     const activeMetaCampaigns = metaInsights.campaigns.map((m) => m.name);
-    const activeGoogleCampaigns = googleCampaigns.map((g) => ({ id: g.id, name: g.name }));
+    const activeGoogleCampaigns = googleCampaigns.map((g) => ({
+      id: g.id, name: g.name, landingPages: g.landingPages,
+    }));
 
     const funnel = computeFunnelByCampaign(
       contacts,

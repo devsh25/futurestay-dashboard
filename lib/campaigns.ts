@@ -145,6 +145,13 @@ const GOOGLE_LEGACY_UTM_HINTS: Record<string, string> = {
   brand: "brand",  // matches "Brand-Search"
 };
 
+/** URL paths that aren't usefully attributable. "/" lands many touches
+ *  from many campaigns (Brand-Search, generic landing, organic) and
+ *  would over-attribute. Kept separate from the per-campaign roster
+ *  so it survives even when a campaign legitimately uses "/" as a
+ *  final URL — we just ignore it. */
+const GOOGLE_LP_IGNORED_PATHS = new Set(["/", ""]);
+
 /** Attribute a HubSpot contact to a specific Google Ads campaign.
  *
  *  Google's HubSpot UTM convention (post tracking-template fix on
@@ -162,7 +169,7 @@ const GOOGLE_LEGACY_UTM_HINTS: Record<string, string> = {
  *  utm_source but don't appear in any individual-campaign filter. */
 export function matchContactToGoogleCampaign(
   c: HubSpotContact,
-  activeGoogleCampaigns: { id: string; name: string }[],
+  activeGoogleCampaigns: { id: string; name: string; landingPages?: string[] }[],
 ): string | null {
   const src = (c.first_touch_utm_source || "").toLowerCase().trim();
   if (src !== "google") return null;
@@ -218,6 +225,33 @@ export function matchContactToGoogleCampaign(
       g.name.toLowerCase().includes(hint.toLowerCase())
     );
     if (match) return match.name;
+  }
+
+  // Tier 4 — landing-page URL match. Recovers pre-tracking-template-fix
+  // contacts whose utm_campaign was "{campaignname}" / empty / a one-off
+  // label, but whose hs_analytics_first_url path matches a campaign's
+  // configured final URL. Deterministic mapping straight from Google
+  // Ads (ad_group_ad.ad.final_urls), so it doesn't go stale when a
+  // campaign's name or LP changes — landingPages are refreshed each
+  // time fetchRecentGoogleCampaigns runs.
+  //
+  // Example: a contact with utm_campaign="{campaignname}" who landed
+  // on /direct-booking-website is attributed to "Search - Direct
+  // Booking Website" (which lists that exact path in its final URLs).
+  const url = c.hs_analytics_first_url || "";
+  if (url) {
+    let path: string | null = null;
+    try {
+      path = new URL(url).pathname.replace(/\/+$/, "") || "/";
+    } catch {
+      // Not a parseable URL — skip.
+    }
+    if (path && !GOOGLE_LP_IGNORED_PATHS.has(path)) {
+      for (const g of activeGoogleCampaigns) {
+        if (!g.landingPages || g.landingPages.length === 0) continue;
+        if (g.landingPages.includes(path)) return g.name;
+      }
+    }
   }
 
   return null;
@@ -583,7 +617,7 @@ export async function computeCampaignAnalysis(
     fetchMetaInsights(since, until),
     fetchRecentGoogleCampaigns(6).catch((err) => {
       console.error("[campaigns] fetchRecentGoogleCampaigns failed:", err);
-      return [] as { id: string; name: string; status: string }[];
+      return [] as Awaited<ReturnType<typeof fetchRecentGoogleCampaigns>>;
     }),
     fetchGoogleAdsInsights(since, until).catch((err) => {
       console.error("[campaigns] fetchGoogleAdsInsights failed:", err);
@@ -595,20 +629,26 @@ export async function computeCampaignAnalysis(
   // active campaigns missing from insights (zero spend in window) are
   // surfaced so freshly-launched campaigns still appear in the table.
   const googleInsightsById = new Map(googleInsightsRaw.map((g) => [g.id, g]));
-  type GoogleCampaignRecord = { id: string; name: string; spend: number };
+  type GoogleCampaignRecord = { id: string; name: string; spend: number; landingPages: string[] };
   const googleCampaigns: GoogleCampaignRecord[] = googleRoster.map((r) => {
     const ins = googleInsightsById.get(r.id);
-    return { id: r.id, name: r.name, spend: ins?.cost ?? 0 };
+    return { id: r.id, name: r.name, spend: ins?.cost ?? 0, landingPages: r.landingPages };
   });
   // Also include any campaign that appeared in insights but not the
   // current ENABLED roster (e.g. paused this morning but spent yesterday).
+  // Insights rows carry landingPages = [] (the ad-LP query in google.ts
+  // is keyed off the roster, not the insights set), so URL-attribution
+  // here only applies to roster campaigns — acceptable trade-off since
+  // an out-of-roster campaign is almost certainly a removed/legacy one.
   const rosterIds = new Set(googleRoster.map((r) => r.id));
   for (const ins of googleInsightsRaw) {
     if (!rosterIds.has(ins.id) && ins.cost > 0) {
-      googleCampaigns.push({ id: ins.id, name: ins.name, spend: ins.cost });
+      googleCampaigns.push({ id: ins.id, name: ins.name, spend: ins.cost, landingPages: [] });
     }
   }
-  const activeGoogleCampaigns = googleCampaigns.map((g) => ({ id: g.id, name: g.name }));
+  const activeGoogleCampaigns = googleCampaigns.map((g) => ({
+    id: g.id, name: g.name, landingPages: g.landingPages,
+  }));
 
   // Aggregate Meta spend per bucket
   const spendByBucket: Record<string, number> = {};

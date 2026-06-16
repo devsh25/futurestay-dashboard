@@ -32,6 +32,12 @@ export interface GoogleAdsCampaign {
   id: string;          // Google Ads campaign ID (numeric string)
   name: string;        // human-readable campaign name
   status: string;      // ENABLED / PAUSED / REMOVED — we only return ENABLED
+  /** URL pathnames the campaign's ads land on (from ad_group_ad.ad.finalUrls).
+   *  Used as a strong attribution signal for HubSpot contacts whose
+   *  utm_campaign was broken/empty pre-tracking-template-fix —
+   *  if their hs_analytics_first_url path matches one of these,
+   *  we can attribute them to this campaign. Excludes "/" (too generic). */
+  landingPages: string[];
 }
 
 /** Per-campaign performance over a date window. cost is in dollars
@@ -162,6 +168,7 @@ export async function fetchActiveGoogleCampaigns(): Promise<GoogleAdsCampaign[]>
         id: String(c.id ?? ""),
         name: c.name ?? "",
         status: c.status ?? "",
+        landingPages: [] as string[],  // not populated by this path
       };
     })
     .filter((c) => c.id && c.name && !isTestCampaign(c.name));
@@ -208,10 +215,71 @@ export async function fetchRecentGoogleCampaigns(monthsBack = 6): Promise<Google
     const hasActivity = n(m.costMicros) > 0 || n(m.impressions) > 0 || n(m.clicks) > 0;
     if (!hasActivity) continue;
     if (!seen.has(id)) {
-      seen.set(id, { id, name, status: c.status ?? "" });
+      seen.set(id, { id, name, status: c.status ?? "", landingPages: [] });
     }
   }
-  return Array.from(seen.values());
+  const campaigns = Array.from(seen.values());
+
+  // Best-effort enrichment: attach landing-page URL paths per campaign.
+  // Used as a Tier-4 attribution fallback for HubSpot contacts whose
+  // pre-tracking-template-fix UTM params were broken/empty — their
+  // hs_analytics_first_url path is matched against these.
+  // Failure is non-fatal: the contact just doesn't gain URL-attribution.
+  try {
+    const ids = campaigns.map((c) => c.id);
+    const lpByCampaign = await fetchLandingPagesByCampaign(ids);
+    for (const c of campaigns) {
+      c.landingPages = lpByCampaign.get(c.id) ?? [];
+    }
+  } catch (err) {
+    console.error("[fetchRecentGoogleCampaigns] landing-page enrichment failed:", err);
+  }
+  return campaigns;
+}
+
+/** Map of campaign ID → URL pathnames its ads link to. Source is
+ *  ad_group_ad.ad.final_urls (the live landing-page URL configured on
+ *  every approved ad). We strip protocol+host and dedupe paths.
+ *
+ *  The "/" path is excluded — it's too generic (Brand-Search lands at
+ *  "/", but so do many organic + paid touches) and would over-attribute. */
+async function fetchLandingPagesByCampaign(campaignIds: string[]): Promise<Map<string, string[]>> {
+  const result = new Map<string, string[]>();
+  if (campaignIds.length === 0) return result;
+  // GAQL: pull every approved ad's final URLs, scoped to the campaigns
+  // we already know are active in the window. Single query — even with
+  // ~30 active campaigns it's a small response.
+  const idList = campaignIds.map((id) => `'${id}'`).join(",");
+  const query = `
+    SELECT campaign.id, ad_group_ad.ad.final_urls
+    FROM ad_group_ad
+    WHERE campaign.id IN (${idList})
+      AND ad_group_ad.status != 'REMOVED'
+  `;
+  const rows = await googleAdsSearch(query);
+  const byCampaign = new Map<string, Set<string>>();
+  for (const r of rows) {
+    const camp = (r.campaign || {}) as { id?: string | number };
+    const ad = ((r.adGroupAd || {}) as { ad?: { finalUrls?: string[] } }).ad || {};
+    const id = String(camp.id ?? "");
+    const urls = ad.finalUrls || [];
+    if (!id || urls.length === 0) continue;
+    let set = byCampaign.get(id);
+    if (!set) { set = new Set<string>(); byCampaign.set(id, set); }
+    for (const u of urls) {
+      try {
+        const path = new URL(u).pathname.replace(/\/+$/, "") || "/";
+        if (path === "/") continue;  // too generic
+        set.add(path);
+      } catch {
+        // skip malformed URLs
+      }
+    }
+  }
+  for (const [id, set] of byCampaign) {
+    result.set(id, Array.from(set));
+  }
+  return result;
 }
 
 // ---- Public: daily account-level spend (for Run Rate budget line) ----
@@ -302,7 +370,7 @@ export async function fetchGoogleAdsInsights(
     let row = byId.get(id);
     if (!row) {
       row = {
-        id, name: camp.name ?? "", status: camp.status ?? "",
+        id, name: camp.name ?? "", status: camp.status ?? "", landingPages: [],
         cost: 0, impressions: 0, clicks: 0, conversions: 0,
         conversionValue: 0, ctr: 0, cpc: 0,
       };
