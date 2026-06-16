@@ -46,7 +46,9 @@ export async function GET(request: NextRequest) {
         console.error("[funnel] fetchMetaInsights failed, falling back to bucket attribution:", err);
         return { campaigns: [] as { name: string }[] };
       }),
-      fetchActiveGoogleCampaigns().catch((err) => {
+      // includePaused so a paused campaign chosen in the dropdown can
+      // still be resolved (name → id) and scoped here.
+      fetchActiveGoogleCampaigns({ includePaused: true }).catch((err) => {
         console.error("[funnel] fetchActiveGoogleCampaigns failed:", err);
         return [] as { id: string; name: string; status: string }[];
       }),
