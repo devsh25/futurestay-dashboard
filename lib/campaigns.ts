@@ -263,9 +263,28 @@ export function matchContactToGoogleAdGroup(
   // Recovers pre-tracking-template-fix contacts whose utm_campaign was
   // "{campaignname}" / empty / unknown, but who landed on a URL that
   // a known ad group serves.
+  //
+  // Critical: prefer ENABLED over PAUSED when multiple ad units share
+  // the same LP. Without this, a contact landing on a path served by
+  // both a live Pmax campaign and a long-paused Search ad group would
+  // attribute to whichever one comes first in the array — which has
+  // burned us before (40 May-2026 contacts mis-attributed to the paused
+  // "Direct Booking Core" Search ad group instead of the active
+  // "Pmax | Direct booking website" campaign that's actually serving
+  // /direct-booking-website).
   if (pathUsable) {
-    for (const u of adUnits) {
-      if (u.landingPages.includes(path!)) return u.label;
+    const isEnabled = (u: GoogleAdsAdGroup) => {
+      // For ad-group entries, the ad-group's own status is authoritative.
+      // For Pmax campaign rollups (no ad group), use the campaign status.
+      if (u.adGroupId !== null && u.adGroupStatus) return u.adGroupStatus === "ENABLED";
+      return u.campaignStatus === "ENABLED";
+    };
+    const candidates = adUnits.filter((u) => u.landingPages.includes(path!));
+    if (candidates.length === 1) return candidates[0].label;
+    if (candidates.length > 1) {
+      const enabled = candidates.find(isEnabled);
+      if (enabled) return enabled.label;
+      return candidates[0].label;  // all paused — fall back to first
     }
   }
   return null;

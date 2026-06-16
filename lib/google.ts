@@ -266,27 +266,44 @@ export async function fetchRecentGoogleCampaigns(monthsBack = 6): Promise<Google
   return campaigns;
 }
 
-/** Map of campaign ID → URL pathnames its ads link to. Source is
- *  ad_group_ad.ad.final_urls (the live landing-page URL configured on
- *  every approved ad). We strip protocol+host and dedupe paths.
+/** Map of campaign ID → URL pathnames its ads link to. Pulls from
+ *  BOTH ad_group_ad.ad.final_urls (Search/Display/Video ads) AND
+ *  asset_group.final_urls (Pmax campaigns — they don't have ad_groups,
+ *  they have asset_groups, and the ad_group_ad query returns nothing
+ *  for them). Without both sources, Pmax campaigns silently lose
+ *  their LPs and lose URL-attribution to any ad-group sibling that
+ *  happens to serve the same path (e.g. a paused Search ad group).
  *
  *  The "/" path is excluded — it's too generic (Brand-Search lands at
  *  "/", but so do many organic + paid touches) and would over-attribute. */
 async function fetchLandingPagesByCampaign(campaignIds: string[]): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>();
   if (campaignIds.length === 0) return result;
-  // GAQL: pull every approved ad's final URLs, scoped to the campaigns
-  // we already know are active in the window. Single query — even with
-  // ~30 active campaigns it's a small response.
   const idList = campaignIds.map((id) => `'${id}'`).join(",");
-  const query = `
-    SELECT campaign.id, ad_group_ad.ad.final_urls
-    FROM ad_group_ad
-    WHERE campaign.id IN (${idList})
-      AND ad_group_ad.status != 'REMOVED'
-  `;
-  const rows = await googleAdsSearch(query);
+  // Two queries in parallel — one for traditional ad-group ads, one
+  // for Pmax asset groups. Both scoped to the requested campaign IDs.
+  const [rows, assetRows] = await Promise.all([
+    googleAdsSearch(`
+      SELECT campaign.id, ad_group_ad.ad.final_urls
+      FROM ad_group_ad
+      WHERE campaign.id IN (${idList})
+        AND ad_group_ad.status != 'REMOVED'
+    `),
+    googleAdsSearch(`
+      SELECT campaign.id, asset_group.final_urls
+      FROM asset_group
+      WHERE campaign.id IN (${idList})
+        AND asset_group.status != 'REMOVED'
+    `).catch((err) => {
+      // Non-fatal: a customer with no Pmax campaigns will still hit
+      // this query, and it should return [] cleanly — but if Google
+      // ever errors here, we don't want to lose the ad_group_ad rows.
+      console.error("[fetchLandingPagesByCampaign] asset_group query failed:", err);
+      return [] as Record<string, unknown>[];
+    }),
+  ]);
   const byCampaign = new Map<string, Set<string>>();
+  // First pass: ad_group_ad rows
   for (const r of rows) {
     const camp = (r.campaign || {}) as { id?: string | number };
     const ad = ((r.adGroupAd || {}) as { ad?: { finalUrls?: string[] } }).ad || {};
@@ -303,6 +320,26 @@ async function fetchLandingPagesByCampaign(campaignIds: string[]): Promise<Map<s
       } catch {
         // skip malformed URLs
       }
+    }
+  }
+  // Second pass: asset_group rows (Pmax). These are crucial — Pmax
+  // doesn't expose final_urls via ad_group_ad, so without this pass
+  // a Pmax campaign serving /direct-booking-website looks LP-less
+  // and Tier-4 attribution falls through to a paused sibling.
+  for (const r of assetRows) {
+    const camp = (r.campaign || {}) as { id?: string | number };
+    const ag = (r.assetGroup || {}) as { finalUrls?: string[] };
+    const id = String(camp.id ?? "");
+    const urls = ag.finalUrls || [];
+    if (!id || urls.length === 0) continue;
+    let set = byCampaign.get(id);
+    if (!set) { set = new Set<string>(); byCampaign.set(id, set); }
+    for (const u of urls) {
+      try {
+        const path = new URL(u).pathname.replace(/\/+$/, "") || "/";
+        if (path === "/") continue;
+        set.add(path);
+      } catch { /* skip */ }
     }
   }
   for (const [id, set] of byCampaign) {
