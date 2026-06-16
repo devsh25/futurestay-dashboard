@@ -148,14 +148,48 @@ export function matchContactToGoogleCampaign(
 ): string | null {
   const src = (c.first_touch_utm_source || "").toLowerCase().trim();
   if (src !== "google") return null;
-  const utmCampaign = (c.first_touch_utm_campaign || "").trim();
-  if (!utmCampaign || utmCampaign === "{campaignname}" || utmCampaign === "{campaignid}") return null;
-  // Only numeric IDs are valid Google campaign references. "brand" and
-  // other labels are intentionally not matched — they'd require a
-  // separate manual mapping.
-  if (!/^\d{8,}$/.test(utmCampaign)) return null;
-  const match = activeGoogleCampaigns.find((g) => g.id === utmCampaign);
-  return match ? match.name : null;
+
+  // Look at BOTH first_touch_utm_campaign and hs_analytics_source_data_2 —
+  // some HubSpot integrations populate only src2, so checking utm_campaign
+  // alone (the old behaviour) dropped those contacts entirely.
+  const candidates = [c.first_touch_utm_campaign, c.hs_analytics_source_data_2];
+
+  // Tier 1 — numeric campaign-ID match (most reliable; post tracking-
+  // template-fix convention).
+  for (const raw of candidates) {
+    const v = (raw || "").trim();
+    if (/^\d{8,}$/.test(v)) {
+      const match = activeGoogleCampaigns.find((g) => g.id === v);
+      if (match) return match.name;
+    }
+  }
+
+  // Tier 2 — campaign-NAME match. Recovers pre-template-fix contacts whose
+  // utm_campaign / src2 carries the campaign name text rather than the
+  // numeric ID. Prefix-match (≥10 chars of overlap, longest name wins) —
+  // same shape as the Meta matcher, so generic tokens like "brand" (too
+  // short) and the literal "{campaignname}" placeholder are skipped.
+  for (const raw of candidates) {
+    let v = (raw || "").trim();
+    if (!v || v === "{campaignname}" || v === "{campaignid}") continue;
+    if (v.includes("%")) {
+      try { v = decodeURIComponent(v); } catch { /* leave as-is */ }
+    }
+    const vNorm = v.toLowerCase().replace(/\s+/g, " ").trim();
+    let best: string | null = null;
+    let bestLen = 0;
+    for (const g of activeGoogleCampaigns) {
+      const nNorm = g.name.toLowerCase().replace(/\s+/g, " ").trim();
+      const minLen = Math.min(vNorm.length, nNorm.length);
+      if (minLen < 10) continue;
+      if (vNorm.slice(0, minLen) === nNorm.slice(0, minLen)) {
+        if (g.name.length > bestLen) { best = g.name; bestLen = g.name.length; }
+      }
+    }
+    if (best) return best;
+  }
+
+  return null;
 }
 
 /** Did the contact come from Google Ads at all? Used for the
