@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchAllContacts } from "@/lib/hubspot";
 import { computeFunnelByCampaign } from "@/lib/funnel";
 import { fetchMetaInsights } from "@/lib/meta";
-import { fetchActiveGoogleCampaigns } from "@/lib/google";
+import { fetchRecentGoogleCampaigns } from "@/lib/google";
 import { PeriodFilter } from "@/lib/types";
 
 /**
@@ -46,8 +46,11 @@ export async function GET(request: NextRequest) {
         console.error("[funnel] fetchMetaInsights failed, falling back to bucket attribution:", err);
         return { campaigns: [] as { name: string }[] };
       }),
-      fetchActiveGoogleCampaigns().catch((err) => {
-        console.error("[funnel] fetchActiveGoogleCampaigns failed:", err);
+      // 6-month window so contacts attributed to a campaign that was
+      // active during pre-template-fix days still resolve to the
+      // correct individual campaign.
+      fetchRecentGoogleCampaigns(6).catch((err) => {
+        console.error("[funnel] fetchRecentGoogleCampaigns failed:", err);
         return [] as { id: string; name: string; status: string }[];
       }),
     ]);

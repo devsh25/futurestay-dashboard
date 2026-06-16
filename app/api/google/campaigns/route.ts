@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchActiveGoogleCampaigns } from "@/lib/google";
+import { fetchRecentGoogleCampaigns } from "@/lib/google";
 
 /**
  * Live roster of currently-active Google Ads campaigns.
@@ -22,7 +22,9 @@ export const revalidate = 0;
 
 export async function GET() {
   try {
-    const campaigns = await fetchActiveGoogleCampaigns();
+    // 6-month window so paused campaigns that spent money recently
+    // still appear in the Funnel filter dropdown.
+    const campaigns = await fetchRecentGoogleCampaigns(6);
     return NextResponse.json({ campaigns });
   } catch (err) {
     console.error("[/api/google/campaigns] failed:", err);

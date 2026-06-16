@@ -144,6 +144,11 @@ function isTestCampaign(name: string): boolean {
 export async function fetchActiveGoogleCampaigns(): Promise<GoogleAdsCampaign[]> {
   // GAQL: ENABLED status only, exclude REMOVED + PAUSED. Test-name
   // filtering happens after (consistent with the Meta-side rule).
+  //
+  // NOTE: most dashboard callers should use fetchRecentGoogleCampaigns
+  // instead — that includes paused campaigns that were active in the
+  // recent window. This function is kept for callers that genuinely
+  // need only currently-running campaigns.
   const query = `
     SELECT campaign.id, campaign.name, campaign.status
     FROM campaign
@@ -160,6 +165,53 @@ export async function fetchActiveGoogleCampaigns(): Promise<GoogleAdsCampaign[]>
       };
     })
     .filter((c) => c.id && c.name && !isTestCampaign(c.name));
+}
+
+/** Campaigns with ANY activity (spend, impressions, or clicks > 0) in
+ *  the trailing `monthsBack` window. Includes paused/removed campaigns
+ *  if they spent money in the window — useful for the funnel attribution
+ *  (a contact may have come from a campaign that was paused yesterday).
+ *
+ *  Dedupes by campaign ID (the query returns one row per day per
+ *  campaign by default). Test-named campaigns filtered out. */
+export async function fetchRecentGoogleCampaigns(monthsBack = 6): Promise<GoogleAdsCampaign[]> {
+  const today = new Date();
+  const past = new Date(today);
+  past.setMonth(past.getMonth() - monthsBack);
+  const ymd = (d: Date) => d.toISOString().slice(0, 10);
+  const since = ymd(past);
+  const until = ymd(today);
+
+  // GAQL with segments.date emits one row per day a campaign was
+  // alive. Campaigns with literally zero activity won't return rows.
+  // We dedupe per campaign ID and require ANY of cost / impressions
+  // / clicks > 0 (some campaigns get rows with all-zero metrics on
+  // days they were enabled but didn't serve).
+  const query = `
+    SELECT campaign.id, campaign.name, campaign.status,
+           metrics.cost_micros, metrics.impressions, metrics.clicks
+    FROM campaign
+    WHERE segments.date BETWEEN '${since}' AND '${until}'
+  `;
+  const results = await googleAdsSearch(query);
+
+  const seen = new Map<string, GoogleAdsCampaign>();
+  for (const r of results) {
+    const c = (r.campaign || {}) as { id?: string | number; name?: string; status?: string };
+    const m = (r.metrics  || {}) as { costMicros?: string | number; impressions?: string | number; clicks?: string | number };
+    const id = String(c.id ?? "");
+    if (!id) continue;
+    const name = c.name ?? "";
+    if (isTestCampaign(name)) continue;
+    const n = (v: string | number | undefined) =>
+      v === undefined || v === null ? 0 : typeof v === "number" ? v : parseFloat(String(v)) || 0;
+    const hasActivity = n(m.costMicros) > 0 || n(m.impressions) > 0 || n(m.clicks) > 0;
+    if (!hasActivity) continue;
+    if (!seen.has(id)) {
+      seen.set(id, { id, name, status: c.status ?? "" });
+    }
+  }
+  return Array.from(seen.values());
 }
 
 // ---- Public: daily account-level spend (for Run Rate budget line) ----

@@ -3,7 +3,7 @@
 
 import { HubSpotContact, CampaignAnalysisRow, CampaignAnalysisData } from "./types";
 import { fetchMetaInsights } from "./meta";
-import { fetchActiveGoogleCampaigns, fetchGoogleAdsInsights } from "./google";
+import { fetchRecentGoogleCampaigns, fetchGoogleAdsInsights } from "./google";
 
 // HubSpot Notes API token reused from env
 const HUBSPOT_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN!;
@@ -125,6 +125,26 @@ export function matchContactToMetaCampaign(
   return tryPrefix(c.first_touch_utm_campaign) || tryPrefix(c.hs_analytics_source_data_2);
 }
 
+/** Legacy-UTM-label mappings for Google contacts created before the
+ *  tracking template was fixed around May 25, 2026. Pre-fix, the
+ *  `first_touch_utm_campaign` field held one of:
+ *    - "{campaignname}" placeholder (~30% of pre-fix Google contacts;
+ *      the ValueTrack macro never resolved — these are LOST, can't
+ *      attribute to a specific campaign)
+ *    - empty string (~34% — also lost)
+ *    - "brand" (~28% — manually-labelled Brand campaign; this maps
+ *      cleanly to today's Brand-Search campaign)
+ *    - "spring_sale" or other one-off labels (rare; not mapped)
+ *
+ *  Each entry maps a literal `utm_campaign` value (lowercase) to a
+ *  case-insensitive substring that must appear in an active Google
+ *  campaign name. We require the target campaign to be in the
+ *  active roster so we don't attribute to a campaign that's no
+ *  longer running. */
+const GOOGLE_LEGACY_UTM_HINTS: Record<string, string> = {
+  brand: "brand",  // matches "Brand-Search"
+};
+
 /** Attribute a HubSpot contact to a specific Google Ads campaign.
  *
  *  Google's HubSpot UTM convention (post tracking-template fix on
@@ -134,14 +154,12 @@ export function matchContactToMetaCampaign(
  *  Google Ads campaign roster and return the campaign's human-
  *  readable name.
  *
- *  Edge cases not handled here:
- *    - utm_campaign = "brand" — manually-labelled Brand campaign;
- *      attributable to "Google (all)" via utm_source but not to a
- *      specific Google campaign (no ID to match against). Falls
- *      through to null and the contact still flows into the
- *      `@all-google` filter.
- *    - utm_campaign = "{campaignname}" — pre-fix placeholder. Also
- *      returns null. Contact still counts in `@all-google`. */
+ *  For pre-fix contacts: if utm_campaign matches a known legacy
+ *  label in GOOGLE_LEGACY_UTM_HINTS (currently just "brand"), we
+ *  attribute to the active campaign whose name contains the hint.
+ *  Other pre-fix values ({campaignname}, empty, one-off labels)
+ *  remain unattributed — they still count in `@all-google` via
+ *  utm_source but don't appear in any individual-campaign filter. */
 export function matchContactToGoogleCampaign(
   c: HubSpotContact,
   activeGoogleCampaigns: { id: string; name: string }[],
@@ -164,11 +182,11 @@ export function matchContactToGoogleCampaign(
     }
   }
 
-  // Tier 2 — campaign-NAME match. Recovers pre-template-fix contacts whose
-  // utm_campaign / src2 carries the campaign name text rather than the
-  // numeric ID. Prefix-match (≥10 chars of overlap, longest name wins) —
-  // same shape as the Meta matcher, so generic tokens like "brand" (too
-  // short) and the literal "{campaignname}" placeholder are skipped.
+  // Tier 2 — campaign-NAME prefix match. Recovers pre-template-fix
+  // contacts whose utm_campaign / src2 carries the campaign name text
+  // rather than the numeric ID. ≥10 chars of overlap, longest name
+  // wins. Generic tokens like "brand" (too short) are intentionally
+  // skipped here — they're handled by Tier 3 below.
   for (const raw of candidates) {
     let v = (raw || "").trim();
     if (!v || v === "{campaignname}" || v === "{campaignid}") continue;
@@ -187,6 +205,19 @@ export function matchContactToGoogleCampaign(
       }
     }
     if (best) return best;
+  }
+
+  // Tier 3 — legacy short-label table (pre-tracking-template-fix era).
+  // Some campaigns used a manual utm_campaign label too short for the
+  // prefix matcher above (e.g. utm_campaign="brand" → "Brand-Search").
+  // Apply against utm_campaign only — src2 doesn't carry these labels.
+  const utmCampaign = (c.first_touch_utm_campaign || "").trim().toLowerCase();
+  const hint = GOOGLE_LEGACY_UTM_HINTS[utmCampaign];
+  if (hint) {
+    const match = activeGoogleCampaigns.find((g) =>
+      g.name.toLowerCase().includes(hint.toLowerCase())
+    );
+    if (match) return match.name;
   }
 
   return null;
@@ -550,8 +581,8 @@ export async function computeCampaignAnalysis(
   // rather than killing the whole Campaign Analysis card.
   const [metaInsights, googleRoster, googleInsightsRaw] = await Promise.all([
     fetchMetaInsights(since, until),
-    fetchActiveGoogleCampaigns().catch((err) => {
-      console.error("[campaigns] fetchActiveGoogleCampaigns failed:", err);
+    fetchRecentGoogleCampaigns(6).catch((err) => {
+      console.error("[campaigns] fetchRecentGoogleCampaigns failed:", err);
       return [] as { id: string; name: string; status: string }[];
     }),
     fetchGoogleAdsInsights(since, until).catch((err) => {

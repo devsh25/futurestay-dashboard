@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchGoogleAdsInsights, fetchActiveGoogleCampaigns } from "@/lib/google";
+import { fetchGoogleAdsInsights, fetchRecentGoogleCampaigns } from "@/lib/google";
 import { resolvedDateRange } from "@/lib/funnel";
 import { GoogleAdsCampaignRow, GoogleAdsInsightsData, PeriodFilter } from "@/lib/types";
 
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
 
     const [insights, roster] = await Promise.all([
       fetchGoogleAdsInsights(since, until),
-      fetchActiveGoogleCampaigns().catch(() => [] as { id: string; name: string; status: string }[]),
+      fetchRecentGoogleCampaigns(6).catch(() => [] as { id: string; name: string; status: string }[]),
     ]);
 
     // Two filtering rules combined:
