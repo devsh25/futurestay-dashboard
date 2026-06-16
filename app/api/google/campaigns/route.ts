@@ -22,9 +22,7 @@ export const revalidate = 0;
 
 export async function GET() {
   try {
-    // includePaused so the dropdown can offer recently-paused campaigns
-    // (their historical funnel is still worth inspecting).
-    const campaigns = await fetchActiveGoogleCampaigns({ includePaused: true });
+    const campaigns = await fetchActiveGoogleCampaigns();
     return NextResponse.json({ campaigns });
   } catch (err) {
     console.error("[/api/google/campaigns] failed:", err);

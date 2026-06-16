@@ -161,14 +161,9 @@ export default function FunnelCard({
     // empty while the rest of the dropdown still works.
     fetch("/api/google/campaigns")
       .then((r) => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
-      .then((d: { campaigns: { id: string; name: string; status?: string }[] }) => {
+      .then((d: { campaigns: { id: string; name: string }[] }) => {
         if (cancelled) return;
-        // The filter submits the real campaign name; the display string
-        // tags paused campaigns so the user knows they're inactive.
-        const opts = d.campaigns.map((c) => ({
-          name: c.name,
-          display: c.status === "PAUSED" ? `${c.name} (paused)` : c.name,
-        }));
+        const opts = d.campaigns.map((c) => ({ name: c.name, display: c.name }));
         opts.sort((a, b) => a.display.localeCompare(b.display));
         setGoogleOptions(opts);
       })

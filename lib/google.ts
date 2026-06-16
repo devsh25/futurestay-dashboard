@@ -141,22 +141,13 @@ function isTestCampaign(name: string): boolean {
   return /(^|[^a-z])test([^a-z]|$)/i.test(name || "");
 }
 
-export async function fetchActiveGoogleCampaigns(
-  opts: { includePaused?: boolean } = {},
-): Promise<GoogleAdsCampaign[]> {
-  // GAQL: ENABLED by default (excludes PAUSED + REMOVED). When
-  // includePaused is set we also return PAUSED campaigns — used by the
-  // Funnel filter dropdown so a recently-paused campaign can still be
-  // selected to inspect its historical funnel. REMOVED stays excluded
-  // (truly dead). Test-name filtering happens after (consistent with
-  // the Meta-side rule).
-  const statusClause = opts.includePaused
-    ? "campaign.status IN ('ENABLED', 'PAUSED')"
-    : "campaign.status = 'ENABLED'";
+export async function fetchActiveGoogleCampaigns(): Promise<GoogleAdsCampaign[]> {
+  // GAQL: ENABLED status only, exclude REMOVED + PAUSED. Test-name
+  // filtering happens after (consistent with the Meta-side rule).
   const query = `
     SELECT campaign.id, campaign.name, campaign.status
     FROM campaign
-    WHERE ${statusClause}
+    WHERE campaign.status = 'ENABLED'
   `;
   const results = await googleAdsSearch(query);
   return results
