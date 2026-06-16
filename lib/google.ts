@@ -40,6 +40,35 @@ export interface GoogleAdsCampaign {
   landingPages: string[];
 }
 
+/** The unit of attribution for Google Ads in the dashboard. Represents
+ *  EITHER an ad group within a campaign OR (for Pmax / asset-group
+ *  campaigns that don't use traditional ad groups) the campaign itself.
+ *  The label is the row's display string — campaign name for single-
+ *  ad-group / Pmax campaigns, "Campaign › Ad Group" for multi-ad-group
+ *  ones. landingPages are ad-group-specific (each ad group has its own
+ *  final URLs) so the same attribution machinery works across both. */
+export interface GoogleAdsAdGroup {
+  campaignId: string;
+  campaignName: string;
+  campaignStatus: string;
+  adGroupId: string | null;     // null = campaign rollup (Pmax / no ad groups)
+  adGroupName: string | null;
+  adGroupStatus: string | null;
+  landingPages: string[];
+  label: string;
+}
+
+/** Per-ad-group performance over a window. cost is in dollars. */
+export interface GoogleAdsAdGroupInsight extends GoogleAdsAdGroup {
+  cost: number;
+  impressions: number;
+  clicks: number;
+  conversions: number;
+  conversionValue: number;
+  ctr: number;
+  cpc: number;
+}
+
 /** Per-campaign performance over a date window. cost is in dollars
  *  (Google returns micros; we divide by 1e6 before exposing). */
 export interface GoogleAdsCampaignInsight extends GoogleAdsCampaign {
@@ -387,4 +416,311 @@ export async function fetchGoogleAdsInsights(
     r.cpc = r.clicks > 0 ? r.cost / r.clicks : 0;
   }
   return Array.from(byId.values()).sort((a, b) => b.cost - a.cost);
+}
+
+// ---- Public: ad-group-level roster + insights ----
+//
+// Ad group is the natural unit of attribution: each ad group has its
+// own landing-page URL, distinct keywords, and very different
+// performance from siblings under the same campaign (e.g. "Search -
+// Direct Booking Website" has STR Direct Booking ($6.5k → /short-
+// term-rental-...) and Direct Booking Core ($4.8k → /direct-booking-
+// website) with very different conversion behaviour).
+//
+// Pmax / asset-group campaigns don't have traditional ad groups, so
+// they surface as a single "campaign-rollup" ad-unit row with
+// adGroupId = null. The label collapses to just the campaign name
+// in that case.
+
+function buildAdGroupLabel(campaignName: string, adGroupName: string | null, isMulti: boolean): string {
+  if (!adGroupName || !isMulti) return campaignName;
+  return `${campaignName} › ${adGroupName}`;
+}
+
+/** Ad groups (and Pmax campaign-rollups) with any activity in the
+ *  trailing `monthsBack` window, enriched with their landing pages.
+ *
+ *  Two queries:
+ *    1. FROM ad_group   — traditional Search / Display / Video campaigns
+ *    2. FROM campaign   — to identify Pmax / no-ad-group campaigns
+ *                         (campaigns with activity that don't appear
+ *                         in query 1 are Pmax-style; we emit one row
+ *                         per such campaign with adGroupId = null).
+ *
+ *  Test-named campaigns and ad groups are filtered out. */
+export async function fetchRecentGoogleAdGroups(monthsBack = 6): Promise<GoogleAdsAdGroup[]> {
+  const today = new Date();
+  const past = new Date(today);
+  past.setMonth(past.getMonth() - monthsBack);
+  const ymd = (d: Date) => d.toISOString().slice(0, 10);
+  const since = ymd(past);
+  const until = ymd(today);
+
+  // 1. Ad-group activity over the window
+  const adGroupRows = await googleAdsSearch(`
+    SELECT campaign.id, campaign.name, campaign.status,
+           ad_group.id, ad_group.name, ad_group.status,
+           metrics.cost_micros, metrics.impressions, metrics.clicks
+    FROM ad_group
+    WHERE segments.date BETWEEN '${since}' AND '${until}'
+  `);
+
+  type AdGroupSeed = {
+    campaignId: string; campaignName: string; campaignStatus: string;
+    adGroupId: string; adGroupName: string; adGroupStatus: string;
+  };
+  const seenAdGroups = new Map<string, AdGroupSeed>();  // key = "campId|adGroupId"
+  const adGroupActiveCampaignIds = new Set<string>();
+  for (const r of adGroupRows) {
+    const c = (r.campaign || {}) as { id?: string; name?: string; status?: string };
+    const g = (r.adGroup || {}) as { id?: string; name?: string; status?: string };
+    const m = (r.metrics || {}) as { costMicros?: string | number; impressions?: string | number; clicks?: string | number };
+    const cid = String(c.id ?? "");
+    const gid = String(g.id ?? "");
+    if (!cid || !gid) continue;
+    if (isTestCampaign(c.name ?? "")) continue;
+    if (isTestCampaign(g.name ?? "")) continue;
+    const n = (v: string | number | undefined) =>
+      v === undefined || v === null ? 0 : typeof v === "number" ? v : parseFloat(String(v)) || 0;
+    if (!(n(m.costMicros) > 0 || n(m.impressions) > 0 || n(m.clicks) > 0)) continue;
+    const key = `${cid}|${gid}`;
+    if (!seenAdGroups.has(key)) {
+      seenAdGroups.set(key, {
+        campaignId: cid, campaignName: c.name ?? "", campaignStatus: c.status ?? "",
+        adGroupId: gid, adGroupName: g.name ?? "", adGroupStatus: g.status ?? "",
+      });
+    }
+    adGroupActiveCampaignIds.add(cid);
+  }
+
+  // 2. Campaign-level activity — identify campaigns active in the
+  //    window that DON'T appear in the ad-group query. Those are
+  //    Pmax-style campaigns (asset groups, not ad groups).
+  const campaignRows = await googleAdsSearch(`
+    SELECT campaign.id, campaign.name, campaign.status,
+           metrics.cost_micros, metrics.impressions, metrics.clicks
+    FROM campaign
+    WHERE segments.date BETWEEN '${since}' AND '${until}'
+  `);
+  type CampaignSeed = { id: string; name: string; status: string };
+  const pmaxCampaigns: CampaignSeed[] = [];
+  const seenCampaigns = new Set<string>();
+  for (const r of campaignRows) {
+    const c = (r.campaign || {}) as { id?: string; name?: string; status?: string };
+    const m = (r.metrics || {}) as { costMicros?: string | number; impressions?: string | number; clicks?: string | number };
+    const cid = String(c.id ?? "");
+    if (!cid || seenCampaigns.has(cid)) continue;
+    if (isTestCampaign(c.name ?? "")) continue;
+    const n = (v: string | number | undefined) =>
+      v === undefined || v === null ? 0 : typeof v === "number" ? v : parseFloat(String(v)) || 0;
+    if (!(n(m.costMicros) > 0 || n(m.impressions) > 0 || n(m.clicks) > 0)) continue;
+    seenCampaigns.add(cid);
+    if (!adGroupActiveCampaignIds.has(cid)) {
+      pmaxCampaigns.push({ id: cid, name: c.name ?? "", status: c.status ?? "" });
+    }
+  }
+
+  // 3. Landing pages per ad group (final URLs configured on each ad)
+  const lpByAdGroup = await fetchLandingPagesByAdGroup(
+    Array.from(seenAdGroups.values()).map((s) => s.adGroupId)
+  );
+
+  // 4. Build the final ad-unit list. Count ad groups per campaign so
+  //    the label-builder can decide whether to suffix the ad-group
+  //    name (only when the campaign has multiple ad groups).
+  const adGroupCountByCampaign = new Map<string, number>();
+  for (const s of seenAdGroups.values()) {
+    adGroupCountByCampaign.set(s.campaignId, (adGroupCountByCampaign.get(s.campaignId) || 0) + 1);
+  }
+  const units: GoogleAdsAdGroup[] = [];
+  for (const s of seenAdGroups.values()) {
+    const isMulti = (adGroupCountByCampaign.get(s.campaignId) || 0) > 1;
+    units.push({
+      campaignId: s.campaignId,
+      campaignName: s.campaignName,
+      campaignStatus: s.campaignStatus,
+      adGroupId: s.adGroupId,
+      adGroupName: s.adGroupName,
+      adGroupStatus: s.adGroupStatus,
+      landingPages: lpByAdGroup.get(s.adGroupId) ?? [],
+      label: buildAdGroupLabel(s.campaignName, s.adGroupName, isMulti),
+    });
+  }
+  // Pmax-style campaigns surface as campaign-rollup rows. Their LPs
+  // come from the campaign-level final-URL query (any ad under any
+  // asset group), so we still get URL-attribution for them.
+  if (pmaxCampaigns.length > 0) {
+    const pmaxLpByCampaign = await fetchLandingPagesByCampaign(pmaxCampaigns.map((p) => p.id));
+    for (const p of pmaxCampaigns) {
+      units.push({
+        campaignId: p.id,
+        campaignName: p.name,
+        campaignStatus: p.status,
+        adGroupId: null,
+        adGroupName: null,
+        adGroupStatus: null,
+        landingPages: pmaxLpByCampaign.get(p.id) ?? [],
+        label: p.name,
+      });
+    }
+  }
+  return units;
+}
+
+/** Map of ad_group ID → URL pathnames its ads link to. Same shape as
+ *  fetchLandingPagesByCampaign but keyed to ad_group, so we can keep
+ *  per-ad-group LP attribution. "/" is excluded. */
+async function fetchLandingPagesByAdGroup(adGroupIds: string[]): Promise<Map<string, string[]>> {
+  const result = new Map<string, string[]>();
+  if (adGroupIds.length === 0) return result;
+  const idList = adGroupIds.map((id) => `'${id}'`).join(",");
+  const query = `
+    SELECT ad_group.id, ad_group_ad.ad.final_urls
+    FROM ad_group_ad
+    WHERE ad_group.id IN (${idList})
+      AND ad_group_ad.status != 'REMOVED'
+  `;
+  const rows = await googleAdsSearch(query);
+  const byAdGroup = new Map<string, Set<string>>();
+  for (const r of rows) {
+    const g = (r.adGroup || {}) as { id?: string | number };
+    const ad = ((r.adGroupAd || {}) as { ad?: { finalUrls?: string[] } }).ad || {};
+    const gid = String(g.id ?? "");
+    const urls = ad.finalUrls || [];
+    if (!gid || urls.length === 0) continue;
+    let set = byAdGroup.get(gid);
+    if (!set) { set = new Set<string>(); byAdGroup.set(gid, set); }
+    for (const u of urls) {
+      try {
+        const path = new URL(u).pathname.replace(/\/+$/, "") || "/";
+        if (path === "/") continue;
+        set.add(path);
+      } catch { /* skip */ }
+    }
+  }
+  for (const [gid, set] of byAdGroup) {
+    result.set(gid, Array.from(set));
+  }
+  return result;
+}
+
+/** Per-ad-group performance over a date window. Mirrors
+ *  fetchGoogleAdsInsights but groups by ad_group instead of campaign.
+ *  Pmax / no-ad-group campaigns are appended as campaign-rollup rows
+ *  (same as the roster fetcher above) so the consumer can join the
+ *  insights against the roster on label. */
+export async function fetchGoogleAdsAdGroupInsights(
+  since: string,
+  until: string,
+): Promise<GoogleAdsAdGroupInsight[]> {
+  // Ad-group-level insights
+  const adGroupRows = await googleAdsSearch(`
+    SELECT campaign.id, campaign.name, campaign.status,
+           ad_group.id, ad_group.name, ad_group.status,
+           metrics.cost_micros, metrics.impressions, metrics.clicks,
+           metrics.conversions, metrics.conversions_value
+    FROM ad_group
+    WHERE segments.date BETWEEN '${since}' AND '${until}'
+  `);
+
+  type Row = GoogleAdsAdGroupInsight;
+  const rowByKey = new Map<string, Row>();  // key = "campId|adGroupId"
+  const adGroupCampaignIds = new Set<string>();
+
+  for (const r of adGroupRows) {
+    const c = (r.campaign || {}) as { id?: string; name?: string; status?: string };
+    const g = (r.adGroup || {}) as { id?: string; name?: string; status?: string };
+    const m = (r.metrics || {}) as {
+      costMicros?: string | number;
+      impressions?: string | number;
+      clicks?: string | number;
+      conversions?: string | number;
+      conversionsValue?: string | number;
+    };
+    const cid = String(c.id ?? "");
+    const gid = String(g.id ?? "");
+    if (!cid || !gid) continue;
+    if (isTestCampaign(c.name ?? "") || isTestCampaign(g.name ?? "")) continue;
+    adGroupCampaignIds.add(cid);
+    const key = `${cid}|${gid}`;
+    let row = rowByKey.get(key);
+    if (!row) {
+      row = {
+        campaignId: cid, campaignName: c.name ?? "", campaignStatus: c.status ?? "",
+        adGroupId: gid, adGroupName: g.name ?? "", adGroupStatus: g.status ?? "",
+        landingPages: [], label: "",  // filled in below
+        cost: 0, impressions: 0, clicks: 0, conversions: 0,
+        conversionValue: 0, ctr: 0, cpc: 0,
+      };
+      rowByKey.set(key, row);
+    }
+    const n = (v: string | number | undefined) =>
+      v === undefined || v === null ? 0 : typeof v === "number" ? v : parseFloat(String(v)) || 0;
+    row.cost            += n(m.costMicros) / 1_000_000;
+    row.impressions     += n(m.impressions);
+    row.clicks          += n(m.clicks);
+    row.conversions     += n(m.conversions);
+    row.conversionValue += n(m.conversionsValue);
+  }
+
+  // Pmax-style rollups: any campaign with insight rows but no ad_group
+  // activity is treated as a single ad-unit row.
+  const campaignRows = await googleAdsSearch(`
+    SELECT campaign.id, campaign.name, campaign.status,
+           metrics.cost_micros, metrics.impressions, metrics.clicks,
+           metrics.conversions, metrics.conversions_value
+    FROM campaign
+    WHERE segments.date BETWEEN '${since}' AND '${until}'
+  `);
+  const pmaxByCampaign = new Map<string, Row>();
+  for (const r of campaignRows) {
+    const c = (r.campaign || {}) as { id?: string; name?: string; status?: string };
+    const m = (r.metrics || {}) as {
+      costMicros?: string | number;
+      impressions?: string | number;
+      clicks?: string | number;
+      conversions?: string | number;
+      conversionsValue?: string | number;
+    };
+    const cid = String(c.id ?? "");
+    if (!cid || isTestCampaign(c.name ?? "")) continue;
+    if (adGroupCampaignIds.has(cid)) continue;  // already covered by ad-group rows
+    const n = (v: string | number | undefined) =>
+      v === undefined || v === null ? 0 : typeof v === "number" ? v : parseFloat(String(v)) || 0;
+    let row = pmaxByCampaign.get(cid);
+    if (!row) {
+      row = {
+        campaignId: cid, campaignName: c.name ?? "", campaignStatus: c.status ?? "",
+        adGroupId: null, adGroupName: null, adGroupStatus: null,
+        landingPages: [], label: c.name ?? "",
+        cost: 0, impressions: 0, clicks: 0, conversions: 0,
+        conversionValue: 0, ctr: 0, cpc: 0,
+      };
+      pmaxByCampaign.set(cid, row);
+    }
+    row.cost            += n(m.costMicros) / 1_000_000;
+    row.impressions     += n(m.impressions);
+    row.clicks          += n(m.clicks);
+    row.conversions     += n(m.conversions);
+    row.conversionValue += n(m.conversionsValue);
+  }
+
+  // Combine + label
+  const all: Row[] = [];
+  const adGroupCountByCampaign = new Map<string, number>();
+  for (const r of rowByKey.values()) {
+    adGroupCountByCampaign.set(r.campaignId, (adGroupCountByCampaign.get(r.campaignId) || 0) + 1);
+  }
+  for (const r of rowByKey.values()) {
+    const isMulti = (adGroupCountByCampaign.get(r.campaignId) || 0) > 1;
+    r.label = buildAdGroupLabel(r.campaignName, r.adGroupName, isMulti);
+    all.push(r);
+  }
+  for (const r of pmaxByCampaign.values()) all.push(r);
+
+  for (const r of all) {
+    r.ctr = r.impressions > 0 ? (r.clicks / r.impressions) * 100 : 0;
+    r.cpc = r.clicks > 0 ? r.cost / r.clicks : 0;
+  }
+  return all.sort((a, b) => b.cost - a.cost);
 }

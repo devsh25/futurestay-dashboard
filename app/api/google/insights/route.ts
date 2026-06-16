@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchGoogleAdsInsights, fetchRecentGoogleCampaigns } from "@/lib/google";
+import { fetchGoogleAdsAdGroupInsights, fetchRecentGoogleAdGroups } from "@/lib/google";
 import { resolvedDateRange } from "@/lib/funnel";
 import { GoogleAdsCampaignRow, GoogleAdsInsightsData, PeriodFilter } from "@/lib/types";
 
@@ -42,26 +42,25 @@ export async function GET(request: NextRequest) {
     }
 
     const [insights, roster] = await Promise.all([
-      fetchGoogleAdsInsights(since, until),
-      fetchRecentGoogleCampaigns(6).catch(() => [] as { id: string; name: string; status: string }[]),
+      fetchGoogleAdsAdGroupInsights(since, until),
+      fetchRecentGoogleAdGroups(6).catch(() => [] as Awaited<ReturnType<typeof fetchRecentGoogleAdGroups>>),
     ]);
 
-    // Two filtering rules combined:
-    //   1. INCLUDE any campaign that had spend > 0 in the window
+    // Key by label (already unique per ad unit). Filtering rules:
+    //   1. INCLUDE any ad unit with spend > 0 in the window
     //      (even if currently paused — historical spend still matters)
-    //   2. INCLUDE any campaign currently ENABLED (even with $0 spend
-    //      — freshly-launched ones still surface)
-    //   3. EXCLUDE everything else (old paused campaigns with no
-    //      activity in window — they used to flood the table with 30+
-    //      zero rows like "(US) GVR", "dnu1", "FutureStay_SEM_Brand").
-    const rosterIds = new Set(roster.map((r) => r.id));
-    const insightsFiltered = insights.filter((i) => i.cost > 0 || rosterIds.has(i.id));
-    const present = new Set(insightsFiltered.map((i) => i.id));
+    //   2. INCLUDE any ad unit in the active 6-month roster
+    //      (currently ENABLED, even with $0 spend — freshly-launched
+    //      ones still surface)
+    //   3. EXCLUDE everything else.
+    const rosterLabels = new Set(roster.map((r) => r.label));
+    const insightsFiltered = insights.filter((i) => i.cost > 0 || rosterLabels.has(i.label));
+    const presentLabels = new Set(insightsFiltered.map((i) => i.label));
     const merged: GoogleAdsCampaignRow[] = [
       ...insightsFiltered.map((i) => ({
-        id: i.id,
-        name: i.name,
-        status: i.status,
+        id: i.adGroupId ? `${i.campaignId}|${i.adGroupId}` : i.campaignId,
+        name: i.label,
+        status: i.adGroupStatus ?? i.campaignStatus,
         spend: i.cost,
         impressions: i.impressions,
         clicks: i.clicks,
@@ -72,11 +71,11 @@ export async function GET(request: NextRequest) {
         costPerConversion: i.conversions > 0 ? i.cost / i.conversions : 0,
       })),
       ...roster
-        .filter((r) => !present.has(r.id))
+        .filter((r) => !presentLabels.has(r.label))
         .map((r) => ({
-          id: r.id,
-          name: r.name,
-          status: r.status,
+          id: r.adGroupId ? `${r.campaignId}|${r.adGroupId}` : r.campaignId,
+          name: r.label,
+          status: r.adGroupStatus ?? r.campaignStatus,
           spend: 0,
           impressions: 0,
           clicks: 0,

@@ -3,7 +3,8 @@
 
 import { HubSpotContact, CampaignAnalysisRow, CampaignAnalysisData } from "./types";
 import { fetchMetaInsights } from "./meta";
-import { fetchRecentGoogleCampaigns, fetchGoogleAdsInsights } from "./google";
+import { fetchRecentGoogleAdGroups, fetchGoogleAdsAdGroupInsights } from "./google";
+import type { GoogleAdsAdGroup } from "./google";
 
 // HubSpot Notes API token reused from env
 const HUBSPOT_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN!;
@@ -152,108 +153,121 @@ const GOOGLE_LEGACY_UTM_HINTS: Record<string, string> = {
  *  final URL — we just ignore it. */
 const GOOGLE_LP_IGNORED_PATHS = new Set(["/", ""]);
 
-/** Attribute a HubSpot contact to a specific Google Ads campaign.
+/** Ad-group-level Google attribution.
  *
- *  Google's HubSpot UTM convention (post tracking-template fix on
- *  ~May 25): `first_touch_utm_campaign` holds the numeric Google
- *  Ads campaign ID, and `first_touch_utm_source` is literally
- *  "google". We match the numeric ID directly against the live
- *  Google Ads campaign roster and return the campaign's human-
- *  readable name.
+ *  Returns the ad-group label (or campaign name for single-ad-group /
+ *  Pmax rollups) for a HubSpot contact. The ad group is the natural
+ *  unit of attribution: each one has its own landing-page URL and
+ *  very different conversion behaviour from siblings.
  *
- *  For pre-fix contacts: if utm_campaign matches a known legacy
- *  label in GOOGLE_LEGACY_UTM_HINTS (currently just "brand"), we
- *  attribute to the active campaign whose name contains the hint.
- *  Other pre-fix values ({campaignname}, empty, one-off labels)
- *  remain unattributed — they still count in `@all-google` via
- *  utm_source but don't appear in any individual-campaign filter. */
-export function matchContactToGoogleCampaign(
+ *  Resolution:
+ *    1. Tier 4 (landing-page match) — directly identifies an ad group
+ *       since LPs are per-ad-group. PREFERRED when available because
+ *       it pins down which ad group within a multi-ad-group campaign.
+ *    2. Tier 1 (numeric campaign ID) — identifies the campaign only,
+ *       so we attribute to the CAMPAIGN-ROLLUP ad-unit if present, or
+ *       to the campaign's first ad group as a fallback. Multi-ad-group
+ *       campaigns without LP narrowing leave us guessing — return the
+ *       campaign rollup label in that case (the campaign name itself).
+ *    3. Tier 2/3 (name-prefix / legacy hint) — same as Tier 1: pins
+ *       campaign, ad group ambiguous.
+ *
+ *  The returned string is the ad unit's `label` (matches the field
+ *  set by fetchRecentGoogleAdGroups), so it joins cleanly against the
+ *  ad-group roster. */
+export function matchContactToGoogleAdGroup(
   c: HubSpotContact,
-  activeGoogleCampaigns: { id: string; name: string; landingPages?: string[] }[],
+  adUnits: GoogleAdsAdGroup[],
 ): string | null {
   const src = (c.first_touch_utm_source || "").toLowerCase().trim();
   if (src !== "google") return null;
 
-  // Look at BOTH first_touch_utm_campaign and hs_analytics_source_data_2 —
-  // some HubSpot integrations populate only src2, so checking utm_campaign
-  // alone (the old behaviour) dropped those contacts entirely.
+  // Pre-compute the contact's URL path for ad-group narrowing.
+  const url = c.hs_analytics_first_url || "";
+  let path: string | null = null;
+  if (url) {
+    try {
+      path = new URL(url).pathname.replace(/\/+$/, "") || "/";
+    } catch { /* skip */ }
+  }
+  const pathUsable = path !== null && !GOOGLE_LP_IGNORED_PATHS.has(path);
+
+  // Given a set of ad units that share a campaign, narrow to a specific
+  // ad group using the contact's LP if possible. Otherwise return the
+  // campaign rollup (Pmax) or campaign name (multi-ad-group fallback).
+  const narrowWithinCampaign = (inCampaign: GoogleAdsAdGroup[]): string => {
+    if (inCampaign.length === 1) return inCampaign[0].label;
+    if (pathUsable) {
+      const exact = inCampaign.find((u) => u.landingPages.includes(path!));
+      if (exact) return exact.label;
+    }
+    const rollup = inCampaign.find((u) => u.adGroupId === null);
+    if (rollup) return rollup.label;
+    return inCampaign[0].campaignName;  // best-effort campaign label
+  };
+
   const candidates = [c.first_touch_utm_campaign, c.hs_analytics_source_data_2];
 
-  // Tier 1 — numeric campaign-ID match (most reliable; post tracking-
-  // template-fix convention).
+  // --- Tier 1: numeric campaign ID → identify campaign → narrow to ad group ---
+  // Numeric IDs are the most authoritative attribution signal (HubSpot
+  // stores them directly from the ValueTrack macro), so this MUST run
+  // before LP-only matching — a contact whose ID points to campaign A
+  // but whose URL slug also happens to be a final URL of campaign B's
+  // ad group must attribute to A, not B.
   for (const raw of candidates) {
     const v = (raw || "").trim();
     if (/^\d{8,}$/.test(v)) {
-      const match = activeGoogleCampaigns.find((g) => g.id === v);
-      if (match) return match.name;
+      const inCampaign = adUnits.filter((u) => u.campaignId === v);
+      if (inCampaign.length > 0) return narrowWithinCampaign(inCampaign);
     }
   }
 
-  // Tier 2 — campaign-NAME prefix match. Recovers pre-template-fix
-  // contacts whose utm_campaign / src2 carries the campaign name text
-  // rather than the numeric ID. ≥10 chars of overlap, longest name
-  // wins. Generic tokens like "brand" (too short) are intentionally
-  // skipped here — they're handled by Tier 3 below.
+  // --- Tier 2: name-prefix match against campaign name ---
   for (const raw of candidates) {
     let v = (raw || "").trim();
     if (!v || v === "{campaignname}" || v === "{campaignid}") continue;
     if (v.includes("%")) {
-      try { v = decodeURIComponent(v); } catch { /* leave as-is */ }
+      try { v = decodeURIComponent(v); } catch { /* skip */ }
     }
     const vNorm = v.toLowerCase().replace(/\s+/g, " ").trim();
-    let best: string | null = null;
+    let best: GoogleAdsAdGroup | null = null;
     let bestLen = 0;
-    for (const g of activeGoogleCampaigns) {
-      const nNorm = g.name.toLowerCase().replace(/\s+/g, " ").trim();
+    for (const u of adUnits) {
+      const nNorm = u.campaignName.toLowerCase().replace(/\s+/g, " ").trim();
       const minLen = Math.min(vNorm.length, nNorm.length);
       if (minLen < 10) continue;
       if (vNorm.slice(0, minLen) === nNorm.slice(0, minLen)) {
-        if (g.name.length > bestLen) { best = g.name; bestLen = g.name.length; }
+        if (u.campaignName.length > bestLen) { best = u; bestLen = u.campaignName.length; }
       }
     }
-    if (best) return best;
+    if (best) {
+      const inCampaign = adUnits.filter((u) => u.campaignId === best!.campaignId);
+      return narrowWithinCampaign(inCampaign);
+    }
   }
 
-  // Tier 3 — legacy short-label table (pre-tracking-template-fix era).
-  // Some campaigns used a manual utm_campaign label too short for the
-  // prefix matcher above (e.g. utm_campaign="brand" → "Brand-Search").
-  // Apply against utm_campaign only — src2 doesn't carry these labels.
+  // --- Tier 3: legacy short-label table ---
   const utmCampaign = (c.first_touch_utm_campaign || "").trim().toLowerCase();
   const hint = GOOGLE_LEGACY_UTM_HINTS[utmCampaign];
   if (hint) {
-    const match = activeGoogleCampaigns.find((g) =>
-      g.name.toLowerCase().includes(hint.toLowerCase())
+    const match = adUnits.find((u) =>
+      u.campaignName.toLowerCase().includes(hint.toLowerCase())
     );
-    if (match) return match.name;
-  }
-
-  // Tier 4 — landing-page URL match. Recovers pre-tracking-template-fix
-  // contacts whose utm_campaign was "{campaignname}" / empty / a one-off
-  // label, but whose hs_analytics_first_url path matches a campaign's
-  // configured final URL. Deterministic mapping straight from Google
-  // Ads (ad_group_ad.ad.final_urls), so it doesn't go stale when a
-  // campaign's name or LP changes — landingPages are refreshed each
-  // time fetchRecentGoogleCampaigns runs.
-  //
-  // Example: a contact with utm_campaign="{campaignname}" who landed
-  // on /direct-booking-website is attributed to "Search - Direct
-  // Booking Website" (which lists that exact path in its final URLs).
-  const url = c.hs_analytics_first_url || "";
-  if (url) {
-    let path: string | null = null;
-    try {
-      path = new URL(url).pathname.replace(/\/+$/, "") || "/";
-    } catch {
-      // Not a parseable URL — skip.
-    }
-    if (path && !GOOGLE_LP_IGNORED_PATHS.has(path)) {
-      for (const g of activeGoogleCampaigns) {
-        if (!g.landingPages || g.landingPages.length === 0) continue;
-        if (g.landingPages.includes(path)) return g.name;
-      }
+    if (match) {
+      const inCampaign = adUnits.filter((u) => u.campaignId === match.campaignId);
+      return narrowWithinCampaign(inCampaign);
     }
   }
 
+  // --- Tier 4: LP-only fallback (no numeric / name / hint match) ---
+  // Recovers pre-tracking-template-fix contacts whose utm_campaign was
+  // "{campaignname}" / empty / unknown, but who landed on a URL that
+  // a known ad group serves.
+  if (pathUsable) {
+    for (const u of adUnits) {
+      if (u.landingPages.includes(path!)) return u.label;
+    }
+  }
   return null;
 }
 
@@ -610,45 +624,60 @@ export async function computeCampaignAnalysis(
   const start = new Date(`${since}T00:00:00.000Z`);
   const end = new Date(`${until}T23:59:59.999Z`);
 
-  // Fetch Meta spend + Google spend (roster + insights) in parallel.
-  // Google failures degrade gracefully — we just show no Google rows
-  // rather than killing the whole Campaign Analysis card.
+  // Fetch Meta spend + Google ad-group roster + Google ad-group spend
+  // in parallel. Google failures degrade gracefully — we just show no
+  // Google rows rather than killing the whole Campaign Analysis card.
+  //
+  // Ad group (not campaign) is the unit of attribution here. Pmax /
+  // asset-group campaigns surface as one row per campaign (adGroupId
+  // = null) so the same machinery handles both.
   const [metaInsights, googleRoster, googleInsightsRaw] = await Promise.all([
     fetchMetaInsights(since, until),
-    fetchRecentGoogleCampaigns(6).catch((err) => {
-      console.error("[campaigns] fetchRecentGoogleCampaigns failed:", err);
-      return [] as Awaited<ReturnType<typeof fetchRecentGoogleCampaigns>>;
+    fetchRecentGoogleAdGroups(6).catch((err) => {
+      console.error("[campaigns] fetchRecentGoogleAdGroups failed:", err);
+      return [] as Awaited<ReturnType<typeof fetchRecentGoogleAdGroups>>;
     }),
-    fetchGoogleAdsInsights(since, until).catch((err) => {
-      console.error("[campaigns] fetchGoogleAdsInsights failed:", err);
-      return [] as Awaited<ReturnType<typeof fetchGoogleAdsInsights>>;
+    fetchGoogleAdsAdGroupInsights(since, until).catch((err) => {
+      console.error("[campaigns] fetchGoogleAdsAdGroupInsights failed:", err);
+      return [] as Awaited<ReturnType<typeof fetchGoogleAdsAdGroupInsights>>;
     }),
   ]);
 
-  // Merge Google insights with active roster — same pattern as Meta:
-  // active campaigns missing from insights (zero spend in window) are
-  // surfaced so freshly-launched campaigns still appear in the table.
-  const googleInsightsById = new Map(googleInsightsRaw.map((g) => [g.id, g]));
-  type GoogleCampaignRecord = { id: string; name: string; spend: number; landingPages: string[] };
-  const googleCampaigns: GoogleCampaignRecord[] = googleRoster.map((r) => {
-    const ins = googleInsightsById.get(r.id);
-    return { id: r.id, name: r.name, spend: ins?.cost ?? 0, landingPages: r.landingPages };
-  });
-  // Also include any campaign that appeared in insights but not the
-  // current ENABLED roster (e.g. paused this morning but spent yesterday).
-  // Insights rows carry landingPages = [] (the ad-LP query in google.ts
-  // is keyed off the roster, not the insights set), so URL-attribution
-  // here only applies to roster campaigns — acceptable trade-off since
-  // an out-of-roster campaign is almost certainly a removed/legacy one.
-  const rosterIds = new Set(googleRoster.map((r) => r.id));
+  // Merge ad-group insights with the roster. Roster carries the
+  // landingPages (needed for attribution); insights carry the spend.
+  // Key by label (already unique per ad unit). Roster-only entries
+  // (no insights row this window) surface with $0 spend.
+  const insightsByLabel = new Map(googleInsightsRaw.map((g) => [g.label, g]));
+  type GoogleAdUnit = {
+    label: string;
+    campaignId: string;
+    campaignName: string;
+    spend: number;
+    landingPages: string[];
+  };
+  const googleAdUnits: GoogleAdUnit[] = googleRoster.map((r) => ({
+    label: r.label,
+    campaignId: r.campaignId,
+    campaignName: r.campaignName,
+    spend: insightsByLabel.get(r.label)?.cost ?? 0,
+    landingPages: r.landingPages,
+  }));
+  // Also include any insights-only ad unit (e.g. ad group paused this
+  // morning but spent yesterday → not in current roster).
+  const rosterLabels = new Set(googleRoster.map((r) => r.label));
   for (const ins of googleInsightsRaw) {
-    if (!rosterIds.has(ins.id) && ins.cost > 0) {
-      googleCampaigns.push({ id: ins.id, name: ins.name, spend: ins.cost, landingPages: [] });
+    if (!rosterLabels.has(ins.label) && ins.cost > 0) {
+      googleAdUnits.push({
+        label: ins.label,
+        campaignId: ins.campaignId,
+        campaignName: ins.campaignName,
+        spend: ins.cost,
+        landingPages: [],  // insights rows don't carry LPs
+      });
     }
   }
-  const activeGoogleCampaigns = googleCampaigns.map((g) => ({
-    id: g.id, name: g.name, landingPages: g.landingPages,
-  }));
+  // Roster passed to the matcher — exactly the same shape it expects.
+  const matcherAdUnits: GoogleAdsAdGroup[] = googleRoster;
 
   // Aggregate Meta spend per bucket
   const spendByBucket: Record<string, number> = {};
@@ -744,9 +773,10 @@ export async function computeCampaignAnalysis(
       bumpAgg(metaAgg[metaMatch], c);
       continue;
     }
-    // Then try Google: utm_source = "google" + utm_campaign matches
-    // a numeric Google campaign ID in the active roster.
-    const googleMatch = matchContactToGoogleCampaign(c, activeGoogleCampaigns);
+    // Then try Google: utm_source = "google" + ad-group attribution
+    // (LP match identifies an exact ad group; numeric ID narrows by
+    // campaign with rollup fallback).
+    const googleMatch = matchContactToGoogleAdGroup(c, matcherAdUnits);
     if (googleMatch) {
       (googleAgg[googleMatch] ||= empty());
       bumpAgg(googleAgg[googleMatch], c);
@@ -919,19 +949,24 @@ export async function computeCampaignAnalysis(
     });
   }
 
-  // Google campaigns — one row each. All are treated as type="self"
+  // Google ad units — one row each. All are treated as type="self"
   // since they're search / display / Pmax (no equivalent of the Meta
   // "call campaigns" path). optSignal = "google" so the table column
   // shows a clear platform distinction. Same column set as Meta self-
   // serve rows — Airbnb Connected, Ready to Launch, Trials, Customers
   // all read from HubSpot, so they apply uniformly across platforms.
-  for (const g of googleCampaigns) {
-    const a = googleAgg[g.name] ?? empty();
+  //
+  // Row label: campaign name for single-ad-group / Pmax campaigns;
+  // "Campaign › Ad Group" for multi-ad-group campaigns. The unit of
+  // attribution is the ad group when LP-narrowing succeeds, otherwise
+  // the campaign rollup.
+  for (const g of googleAdUnits) {
+    const a = googleAgg[g.label] ?? empty();
     const sp = g.spend;
     const cpa = (n: number) => (n > 0 ? sp / n : null);
     const pct = (n: number, d: number) => (d > 0 ? (n / d) * 100 : 0);
     rows.push({
-      campaign: g.name,
+      campaign: g.label,
       type: "self",
       spend: sp,
       optSignal: "google",

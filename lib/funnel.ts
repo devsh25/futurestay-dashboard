@@ -13,10 +13,11 @@ import {
 import {
   bucketContactToCampaign,
   matchContactToMetaCampaign,
-  matchContactToGoogleCampaign,
+  matchContactToGoogleAdGroup,
   isGoogleSourcedContact,
   isMetaAttributedContact,
 } from "./campaigns";
+import type { GoogleAdsAdGroup } from "./google";
 import {
   tzStartOfDay, tzEndOfDay, tzAddDays, tzStartOfWeek,
   tzStartOfMonth, tzStartOfQuarter, tzDateKey,
@@ -928,13 +929,13 @@ export function computeFunnelByCampaign(
   // contacts that share the bucket. Falls back to bucket attribution
   // for legacy bucket-key params.
   activeMetaCampaigns: string[] = [],
-  // Live Google Ads campaign roster — used to resolve a submitted
-  // Google campaign NAME back to its numeric ID (which is what
-  // HubSpot stores in first_touch_utm_campaign for Google-sourced
-  // contacts post-template-fix). Pass an empty array if the Google
-  // API isn't connected — the dropdown's Google entries silently
-  // become inert in that case.
-  activeGoogleCampaigns: { id: string; name: string; landingPages?: string[] }[] = [],
+  // Live Google Ads ad-group roster — used to resolve a submitted
+  // Google ad-unit LABEL back to a contact-attribution decision. Each
+  // entry represents an ad group (or, for Pmax / asset-group campaigns
+  // that don't use ad groups, the campaign rollup). Pass an empty
+  // array if the Google API isn't connected — the dropdown's Google
+  // entries silently become inert in that case.
+  activeGoogleAdGroups: GoogleAdsAdGroup[] = [],
 ): FunnelStage[] {
   const clean = excludePartnerSources(contacts);
   const { start, end } = resolvedDateRange(period, customStart, customEnd);
@@ -964,20 +965,20 @@ export function computeFunnelByCampaign(
     } else if (campaign === ALL_GOOGLE_SENTINEL) {
       signupFiltered = signupFiltered.filter(isGoogleSourcedContact);
     } else if (campaign === GOOGLE_PMAX_SENTINEL || campaign === GOOGLE_BRAND_SENTINEL) {
-      // Filter Google campaigns by name regex, then match contacts
-      // attributed to ANY of those campaigns. utm_source must also
-      // be "google" (already enforced by matchContactToGoogleCampaign).
+      // Filter Google ad units by campaign-name regex, then match
+      // contacts attributed to ANY of those ad units. utm_source must
+      // also be "google" (already enforced by matchContactToGoogleAdGroup).
       const re = campaign === GOOGLE_PMAX_SENTINEL ? GOOGLE_PMAX_NAME_REGEX : GOOGLE_BRAND_NAME_REGEX;
-      const targetNames = new Set(
-        activeGoogleCampaigns.filter((g) => re.test(g.name)).map((g) => g.name),
+      const targetLabels = new Set(
+        activeGoogleAdGroups.filter((u) => re.test(u.campaignName)).map((u) => u.label),
       );
       signupFiltered = signupFiltered.filter((c) => {
-        const match = matchContactToGoogleCampaign(c, activeGoogleCampaigns);
-        return match !== null && targetNames.has(match);
+        const match = matchContactToGoogleAdGroup(c, activeGoogleAdGroups);
+        return match !== null && targetLabels.has(match);
       });
-    } else if (activeGoogleCampaigns.some((g) => g.name === campaign)) {
+    } else if (activeGoogleAdGroups.some((u) => u.label === campaign)) {
       signupFiltered = signupFiltered.filter(
-        (c) => matchContactToGoogleCampaign(c, activeGoogleCampaigns) === campaign,
+        (c) => matchContactToGoogleAdGroup(c, activeGoogleAdGroups) === campaign,
       );
     } else if (activeMetaCampaigns.includes(campaign)) {
       signupFiltered = signupFiltered.filter(

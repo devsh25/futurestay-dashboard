@@ -1,30 +1,41 @@
 import { NextResponse } from "next/server";
-import { fetchRecentGoogleCampaigns } from "@/lib/google";
+import { fetchRecentGoogleAdGroups } from "@/lib/google";
 
 /**
- * Live roster of currently-active Google Ads campaigns.
+ * Live roster of currently-active Google Ads ad units (ad groups for
+ * traditional campaigns, campaign rollups for Pmax / asset-group ones).
  *
  *   GET /api/google/campaigns
  *
- * Used by the FunnelCard dropdown to surface individual Google
- * campaigns as filter options. Returns `[{ id, name, status }]` —
- * the dropdown's display string is built client-side from `name`,
- * the funnel-filter payload submits the same `name` back, and the
- * server resolves it to an ID inside computeFunnelByCampaign.
+ * Used by the FunnelCard dropdown to surface individual Google ad units
+ * as filter options. Returns `{ campaigns: [...] }` where each entry has
+ * a `name` (the row's display label — campaign name for single-ad-group /
+ * Pmax campaigns, "Campaign › Ad Group" for multi-ad-group ones).
  *
- * On any failure (developer-token blocked, network, OAuth refresh
- * fail, etc.) we return an empty list with HTTP 200 rather than
- * propagating the error — the dropdown falls back to "no Google
- * campaigns available" instead of breaking the whole funnel card.
+ * Response keys are kept as `campaigns` (not `adGroups`) for backward
+ * compat with the existing client — the unit changed but the dropdown
+ * payload shape didn't.
+ *
+ * On any failure (developer-token blocked, network, OAuth refresh fail,
+ * etc.) we return an empty list with HTTP 200 rather than propagating
+ * the error — the dropdown falls back to "no Google entries available"
+ * instead of breaking the whole funnel card.
  */
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export async function GET() {
   try {
-    // 6-month window so paused campaigns that spent money recently
-    // still appear in the Funnel filter dropdown.
-    const campaigns = await fetchRecentGoogleCampaigns(6);
+    const adGroups = await fetchRecentGoogleAdGroups(6);
+    // Shape preserved so the existing dropdown rendering keeps working.
+    // `id` is a synthetic "campId|adGroupId" string (or just campId for
+    // Pmax rollups) — only used as a React key, the funnel API matches
+    // on `name` (the label).
+    const campaigns = adGroups.map((u) => ({
+      id: u.adGroupId ? `${u.campaignId}|${u.adGroupId}` : u.campaignId,
+      name: u.label,
+      status: u.adGroupStatus ?? u.campaignStatus,
+    }));
     return NextResponse.json({ campaigns });
   } catch (err) {
     console.error("[/api/google/campaigns] failed:", err);
