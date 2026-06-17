@@ -152,7 +152,7 @@ export default function RetentionCurveChart() {
             paying customers (lifecycle ∈ <code className="text-[#C9D1DC]">customer / former.customer / Customer&#47;Limited Access</code>)
             who entered customer status on or after{" "}
             <span className="text-white">March 1, 2026</span>, excluding WIX/HOPPER partner
-            referrals. Customers who exited within{" "}
+            referrals and Futurestay internal test accounts. Customers who exited within{" "}
             <span className="text-white">{data?.failedTrialists.days ?? 4} days</span>{" "}
             of entry are reclassified as failed trialists, removed from every curve,
             and reported as a separate count above. The plotted x-axis stops at the

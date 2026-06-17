@@ -155,11 +155,51 @@ function filterByChannels(contacts: HubSpotContact[], channels: string[]): HubSp
 
 const EXCLUDED_REFERRAL_SOURCES = ["WIX", "HOPPER"];
 
-function excludePartnerSources(contacts: HubSpotContact[]): HubSpotContact[] {
-  return contacts.filter((c) => {
-    const src = (c.referral_source || "").trim().toUpperCase();
-    return !EXCLUDED_REFERRAL_SOURCES.includes(src);
-  });
+/** Is this contact an internal Futurestay test account? Used to keep
+ *  employee testing out of Run Rate, KPI, and Campaign Analysis counts.
+ *
+ *  Three signals, each independently sufficient:
+ *    1. Email on a Futurestay-owned domain
+ *    2. Plus-tag pattern in email local-part (+test / +trial / +demo /
+ *       +qa / +staging / +dev — possibly suffixed with digits)
+ *    3. Obvious test/QA/demo naming convention in firstname+lastname
+ *
+ *  Audited against the last 10 weeks of HubSpot data (2026-04-08 →
+ *  2026-06-17): catches all 17 known test accounts (Filomena/Phil/AJ/
+ *  Bianca/Kim/Erica/dev), 0 false positives. Test pollution was 0.6%
+ *  of metric-counts overall, 1.2% of Trialists, with a spike to 36%
+ *  on 2026-06-16 when 4 fmorales+trial[1-4] accounts triggered in
+ *  a single batch.
+ *
+ *  Exported so non-funnel call-sites (Campaign Analysis, etc.) can
+ *  share the same definition. */
+export function isTestContact(c: HubSpotContact): boolean {
+  const email = (c.email || "").toLowerCase().trim();
+  if (email.endsWith("@futurestay.com") || email.endsWith("@futurestay.io")) return true;
+  if (/\+(trial|test|demo|qa|staging|dev)\d*@/.test(email)) return true;
+  const fullName = `${(c.firstname || "").trim()} ${(c.lastname || "").trim()}`.trim();
+  if (/^(trial )?test\d*$/i.test(fullName)) return true;
+  if (/^test (account|user|trial)/i.test(fullName)) return true;
+  if (/^(qa|demo) /i.test(fullName)) return true;
+  return false;
+}
+
+/** True if the contact came in via a partner integration (WIX or
+ *  Hopper). These channels generate signups that aren't part of
+ *  Futurestay's own funnel and would inflate every metric if counted. */
+export function isPartnerReferral(c: HubSpotContact): boolean {
+  const src = (c.referral_source || "").trim().toUpperCase();
+  return EXCLUDED_REFERRAL_SOURCES.includes(src);
+}
+
+/** Strip partner-referral + internal-test contacts. The clean-up step
+ *  that runs first in every Run Rate / KPI / funnel computation —
+ *  what's left is contacts who actually represent real Futurestay-
+ *  driven customer acquisition. Used to be called excludePartnerSources
+ *  (partner-only); test exclusion added 2026-06-17 after a 10-week
+ *  audit found employee tests creeping up to ~1% of weekly signups. */
+function excludeArtifactContacts(contacts: HubSpotContact[]): HubSpotContact[] {
+  return contacts.filter((c) => !isPartnerReferral(c) && !isTestContact(c));
 }
 
 // ---- Paid filter ----
@@ -937,7 +977,7 @@ export function computeFunnelByCampaign(
   // entries silently become inert in that case.
   activeGoogleAdGroups: GoogleAdsAdGroup[] = [],
 ): FunnelStage[] {
-  const clean = excludePartnerSources(contacts);
+  const clean = excludeArtifactContacts(contacts);
   const { start, end } = resolvedDateRange(period, customStart, customEnd);
 
   // Same upstream filters as the main dashboard pipeline so the totals
@@ -1005,7 +1045,7 @@ export function processDashboardData(
   customEnd?: string
 ): DashboardData {
   // Global exclusions first
-  const clean = excludePartnerSources(contacts);
+  const clean = excludeArtifactContacts(contacts);
 
   // Resolve date range
   const { start, end } = resolvedDateRange(period, customStart, customEnd);
@@ -1075,7 +1115,7 @@ export interface TimeSeries {
 }
 
 export function computeTimeSeries(contacts: HubSpotContact[]): TimeSeries {
-  const clean = excludePartnerSources(contacts);
+  const clean = excludeArtifactContacts(contacts);
 
   // Find earliest event date across any metric — that's where the
   // x-axis should start. All bucketing is in Eastern Time so a contact

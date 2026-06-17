@@ -136,7 +136,7 @@ export default function KPICards({
         <span className="text-white">bottom row</span> ratios use the cohort path
         consistently — denominators are Qualified Signups in the window, so the
         % matches a clean signup-to-stage conversion. Excludes WIX/HOPPER partner
-        referrals.
+        referrals and Futurestay internal test accounts.
       </p>
 
       {/* Hero KPI row — divided container pattern. Five numbers share

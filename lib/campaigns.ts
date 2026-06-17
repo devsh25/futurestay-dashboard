@@ -5,6 +5,7 @@ import { HubSpotContact, CampaignAnalysisRow, CampaignAnalysisData } from "./typ
 import { fetchMetaInsights } from "./meta";
 import { fetchRecentGoogleAdGroups, fetchGoogleAdsAdGroupInsights } from "./google";
 import type { GoogleAdsAdGroup } from "./google";
+import { isPartnerReferral, isTestContact } from "./funnel";
 
 // HubSpot Notes API token reused from env
 const HUBSPOT_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN!;
@@ -588,8 +589,7 @@ async function classifyCallContacts(
     if (!cid) continue;
     const c = contactById.get(cid);
     if (!c) continue;
-    const ref = (c.referral_source || "").toUpperCase().trim();
-    if (ref === "WIX" || ref === "HOPPER") continue;
+    if (isPartnerReferral(c) || isTestContact(c)) continue;
     if ((c.airbnbdqreason || "").trim()) continue;
     const url = (c.hs_analytics_first_url || "").toLowerCase();
     const isCall = ["optimization-call", "direct-booking-sales", "website-call", "direct-booking-call", "/sales"]
@@ -778,8 +778,7 @@ export async function computeCampaignAnalysis(
   }
 
   for (const c of contacts) {
-    const ref = (c.referral_source || "").toUpperCase().trim();
-    if (ref === "WIX" || ref === "HOPPER") continue;
+    if (isPartnerReferral(c) || isTestContact(c)) continue;
 
     const created = parseDate(c.createdate);
     if (!created || created < start || created > end) continue;
@@ -1106,8 +1105,7 @@ export async function computeMeetingsTimeseries(
   }
 
   for (const c of contacts) {
-    const ref = (c.referral_source || "").toUpperCase().trim();
-    if (ref === "WIX" || ref === "HOPPER") continue;
+    if (isPartnerReferral(c) || isTestContact(c)) continue;
 
     const bk = bucketContactToCampaign(c);
     if (!bk) continue;

@@ -33,6 +33,7 @@
  */
 
 import type { HubSpotContact } from "./types";
+import { isPartnerReferral, isTestContact } from "./funnel";
 
 const HS_BASE = "https://api.hubapi.com";
 const TOKEN = process.env.HUBSPOT_ACCESS_TOKEN!;
@@ -297,11 +298,13 @@ const FAILED_TRIALIST_DAYS = 4;
 export async function computeRetention(
   contacts: HubSpotContact[]
 ): Promise<RetentionData> {
-  // Filter to paid customers only (Amplify or Flex). Exclude
-  // WIX/HOPPER partner referrals (same exclusion every other card uses).
+  // Filter to paid customers only (Amplify or Flex). Exclude WIX/HOPPER
+  // partner referrals + Futurestay internal test accounts — same
+  // exclusion every other card uses. In practice tests almost never
+  // become real paid customers, but apply the filter for consistency
+  // and to keep the descriptions honest.
   const paidCustomers = contacts.filter((c) => {
-    const ref = (c.referral_source || "").trim().toUpperCase();
-    if (ref === "WIX" || ref === "HOPPER") return false;
+    if (isPartnerReferral(c) || isTestContact(c)) return false;
     return wasPaidCustomer(c);
   });
 

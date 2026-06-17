@@ -32,6 +32,12 @@ export interface HubSpotContact {
   ip_country: string | null;
   ip_city: string | null;
   referral_source: string | null;
+  // Identity fields — used to detect internal/test accounts (Futurestay
+  // employee emails, +test plus-tags, obvious Test/QA/Demo names) so
+  // they can be filtered out of Run Rate and KPI counts.
+  email: string | null;
+  firstname: string | null;
+  lastname: string | null;
   hs_v2_date_entered_opportunity: string | null; // date entered Trial
   hs_v2_date_exited_opportunity: string | null;  // date exited Trial
   hs_v2_date_entered_customer: string | null;    // date entered Customer
