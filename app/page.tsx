@@ -36,7 +36,7 @@ export default function Dashboard() {
   const [hasInitialRunRate, setHasInitialRunRate] = useState(false);
   const firstFoldReady = hasInitialContacts && hasInitialRunRate;
   const isRefreshing = loading && firstFoldReady;
-  // Default custom range: Feb 1, 2026 → T−14d.
+  // Default custom range: May 1, 2026 → T−14d.
   // T−14d enforces the cohort-maturity rule (Futurestay's median signup→customer
   // is ~14 days, so anything fresher than that has unmatured conversion data).
   // All date arithmetic in ET so the default + maturity warning are stable
@@ -45,7 +45,7 @@ export default function Dashboard() {
   const tMinus14Iso = tzDateKey(tzAddDays(nowEt, -14));
 
   const [period, setPeriod] = useState<PeriodFilter>("custom");
-  const [customStart, setCustomStart] = useState("2026-02-01");
+  const [customStart, setCustomStart] = useState("2026-05-01");
   const [customEnd, setCustomEnd] = useState(tMinus14Iso);
   const [countries, setCountries] = useState<string[]>([]);
   const [channels, setChannels] = useState<string[]>([]);
