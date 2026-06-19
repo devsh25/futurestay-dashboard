@@ -28,6 +28,7 @@ type Mode = "count" | "percent";
 type Series = {
   days: string[];
   signups: number[];
+  totalSignups: number[];
   airbnbConnects: number[];
   readyToLaunch: number[];
   trials: number[];
@@ -42,6 +43,7 @@ type Series = {
 
 type MetricKey =
   | "signups"
+  | "totalSignups"
   | "airbnbConnects"
   | "readyToLaunch"
   | "trials"
@@ -50,6 +52,11 @@ type MetricKey =
   | "googleSpend";
 
 const METRICS: { key: MetricKey; label: string; color: string; description: string; isCurrency?: boolean }[] = [
+  // "Total Signups" sits above "Qualified Signups" so the legend reads
+  // top-to-bottom in funnel order: broadest → narrowest. Slate color so
+  // it reads as supporting context rather than competing with the
+  // primary inflight-blue used by QS / Airbnb Connects.
+  { key: "totalSignups",   label: "Total Signups",      color: "#94A3B8", description: "createdate, includes Airbnb DQ" },
   { key: "signups",        label: "Qualified Signups",  color: "#1E6FFF", description: "createdate, Airbnb DQ excluded" },
   { key: "airbnbConnects", label: "Airbnb Connects",    color: "#60A5FA", description: "auth status COMPLETED/REVOKED" },
   { key: "readyToLaunch",  label: "Ready to Launch",    color: "#93C5FD", description: "property_ready_to_launch=true" },
@@ -86,6 +93,7 @@ type WeeklyData = {
   weekEnd: string[];
   /** Sums for each metric. */
   signups: number[];
+  totalSignups: number[];
   airbnbConnects: number[];
   readyToLaunch: number[];
   trials: number[];
@@ -105,7 +113,7 @@ type WeeklyData = {
  *  incomplete so the UI can render them differently. */
 function bucketByWeek(data: Series): WeeklyData {
   // Map week-start (Mon ET, YYYY-MM-DD) → aggregated row
-  const buckets = new Map<string, { weekStart: string; weekEnd: string; signups: number; airbnbConnects: number; readyToLaunch: number; trials: number; customers: number; metaSpend: number; googleSpend: number; daysSeen: number; lastDay: string }>();
+  const buckets = new Map<string, { weekStart: string; weekEnd: string; signups: number; totalSignups: number; airbnbConnects: number; readyToLaunch: number; trials: number; customers: number; metaSpend: number; googleSpend: number; daysSeen: number; lastDay: string }>();
 
   for (let i = 0; i < data.days.length; i++) {
     const day = data.days[i];
@@ -123,13 +131,14 @@ function bucketByWeek(data: Series): WeeklyData {
       buckets.set(weekKey, {
         weekStart: weekKey,
         weekEnd: sundayKey,
-        signups: 0, airbnbConnects: 0, readyToLaunch: 0, trials: 0, customers: 0,
+        signups: 0, totalSignups: 0, airbnbConnects: 0, readyToLaunch: 0, trials: 0, customers: 0,
         metaSpend: 0, googleSpend: 0,
         daysSeen: 0, lastDay: day,
       });
     }
     const b = buckets.get(weekKey)!;
     b.signups += data.signups[i];
+    b.totalSignups += data.totalSignups[i];
     b.airbnbConnects += data.airbnbConnects[i];
     b.readyToLaunch += data.readyToLaunch[i];
     b.trials += data.trials[i];
@@ -148,6 +157,7 @@ function bucketByWeek(data: Series): WeeklyData {
     weekStart: sorted.map((b) => b.weekStart),
     weekEnd: sorted.map((b) => b.weekEnd),
     signups: sorted.map((b) => b.signups),
+    totalSignups: sorted.map((b) => b.totalSignups),
     airbnbConnects: sorted.map((b) => b.airbnbConnects),
     readyToLaunch: sorted.map((b) => b.readyToLaunch),
     trials: sorted.map((b) => b.trials),
@@ -170,7 +180,7 @@ function bucketByWeek(data: Series): WeeklyData {
 function bucketByMonth(data: Series): WeeklyData {
   // `day` strings are YYYY-MM-DD ET keys. Month key = YYYY-MM.
   type Row = { monthStart: string; monthEnd: string; days: Set<string>;
-               signups: number; airbnbConnects: number; readyToLaunch: number;
+               signups: number; totalSignups: number; airbnbConnects: number; readyToLaunch: number;
                trials: number; customers: number; metaSpend: number; googleSpend: number;
                daysInMonth: number };
   const buckets = new Map<string, Row>();
@@ -189,7 +199,7 @@ function bucketByMonth(data: Series): WeeklyData {
         monthStart: `${monthKey}-01`,
         monthEnd:   `${monthKey}-${String(last).padStart(2, "0")}`,
         days: new Set<string>(),
-        signups: 0, airbnbConnects: 0, readyToLaunch: 0, trials: 0, customers: 0,
+        signups: 0, totalSignups: 0, airbnbConnects: 0, readyToLaunch: 0, trials: 0, customers: 0,
         metaSpend: 0, googleSpend: 0,
         daysInMonth: last,
       });
@@ -197,6 +207,7 @@ function bucketByMonth(data: Series): WeeklyData {
     const b = buckets.get(monthKey)!;
     b.days.add(day);
     b.signups       += data.signups[i];
+    b.totalSignups  += data.totalSignups[i];
     b.airbnbConnects+= data.airbnbConnects[i];
     b.readyToLaunch += data.readyToLaunch[i];
     b.trials        += data.trials[i];
@@ -209,6 +220,7 @@ function bucketByMonth(data: Series): WeeklyData {
     weekStart: sorted.map((b) => b.monthStart),
     weekEnd:   sorted.map((b) => b.monthEnd),
     signups:   sorted.map((b) => b.signups),
+    totalSignups: sorted.map((b) => b.totalSignups),
     airbnbConnects: sorted.map((b) => b.airbnbConnects),
     readyToLaunch:  sorted.map((b) => b.readyToLaunch),
     trials:    sorted.map((b) => b.trials),
@@ -307,6 +319,12 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
       // split).
       const vals: Record<Exclude<MetricKey, "metaSpend" | "googleSpend">, (number | null)[]> = asPercent
         ? {
+            // Total Signups uses ITSELF as the denominator in % mode
+            // (it's the broadest count — there's no meaningful "above")
+            // so it just lines up at 100% the same way Qualified Signups
+            // does. Slightly redundant, but keeps the toggle behaviour
+            // consistent: every metric maps to a number in % mode.
+            totalSignups: toPercentOf(w.totalSignups, w.totalSignups),
             signups: toPercentOf(w.signups, w.signups),
             airbnbConnects: toPercentOf(w.airbnbConnects, w.signups),
             readyToLaunch: toPercentOf(w.readyToLaunch, w.signups),
@@ -314,6 +332,7 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
             customers: toPercentOf(w.customers, w.signups),
           }
         : {
+            totalSignups: w.totalSignups,
             signups: w.signups,
             airbnbConnects: w.airbnbConnects,
             readyToLaunch: w.readyToLaunch,
@@ -348,6 +367,7 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
         return { solid, dashed };
       }
 
+      const split_totalSignups   = split(vals.totalSignups);
       const split_signups        = split(vals.signups);
       const split_airbnbConnects = split(vals.airbnbConnects);
       const split_readyToLaunch  = split(vals.readyToLaunch);
@@ -359,6 +379,7 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
         weekEnd: w.weekEnd[i],
         partial: w.partial[i],
         // Plotted values — used by the tooltip (read directly from row.payload)
+        totalSignups: vals.totalSignups[i],
         signups: vals.signups[i],
         airbnbConnects: vals.airbnbConnects[i],
         readyToLaunch: vals.readyToLaunch[i],
@@ -369,6 +390,8 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
         metaSpend:   w.metaSpend[i],
         googleSpend: w.googleSpend[i],
         // Split values — used by the two Line components per metric
+        totalSignups_solid: split_totalSignups.solid[i],
+        totalSignups_dashed: split_totalSignups.dashed[i],
         signups_solid: split_signups.solid[i],
         signups_dashed: split_signups.dashed[i],
         airbnbConnects_solid: split_airbnbConnects.solid[i],
@@ -386,6 +409,7 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
     // day-by-day ratio of small numbers.
     const rawOrSmooth = (a: number[]) => (smoothed ? smooth(a) : a);
     const base: Record<Exclude<MetricKey, "metaSpend" | "googleSpend">, number[]> = {
+      totalSignups: rawOrSmooth(data.totalSignups),
       signups: rawOrSmooth(data.signups),
       airbnbConnects: rawOrSmooth(data.airbnbConnects),
       readyToLaunch: rawOrSmooth(data.readyToLaunch),
@@ -398,6 +422,7 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
     const googleSpendSeries = rawOrSmooth(data.googleSpend || new Array(data.days.length).fill(0));
     const series: Record<Exclude<MetricKey, "metaSpend" | "googleSpend">, (number | null)[]> = asPercent
       ? {
+          totalSignups: toPercentOf(base.totalSignups, base.totalSignups),
           signups: toPercentOf(base.signups, base.signups),
           airbnbConnects: toPercentOf(base.airbnbConnects, base.signups),
           readyToLaunch: toPercentOf(base.readyToLaunch, base.signups),
@@ -407,6 +432,7 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
       : base;
     return data.days.map((day, i) => ({
       day,
+      totalSignups: series.totalSignups[i],
       signups: series.signups[i],
       airbnbConnects: series.airbnbConnects[i],
       readyToLaunch: series.readyToLaunch[i],
@@ -423,6 +449,7 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
     if (!data) return null;
     const sum = (a: number[]) => a.reduce((s, v) => s + v, 0);
     return {
+      totalSignups: sum(data.totalSignups),
       signups: sum(data.signups),
       airbnbConnects: sum(data.airbnbConnects),
       readyToLaunch: sum(data.readyToLaunch),

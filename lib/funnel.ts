@@ -1107,7 +1107,14 @@ export function processDashboardData(
 // time-series chart should show.
 export interface TimeSeries {
   days: string[];
+  /** Qualified signups: lifecycle ∈ signup-set AND no Airbnb DQ. The
+   *  "funnel-relevant" denominator everywhere else in the dashboard. */
   signups: number[];
+  /** Total signups: lifecycle ∈ signup-set, INCLUDING Airbnb-DQ'd
+   *  contacts. The broader pre-qualification count — matches the
+   *  KPI tile's "Total Signups" line. Useful alongside Qualified
+   *  Signups to spot DQ-rate spikes day-over-day. */
+  totalSignups: number[];
   airbnbConnects: number[];
   readyToLaunch: number[];
   trials: number[];
@@ -1135,7 +1142,10 @@ export function computeTimeSeries(contacts: HubSpotContact[]): TimeSeries {
   }
 
   for (const c of clean) {
-    if (isSignup(c) && !hasDQ(c)) consider(c.createdate);
+    // Use the broader signup criterion (lifecycle only, no DQ filter)
+    // so DQ-only days still extend the x-axis. The narrower QS metric
+    // is a strict subset; counting either way picks up the same dates.
+    if (isSignup(c)) consider(c.createdate);
     // Trials: match KPI semantics exactly — canonical date first
     // (hs_v2_date_entered_opportunity), trial__start_date as fallback.
     // No lifecycle gate: KPI's totalTrials counts any contact whose
@@ -1151,7 +1161,7 @@ export function computeTimeSeries(contacts: HubSpotContact[]): TimeSeries {
   }
 
   if (!isFinite(minTs)) {
-    return { days: [], signups: [], airbnbConnects: [], readyToLaunch: [], trials: [], customers: [] };
+    return { days: [], signups: [], totalSignups: [], airbnbConnects: [], readyToLaunch: [], trials: [], customers: [] };
   }
 
   // Snap min to ET start-of-day; chart always extends to today (ET).
@@ -1198,6 +1208,7 @@ export function computeTimeSeries(contacts: HubSpotContact[]): TimeSeries {
   }
   const dayCount = days.length;
   const signups: number[] = new Array(dayCount).fill(0);
+  const totalSignups: number[] = new Array(dayCount).fill(0);
   const airbnbConnects: number[] = new Array(dayCount).fill(0);
   const readyToLaunch: number[] = new Array(dayCount).fill(0);
   const trials: number[] = new Array(dayCount).fill(0);
@@ -1220,6 +1231,13 @@ export function computeTimeSeries(contacts: HubSpotContact[]): TimeSeries {
     if (isSignup(c) && !hasDQ(c)) {
       const i = bucketIndex(c.createdate);
       if (i >= 0) signups[i]++;
+    }
+    // Total signups: same lifecycle gate, DQ contacts INCLUDED. Matches
+    // the KPI tile's "Total Signups" definition. QS is a strict subset
+    // (totalSignups - signups = Airbnb DQ count on that day).
+    if (isSignup(c)) {
+      const i = bucketIndex(c.createdate);
+      if (i >= 0) totalSignups[i]++;
     }
     // Airbnb connects
     if (isAuth(c)) {
@@ -1251,5 +1269,5 @@ export function computeTimeSeries(contacts: HubSpotContact[]): TimeSeries {
     }
   }
 
-  return { days, signups, airbnbConnects, readyToLaunch, trials, customers };
+  return { days, signups, totalSignups, airbnbConnects, readyToLaunch, trials, customers };
 }
