@@ -20,6 +20,9 @@ export interface HubSpotContact {
   first_touch_utm_source: string | null;
   first_touch_utm_medium: string | null;
   first_touch_utm_term: string | null;
+  /** Meta: typically the ad ID via {{ad.id}}. Google: Pmax asset ID.
+   *  Joins HubSpot contacts to ad-platform ads in the per-ad export. */
+  first_touch_utm_content: string | null;
   hs_analytics_first_url: string | null;
   hs_analytics_source_data_2: string | null;
   engagements_last_meeting_booked: string | null;

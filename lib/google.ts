@@ -761,3 +761,161 @@ export async function fetchGoogleAdsAdGroupInsights(
   }
   return all.sort((a, b) => b.cost - a.cost);
 }
+
+// ============================================================
+// Per-ad daily — for the data-export endpoint
+// ============================================================
+
+/** One ad-unit on one day. For traditional Google campaigns
+ *  (Search / Display / Video) this is an ad_group_ad row. For
+ *  Pmax campaigns, ad_id is null and we expose asset_group as
+ *  the unit instead — Pmax has no ad_group_ad rows.
+ *
+ *  Used by /api/export for analyst-friendly per-ad CSVs.
+ *
+ *  Conversions is Google's count (whatever conversion actions are
+ *  set up in the account). conversion_value is the $ value. */
+export interface GoogleAdDayRow {
+  date: string;             // YYYY-MM-DD
+  campaign_id: string;
+  campaign_name: string;
+  ad_group_id: string | null;     // null for Pmax rollups
+  ad_group_name: string | null;
+  ad_id: string | null;           // null for Pmax (use asset_group_id instead)
+  ad_name: string | null;         // ad.name or asset_group.name
+  asset_group_id: string | null;  // Pmax only
+  channel_type: string;     // "SEARCH" / "DISPLAY" / "PERFORMANCE_MAX" / etc.
+  cost: number;             // $ (micros ÷ 1e6)
+  impressions: number;
+  clicks: number;
+  ctr: number;              // %
+  cpc: number;
+  conversions: number;
+  conversion_value: number; // $
+}
+
+/** Per-ad, per-day Google Ads insights. Runs two GAQL queries:
+ *
+ *    1. FROM ad_group_ad — Search, Display, Video, Discovery, etc.
+ *       (every campaign that uses traditional ad groups)
+ *
+ *    2. FROM asset_group_asset — Pmax campaigns. We use the asset-group
+ *       level (Pmax's "ad-like" unit) because ad_group_ad returns no
+ *       rows for Pmax.
+ *
+ *  Both queries are scoped to segments.date in the requested window.
+ *  Returned rows are sorted (date, campaign, ad_group, ad). */
+export async function fetchGoogleAdsAdDaily(
+  since: string,
+  until: string,
+): Promise<GoogleAdDayRow[]> {
+  // 1. ad_group_ad rows (traditional campaigns)
+  const adGroupAdRows = await googleAdsSearch(`
+    SELECT segments.date,
+           campaign.id, campaign.name, campaign.advertising_channel_type,
+           ad_group.id, ad_group.name,
+           ad_group_ad.ad.id, ad_group_ad.ad.name,
+           metrics.cost_micros, metrics.impressions, metrics.clicks,
+           metrics.conversions, metrics.conversions_value
+    FROM ad_group_ad
+    WHERE segments.date BETWEEN '${since}' AND '${until}'
+      AND ad_group_ad.status != 'REMOVED'
+  `);
+
+  const rows: GoogleAdDayRow[] = [];
+  for (const r of adGroupAdRows) {
+    const seg = (r.segments || {}) as { date?: string };
+    const c = (r.campaign || {}) as { id?: string; name?: string; advertisingChannelType?: string };
+    const g = (r.adGroup || {}) as { id?: string; name?: string };
+    const ad = ((r.adGroupAd || {}) as { ad?: { id?: string; name?: string } }).ad || {};
+    const m = (r.metrics || {}) as {
+      costMicros?: string | number; impressions?: string | number;
+      clicks?: string | number; conversions?: string | number;
+      conversionsValue?: string | number;
+    };
+    if (isTestCampaign(c.name || "")) continue;
+    const num = (v: string | number | undefined) =>
+      v === undefined || v === null ? 0 : typeof v === "number" ? v : parseFloat(String(v)) || 0;
+    rows.push({
+      date:             seg.date || "",
+      campaign_id:      String(c.id || ""),
+      campaign_name:    c.name || "",
+      ad_group_id:      String(g.id || ""),
+      ad_group_name:    g.name || "",
+      ad_id:            ad.id ? String(ad.id) : null,
+      ad_name:          ad.name || null,
+      asset_group_id:   null,
+      channel_type:     c.advertisingChannelType || "",
+      cost:             num(m.costMicros) / 1_000_000,
+      impressions:      num(m.impressions),
+      clicks:           num(m.clicks),
+      ctr:              0,  // derived below
+      cpc:              0,
+      conversions:      num(m.conversions),
+      conversion_value: num(m.conversionsValue),
+    });
+  }
+
+  // 2. asset_group rows (Pmax) — group rows by (campaign, asset_group, date)
+  //    using asset_group as the "ad-like" unit. Pmax doesn't have
+  //    ad_group, so ad_group columns stay null.
+  const assetGroupRows = await googleAdsSearch(`
+    SELECT segments.date,
+           campaign.id, campaign.name, campaign.advertising_channel_type,
+           asset_group.id, asset_group.name,
+           metrics.cost_micros, metrics.impressions, metrics.clicks,
+           metrics.conversions, metrics.conversions_value
+    FROM asset_group
+    WHERE segments.date BETWEEN '${since}' AND '${until}'
+  `).catch((err) => {
+    // Non-fatal: if asset_group permissions / dev-token tier is wrong,
+    // we still return the ad_group_ad rows.
+    console.error("[fetchGoogleAdsAdDaily] asset_group query failed:", err);
+    return [] as Record<string, unknown>[];
+  });
+  for (const r of assetGroupRows) {
+    const seg = (r.segments || {}) as { date?: string };
+    const c = (r.campaign || {}) as { id?: string; name?: string; advertisingChannelType?: string };
+    const ag = (r.assetGroup || {}) as { id?: string; name?: string };
+    const m = (r.metrics || {}) as {
+      costMicros?: string | number; impressions?: string | number;
+      clicks?: string | number; conversions?: string | number;
+      conversionsValue?: string | number;
+    };
+    if (isTestCampaign(c.name || "")) continue;
+    const num = (v: string | number | undefined) =>
+      v === undefined || v === null ? 0 : typeof v === "number" ? v : parseFloat(String(v)) || 0;
+    rows.push({
+      date:             seg.date || "",
+      campaign_id:      String(c.id || ""),
+      campaign_name:    c.name || "",
+      ad_group_id:      null,
+      ad_group_name:    null,
+      ad_id:            null,
+      ad_name:          ag.name || null,
+      asset_group_id:   ag.id ? String(ag.id) : null,
+      channel_type:     c.advertisingChannelType || "PERFORMANCE_MAX",
+      cost:             num(m.costMicros) / 1_000_000,
+      impressions:      num(m.impressions),
+      clicks:           num(m.clicks),
+      ctr:              0,
+      cpc:              0,
+      conversions:      num(m.conversions),
+      conversion_value: num(m.conversionsValue),
+    });
+  }
+
+  // Derive CTR + CPC per row (cheap, keeps the row complete for CSV).
+  for (const r of rows) {
+    r.ctr = r.impressions > 0 ? (r.clicks / r.impressions) * 100 : 0;
+    r.cpc = r.clicks > 0 ? r.cost / r.clicks : 0;
+  }
+  rows.sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    if (a.campaign_name !== b.campaign_name) return a.campaign_name.localeCompare(b.campaign_name);
+    const ag = (a.ad_group_name || "") + (a.ad_name || "");
+    const bg = (b.ad_group_name || "") + (b.ad_name || "");
+    return ag.localeCompare(bg);
+  });
+  return rows;
+}

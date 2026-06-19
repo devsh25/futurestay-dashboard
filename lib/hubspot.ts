@@ -31,6 +31,9 @@ const CONTACT_PROPERTIES = [
   "first_touch_utm_source",
   "first_touch_utm_medium",
   "first_touch_utm_term",
+  // Joins HubSpot contacts to specific ads in the per-ad CSV export
+  // (Meta puts ad_id here via {{ad.id}}; Google Pmax puts asset ID).
+  "first_touch_utm_content",
   "hs_analytics_first_url",
   "hs_analytics_source_data_2",
   "engagements_last_meeting_booked",
@@ -200,6 +203,7 @@ async function doFetchAllContacts(): Promise<HubSpotContact[]> {
         first_touch_utm_source: p.first_touch_utm_source || null,
         first_touch_utm_medium: p.first_touch_utm_medium || null,
         first_touch_utm_term: p.first_touch_utm_term || null,
+        first_touch_utm_content: p.first_touch_utm_content || null,
         hs_analytics_first_url: p.hs_analytics_first_url || null,
         hs_analytics_source_data_2: p.hs_analytics_source_data_2 || null,
         engagements_last_meeting_booked: p.engagements_last_meeting_booked || null,
@@ -320,6 +324,7 @@ async function doFetchAllCustomers(): Promise<HubSpotContact[]> {
         first_touch_utm_source: p.first_touch_utm_source || null,
         first_touch_utm_medium: p.first_touch_utm_medium || null,
         first_touch_utm_term: p.first_touch_utm_term || null,
+        first_touch_utm_content: p.first_touch_utm_content || null,
         hs_analytics_first_url: p.hs_analytics_first_url || null,
         hs_analytics_source_data_2: p.hs_analytics_source_data_2 || null,
         engagements_last_meeting_booked: p.engagements_last_meeting_booked || null,

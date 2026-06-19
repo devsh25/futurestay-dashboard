@@ -210,11 +210,11 @@ function isPaid(c: HubSpotContact): boolean {
 
 // ---- Funnel stage logic ----
 
-function isAuth(c: HubSpotContact): boolean {
+export function isAuth(c: HubSpotContact): boolean {
   return ["COMPLETED", "REVOKED"].includes(c.airbnb_authorization_status || "");
 }
 
-function hasDQ(c: HubSpotContact): boolean {
+export function hasDQ(c: HubSpotContact): boolean {
   return !!(c.airbnbdqreason && c.airbnbdqreason.trim());
 }
 
@@ -229,7 +229,7 @@ function clickedLaunch(c: HubSpotContact): boolean {
 // Property is fully set up and the user marked it Ready to Launch.
 // More definitive signal than "Clicked Launch" — captures the final
 // pre-trial setup step.
-function isReadyToLaunch(c: HubSpotContact): boolean {
+export function isReadyToLaunch(c: HubSpotContact): boolean {
   return (c.property_ready_to_launch || "").toLowerCase() === "true";
 }
 
@@ -256,7 +256,7 @@ const SIGNUP_LIFECYCLES = new Set([
   "Disqualfied",
 ]);
 
-function isSignup(c: HubSpotContact): boolean {
+export function isSignup(c: HubSpotContact): boolean {
   return SIGNUP_LIFECYCLES.has(c.account_lifecycle || "");
 }
 
@@ -400,7 +400,7 @@ function isFailedTrialist(c: HubSpotContact): boolean {
 // churn-rate denominator and the funnel's current-state Customer node (which
 // has its own separate Churned branch, so counting churns there too would
 // double-count them).
-function everBecameRealCustomer(c: HubSpotContact): boolean {
+export function everBecameRealCustomer(c: HubSpotContact): boolean {
   if (!everBecameCustomer(c)) return false;
   if (isQuickCancel(c)) return false;
   return hadPaidPlan(c);

@@ -310,3 +310,94 @@ export async function fetchMetaInsights(
     daily,
   };
 }
+
+// ============================================================
+// Per-ad daily — for the data-export endpoint
+// ============================================================
+
+/** One ad on one day. Mirrors what Meta returns at level=ad,
+ *  time_increment=1. Used by /api/export to feed an analyst-friendly
+ *  CSV with full ad granularity. */
+export interface MetaAdDayRow {
+  date: string;        // YYYY-MM-DD
+  ad_id: string;
+  ad_name: string;
+  adset_id: string;
+  adset_name: string;
+  campaign_id: string;
+  campaign_name: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  ctr: number;         // % from Meta (we trust their math here, not recompute)
+  cpc: number;         // $ from Meta
+  reach: number;
+  subscribes: number;  // custom-event Airbnb-connected proxy
+  leads: number;       // 'lead' / 'onsite_web_lead' — call-campaign signal
+  signups_event: number; // 'complete_registration'
+}
+
+type MetaRawAdInsight = MetaRawInsight & {
+  ad_id?: string;
+  ad_name?: string;
+  adset_id?: string;
+  adset_name?: string;
+};
+
+/** Per-ad, per-day Meta insights for the given window. Pulls
+ *  level=ad with time_increment=1, paginating until exhausted.
+ *  Test-named campaigns / ads are filtered out (same convention as
+ *  fetchActiveCampaigns / fetchMetaInsights).
+ *
+ *  Returns a flat row-per-(ad, day). Could be a lot of rows for
+ *  long windows + large ad rosters; Meta's per-call limit of 200
+ *  is respected via the existing fetchAllPages cursor. */
+export async function fetchMetaAdDaily(
+  since: string,
+  until: string,
+): Promise<MetaAdDayRow[]> {
+  const token = process.env.META_ACCESS_TOKEN;
+  const accountId = process.env.META_AD_ACCOUNT_ID;
+  if (!token || !accountId) {
+    throw new Error("Missing META_ACCESS_TOKEN or META_AD_ACCOUNT_ID");
+  }
+  const timeRange = encodeURIComponent(JSON.stringify({ since, until }));
+  const base = `https://graph.facebook.com/${GRAPH_VERSION}/${accountId}/insights`;
+  const fields =
+    "ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name," +
+    "spend,impressions,clicks,ctr,cpc,reach,actions,date_start";
+  const url = `${base}?fields=${fields}&level=ad&time_increment=1&time_range=${timeRange}&access_token=${token}&limit=200`;
+
+  const raw = await fetchAllPages<MetaRawAdInsight>(url);
+  const rows: MetaAdDayRow[] = [];
+  for (const r of raw) {
+    const adName = r.ad_name || "";
+    const campName = r.campaign_name || "";
+    if (isTestCampaign(adName) || isTestCampaign(campName)) continue;
+    rows.push({
+      date:           r.date_start || "",
+      ad_id:          r.ad_id || "",
+      ad_name:        adName,
+      adset_id:       r.adset_id || "",
+      adset_name:     r.adset_name || "",
+      campaign_id:    r.campaign_id || "",
+      campaign_name:  campName,
+      spend:          n(r.spend),
+      impressions:    n(r.impressions),
+      clicks:         n(r.clicks),
+      ctr:            n(r.ctr),
+      cpc:            n(r.cpc),
+      reach:          n(r.reach),
+      subscribes:     pickAction(r.actions, SUBSCRIBE_ACTION_TYPE),
+      leads:          pickAction(r.actions, "lead") + pickAction(r.actions, "onsite_web_lead"),
+      signups_event:  pickAction(r.actions, "complete_registration"),
+    });
+  }
+  rows.sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    if (a.campaign_name !== b.campaign_name) return a.campaign_name.localeCompare(b.campaign_name);
+    if (a.adset_name !== b.adset_name) return a.adset_name.localeCompare(b.adset_name);
+    return a.ad_name.localeCompare(b.ad_name);
+  });
+  return rows;
+}
