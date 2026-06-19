@@ -319,7 +319,11 @@ expect minor edge-of-day skew.
 
 ## Methodology
 
-- **Cohort vs period:** Signups/QS use \`createdate\` (cohort), Trials and Customers use their entry dates (period). A customer who signed up 60 days ago and converted today counts in Customers for today's window but in Signups for the 60-days-ago window.
+- **Two attribution conventions in this export.** Don't sum across files expecting them to agree:
+  - \`campaign_analysis.csv\` is **cohort-based** — a row's \`customers\` count includes only contacts whose \`createdate\` is in the window AND who ever became a paid customer. A contact who signed up in March and converted in May appears in the March cohort, never in May.
+  - \`meta_ad_daily.csv\` / \`google_ad_daily.csv\` / \`run_rate_daily.csv\` are **period-based** — \`hs_customers\` is bucketed by \`hs_v2_date_entered_customer\`, so the same March-signup-to-May-customer contact lands on the May row.
+  - Both are correct for different questions: cohort = "how many of THIS week's signups become customers?"; period = "how many customers did we add THIS week?". The KPI tile uses period-based for Customers/Trials and cohort-based for Signups/QS — matches the per-day CSVs by metric.
+- **Cohort vs period for individual metrics:** Signups/QS use \`createdate\` (cohort); Trials and Customers use their entry dates (period). A customer who signed up 60 days ago and converted today counts in Customers for today's window but in Signups for the 60-days-ago window.
 - **Excluded:** WIX/HOPPER partner referrals + Futurestay internal test accounts (employee \`@futurestay.com\` emails, \`+test/+trial/+demo/+qa/+staging/+dev\` plus-tag patterns, obvious test/QA/demo names). Same exclusion every dashboard card applies.
 - **Customers definition:** "real paid customer" = currently or formerly on Amplify or Flex AND did NOT cancel within 2 days of entry (quick-cancel filter). Churned customers ARE counted (they were real once).
 - **Attribution chain (Google):** numeric campaign ID → name prefix → legacy short-label hint → landing-page URL fallback, with ENABLED ad units preferred over PAUSED. Pmax campaigns use \`asset_group.final_urls\` for landing pages.
