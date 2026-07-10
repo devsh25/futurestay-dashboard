@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { list } from "@vercel/blob";
 import { computeGrowthReport, renderGrowthReportHtml, renderGrowthReportSlack, type GrowthReportData } from "@/lib/growth-report";
 
 /**
@@ -61,6 +62,23 @@ async function getReport(date: string): Promise<GrowthReportData> {
   return data;
 }
 
+/** Look up the precomputed report artefact for a given date in Vercel Blob.
+ *  Returns a fetchable URL if the file exists, or null. Silently returns
+ *  null if the Blob store isn't configured (no BLOB_READ_WRITE_TOKEN) so
+ *  local dev and pre-provisioned environments keep working. */
+async function precomputedUrl(date: string, ext: "json" | "html" | "txt"): Promise<string | null> {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) return null;
+  try {
+    const key = `growth-report/${date}/report.${ext}`;
+    const res = await list({ prefix: key, limit: 1 });
+    const hit = res.blobs.find((b) => b.pathname === key);
+    return hit ? hit.url : null;
+  } catch (err) {
+    console.error("[growth-report] Blob lookup failed:", err);
+    return null;
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const params = request.nextUrl.searchParams;
@@ -70,6 +88,37 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Invalid date. Expected YYYY-MM-DD." }, { status: 400 });
     }
     const format = ((params.get("format") || "html").toLowerCase()) as Format;
+    // `?live=1` bypasses the precomputed artefact and forces a fresh
+    // compute. Useful for verifying that the daily snapshot matches
+    // what a live run would produce.
+    const forceLive = params.get("live") === "1";
+
+    // Fast path: if the daily cron has already written a precomputed
+    // artefact for this date, serve it verbatim. Snapshot HTML/text is
+    // byte-identical to what a live compute would render, since both
+    // renderers are pure functions of the same computed data.
+    if (!forceLive) {
+      const ext = format === "slack" ? "txt" : format === "json" ? "json" : "html";
+      const url = await precomputedUrl(rawDate, ext);
+      if (url) {
+        const upstream = await fetch(url, { cache: "no-store" });
+        if (upstream.ok) {
+          const body = await upstream.arrayBuffer();
+          const contentType =
+            format === "slack" ? "text/plain; charset=utf-8"
+            : format === "json" ? "application/json"
+            : "text/html; charset=utf-8";
+          return new Response(body, {
+            status: 200,
+            headers: {
+              "Content-Type": contentType,
+              "Cache-Control": "no-store",
+              "x-growth-report-source": "precomputed",
+            },
+          });
+        }
+      }
+    }
 
     const data = await getReport(rawDate);
 
