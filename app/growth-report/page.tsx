@@ -1,20 +1,21 @@
 "use client";
 
-// Daily Growth Report — standalone page. Opens in a new tab from the
-// dashboard "Growth Report" button. The report itself is a self-
-// contained HTML document served by /api/growth-report; this page
-// wraps it in a tiny chrome (date picker + status).
+// Daily Growth Report — standalone page.
 //
-// The iframe uses the API URL directly rather than fetching HTML into
-// srcdoc. That lets the browser show its native progress state during
-// the 30–60s cold compute, and it keeps this component small.
+// Serves the pre-generated HTML files that ship in the repo under
+// public/growth-reports/. The scheduled task on the operator's laptop
+// generates these locally each morning and commits them to the repo,
+// so Vercel serves them as static assets. No serverless compute path
+// is touched here.
+//
+// If a date's snapshot isn't in the repo the iframe shows a 404 body
+// from Next.js; we detect that with a HEAD probe and fall back to
+// /growth-reports/latest.html.
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 
 function etYesterday(): string {
-  // Compute in the browser's local time then reformat to America/New_York.
-  const now = new Date();
-  const y = new Date(now.getTime() - 86_400_000);
+  const y = new Date(Date.now() - 86_400_000);
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
   }).format(y);
@@ -27,50 +28,49 @@ function todayET(): string {
 }
 
 export default function GrowthReportPage() {
-  // Read initial date from URL if present; else yesterday ET.
   const [date, setDate] = useState<string>(() => {
     if (typeof window === "undefined") return etYesterday();
     const url = new URL(window.location.href);
     return url.searchParams.get("date") || etYesterday();
   });
-  const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  const [errMsg, setErrMsg] = useState<string>("");
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [iframeSrc, setIframeSrc] = useState<string>("");
+  const [status, setStatus] = useState<"loading" | "ready" | "fallback" | "missing">("loading");
 
-  // Keep the URL in sync with the selected date so it's shareable.
   useEffect(() => {
     const url = new URL(window.location.href);
     url.searchParams.set("date", date);
     window.history.replaceState({}, "", url.toString());
   }, [date]);
 
-  // Kick a load whenever the date changes.
   useEffect(() => {
-    setStatus("loading");
-    setErrMsg("");
-    // Ping the API separately (as JSON) purely to surface errors + know
-    // when the compute finishes. The iframe below loads in parallel and
-    // renders the HTML directly.
     let cancelled = false;
-    fetch(`/api/growth-report?date=${date}&format=json`)
-      .then(async (r) => {
-        if (!r.ok) {
-          const j = await r.json().catch(() => ({}));
-          throw new Error(j.error || `HTTP ${r.status}`);
-        }
-        return r.json();
-      })
-      .then(() => {
-        if (!cancelled) setStatus("ready");
-      })
-      .catch((e: Error) => {
-        if (!cancelled) { setErrMsg(e.message); setStatus("error"); }
-      });
+    setStatus("loading");
+    const dated = `/growth-reports/growth-report-${date}.html`;
+    // Try the dated file. If it isn't in the repo yet (missed run, or
+    // a date the user picked ahead of the daily generator), fall back
+    // to latest.html which is always the most recent snapshot.
+    fetch(dated, { method: "HEAD" }).then((r) => {
+      if (cancelled) return;
+      if (r.ok) {
+        setIframeSrc(dated);
+        setStatus("ready");
+      } else {
+        return fetch("/growth-reports/latest.html", { method: "HEAD" }).then((r2) => {
+          if (cancelled) return;
+          if (r2.ok) {
+            setIframeSrc("/growth-reports/latest.html");
+            setStatus("fallback");
+          } else {
+            setIframeSrc("");
+            setStatus("missing");
+          }
+        });
+      }
+    }).catch(() => {
+      if (!cancelled) { setIframeSrc(""); setStatus("missing"); }
+    });
     return () => { cancelled = true; };
   }, [date]);
-
-  const iframeSrc = `/api/growth-report?date=${encodeURIComponent(date)}&format=html`;
-  const slackHref = `/api/growth-report?date=${encodeURIComponent(date)}&format=slack`;
 
   return (
     <div style={{ minHeight: "100vh", background: "#F6F7FB" }}>
@@ -100,32 +100,25 @@ export default function GrowthReportPage() {
             }}
           />
         </label>
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 14 }}>
-          <a
-            href={slackHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              fontSize: 12, color: "#3963E7", textDecoration: "none", fontWeight: 600,
-              padding: "6px 10px", borderRadius: 8, border: "1px solid #E7EAF2", background: "#FFFFFF",
-            }}
-          >
-            View Slack text
-          </a>
-          <span style={{ fontSize: 12, color: status === "error" ? "#F05C61" : "#626C82" }}>
-            {status === "loading" && `Computing… (up to 60s on a cold cache)`}
-            {status === "ready" && `Ready`}
-            {status === "error" && `Error: ${errMsg}`}
-            {status === "idle" && ""}
-          </span>
+        <div style={{ marginLeft: "auto", fontSize: 12, color: status === "missing" ? "#F05C61" : "#626C82" }}>
+          {status === "loading" && "Loading…"}
+          {status === "ready" && `Snapshot for ${date}`}
+          {status === "fallback" && `No snapshot for ${date}. Showing the latest available.`}
+          {status === "missing" && "No snapshots have been generated yet."}
         </div>
       </div>
-      <iframe
-        ref={iframeRef}
-        src={iframeSrc}
-        title={`Growth report for ${date}`}
-        style={{ width: "100%", height: "calc(100vh - 66px)", border: "none", background: "#F6F7FB" }}
-      />
+      {iframeSrc ? (
+        <iframe
+          src={iframeSrc}
+          title={`Growth report for ${date}`}
+          style={{ width: "100%", height: "calc(100vh - 66px)", border: "none", background: "#F6F7FB" }}
+        />
+      ) : (
+        <div style={{ maxWidth: 720, margin: "80px auto", padding: 20, fontSize: 14, color: "#626C82", lineHeight: 1.6 }}>
+          <p style={{ fontSize: 16, color: "#101728", fontWeight: 600, marginBottom: 12 }}>No growth report snapshots yet.</p>
+          <p>The daily generator writes files to <code>public/growth-reports/</code> in this repo. If you just deployed and haven't generated one yet, run the scheduled task on your machine or generate a snapshot manually and commit it.</p>
+        </div>
+      )}
     </div>
   );
 }

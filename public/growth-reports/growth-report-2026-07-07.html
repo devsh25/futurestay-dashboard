@@ -1,0 +1,247 @@
+<title>Futurestay Daily Growth Report</title>
+<style>
+  :root{
+    --ground:#F6F7FB;--card:#FFFFFF;--ink:#101728;--muted:#626C82;--faint:#E7EAF2;--faint2:#F0F2F8;
+    --blue:#3963E7;--violet:#543CE8;--good:#109B57;--good-bg:#E6F5EE;--bad:#F05C61;--bad-bg:#FDECEC;
+    --warn:#D98A00;--warn-bg:#FBF1DE;--grad:linear-gradient(90deg,#3963E7 0%,#543CE8 100%);
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
+  .wrap{max-width:1120px;margin:0 auto;padding:40px 28px 72px}
+  h1,h2,h3{margin:0;text-wrap:balance}
+  .top{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap;padding-bottom:20px;border-bottom:2px solid var(--ink)}
+  .brand{display:flex;align-items:center;gap:12px}
+  .dot{width:34px;height:34px;border-radius:9px;background:var(--grad);flex:none}
+  .brand h1{font-size:23px;font-weight:800;letter-spacing:-.02em}
+  .brand .sub{font-size:12px;color:var(--muted);letter-spacing:.14em;text-transform:uppercase;font-weight:600}
+  .datebox{text-align:right}
+  .datebox .day{font-size:26px;font-weight:800;letter-spacing:-.02em}
+  .datebox .meta{font-size:13px;color:var(--muted)}
+  section{margin-top:38px}
+  .eyebrow{font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:10px}
+  .eyebrow::after{content:"";flex:1;height:1px;background:var(--faint)}
+  .headlines{background:var(--card);border:1px solid var(--faint);border-radius:16px;overflow:hidden;box-shadow:0 1px 2px rgba(16,23,40,.04)}
+  .hl-head{padding:16px 22px;background:var(--ink);color:#fff;display:flex;align-items:center;gap:12px}
+  .hl-head h2{font-size:15px;font-weight:700;letter-spacing:.02em}
+  .hl-head .tag{margin-left:auto;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#9AA6C4;font-weight:600}
+  .hl-row{display:flex;align-items:flex-start;gap:14px;padding:15px 22px;border-top:1px solid var(--faint)}
+  .hl-row:first-child{border-top:none}
+  .hl-rank{font-family:var(--mono);font-size:13px;color:var(--muted);font-weight:600;min-width:20px}
+  .hl-stripe{width:4px;align-self:stretch;border-radius:3px;flex:none}
+  .hl-stripe.good{background:var(--good)}.hl-stripe.bad{background:var(--bad)}
+  .hl-text{font-size:15px;font-weight:500}
+  .sum-card{margin-top:14px}
+  .sum-lead{font-size:15px;line-height:1.6;margin:0}
+  .summary{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:18px;padding-top:18px;border-top:1px solid var(--faint)}
+  .sum-box h4{font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin:0 0 12px;display:flex;align-items:baseline;gap:8px}
+  .sum-box h4 span{font-size:10px;letter-spacing:.02em;color:var(--muted);font-weight:600;text-transform:none}
+  .sum-box.investigate h4{color:var(--bad)}
+  .sum-box.watch h4{color:var(--blue)}
+  .sum-box ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:11px}
+  .sum-box li{font-size:13px;line-height:1.5;padding-left:18px;position:relative;color:var(--ink)}
+  .sum-box li::before{content:"";position:absolute;left:2px;top:7px;width:7px;height:7px;border-radius:50%}
+  .sum-box.investigate li::before{background:var(--bad)}
+  .sum-box.watch li::before{background:var(--blue)}
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:14px}
+  .kpi{background:var(--card);border:1px solid var(--faint);border-radius:14px;padding:16px 16px 14px;box-shadow:0 1px 2px rgba(16,23,40,.04)}
+  .kpi .lab{font-size:12px;color:var(--muted);font-weight:600}
+  .kpi .num{font-size:38px;font-weight:800;letter-spacing:-.03em;line-height:1.05;margin:6px 0 10px}
+  .chips{display:flex;flex-direction:column;gap:5px}
+  .chip{display:flex;justify-content:space-between;align-items:center;font-size:11.5px}
+  .chip .k{color:var(--muted)}
+  .delta{font-weight:700;font-variant-numeric:tabular-nums}
+  .delta.up{color:var(--good)}.delta.down{color:var(--bad)}.delta.flat{color:var(--muted)}
+  .card{background:var(--card);border:1px solid var(--faint);border-radius:14px;padding:20px 22px;box-shadow:0 1px 2px rgba(16,23,40,.04)}
+  .card h3{font-size:15px;font-weight:700;margin-bottom:4px}
+  .card .note{font-size:12px;color:var(--muted);margin-bottom:14px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  .wk-row{display:grid;grid-template-columns:96px 1fr 210px;align-items:center;gap:14px;padding:9px 0;border-top:1px solid var(--faint2)}
+  .wk-row:first-of-type{border-top:none}
+  .wk-row.star{background:linear-gradient(90deg,rgba(57,99,231,.06),transparent);border-radius:8px}
+  .wk-day{font-size:12.5px;font-weight:600}
+  .wk-day span{color:var(--muted);font-weight:500}
+  .bar-track{height:22px;background:var(--faint2);border-radius:6px;overflow:hidden}
+  .bar-fill{height:100%;background:var(--grad);border-radius:6px;display:flex;align-items:center;justify-content:flex-end;padding-right:8px;color:#fff;font-size:11.5px;font-weight:700}
+  .wk-mini{font-family:var(--mono);font-size:11.5px;color:var(--muted);text-align:right;white-space:nowrap}
+  .wk-mini b{color:var(--ink)}
+  .wk-legend{font-size:11px;color:var(--muted);margin-top:12px}
+  .funnel{display:flex;flex-direction:column;gap:8px}
+  .fn-row{display:grid;grid-template-columns:150px 1fr 132px;align-items:center;gap:14px}
+  .fn-lab{font-size:13px;font-weight:600}
+  .fn-lab span{display:block;font-size:11px;color:var(--muted);font-weight:500}
+  .fn-bar{height:34px;border-radius:8px;background:var(--grad);display:flex;align-items:center;padding:0 14px;color:#fff;font-weight:800;font-size:15px;min-width:64px}
+  .fn-bar.dim{opacity:.86}
+  .fn-cmp{text-align:right}
+  .fn-cmp b{font-size:15px;font-weight:800;font-variant-numeric:tabular-nums}
+  .fn-cmp span{display:block;font-size:10.5px;color:var(--muted)}
+  .wk2-row{display:grid;grid-template-columns:96px 1fr;gap:14px;align-items:center;padding:8px 0;border-top:1px solid var(--faint2)}
+  .wk2-row:first-of-type{border-top:none}
+  .wk2-row.star{background:linear-gradient(90deg,rgba(57,99,231,.06),transparent);border-radius:8px}
+  .wk2-line{display:grid;grid-template-columns:1fr 22px;gap:8px;align-items:center;margin:3px 0}
+  .wk2-line .bar-track{height:15px}
+  .wk2-val{font-size:11.5px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
+  .bar-fill.blue{background:linear-gradient(90deg,#3963E7,#6E8CEF)}
+  .bar-fill.green{background:linear-gradient(90deg,#0E8A4D,#2FBF77)}
+  .lg{display:inline-block;width:10px;height:10px;border-radius:3px;vertical-align:middle;margin-right:4px}
+  .lg.blue{background:#3963E7}.lg.green{background:#109B57}
+  .tbl-scroll{overflow-x:auto;margin:0 -4px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:0 12px 8px;border-bottom:1px solid var(--faint);white-space:nowrap}
+  td{padding:9px 12px;border-bottom:1px solid var(--faint2);vertical-align:middle}
+  tr:last-child td{border-bottom:none}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  .code{font-family:var(--mono);font-size:12px}
+  .pill{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:20px}
+  .pill.meta{color:var(--violet);background:#EEEBFD}
+  .pill.google{color:#1667C9;background:#E4EFFD}
+  .pill.other{color:var(--muted);background:var(--faint2)}
+  .sev td:first-child{border-left:3px solid var(--bad)}
+  .sev.warn td:first-child{border-left:3px solid var(--warn)}
+  .agebar{display:flex;height:16px;border-radius:5px;overflow:hidden;min-width:150px}
+  .agebar i{display:block;height:100%}
+  .foot{margin-top:40px;padding-top:18px;border-top:1px solid var(--faint);font-size:11.5px;color:var(--muted);line-height:1.7}
+  .foot b{color:var(--ink)}
+  @media(max-width:820px){
+    .kpis{grid-template-columns:repeat(2,1fr)}
+    .grid2,.summary{grid-template-columns:1fr}
+    .wk2-row{grid-template-columns:60px 1fr}
+    .fn-row{grid-template-columns:92px 1fr 92px}
+    .datebox{text-align:left}
+  }
+</style>
+<div class="wrap">
+  <div class="top">
+    <div class="brand"><div class="dot"></div>
+      <div><h1>Futurestay Growth Report</h1><div class="sub">Daily Acquisition &amp; Funnel</div></div>
+    </div>
+    <div class="datebox"><div class="day">Tuesday, July 7</div>
+      <div class="meta">Reporting day 2026-07-07 &middot; Generated Jul 8, 2026 (ET)</div></div>
+  </div>
+  <section><div class="headlines">
+    <div class="hl-head"><h2>Top Headlines</h2><span class="tag">Ranked by magnitude</span></div>
+    <div class="hl-row"><div class="hl-rank">1</div><div class="hl-stripe bad"></div>
+      <div class="hl-text">16 zombie ads burning $7299+ over 14d (worst 6)</div></div><div class="hl-row"><div class="hl-rank">2</div><div class="hl-stripe bad"></div>
+      <div class="hl-text">Source &quot;google&quot; dropped: 3 yday vs 14d-avg 11.5 (-74%)</div></div><div class="hl-row"><div class="hl-rank">3</div><div class="hl-stripe bad"></div>
+      <div class="hl-text">14/31 (45%) qualified signups have unknown country — data gap</div></div>
+  </div></section>
+  <section>
+    <div class="eyebrow">Summary</div>
+    <div class="card sum-card">
+      <p class="sum-lead">Signups landed at 34, roughly flat versus recent Tuesdays. The -36% against the 7 day average is a level effect from stronger early week days, not a real same day drop. The rest of the funnel held on a same Tuesday basis: Airbnb auth up 17%, Ready to Launch roughly flat, trials down 14%.</p>
+      <div class="summary">
+        <div class="sum-box investigate"><h4>Worth investigating</h4><ul><li>16 zombie ads have burned about $7,299 over 14 days with no attributed trials. Review and pause the worst, starting with 05.03 | Static | Concept - 4 | Text Variation - 3 | LP - Direct-booking-website at $2,130.</li><li>Source &quot;google&quot; fell to 3 signups from a 14 day average of 11.5 (-74%). Check spend and tracking on that channel.</li></ul></div>
+        <div class="sum-box watch"><h4>Keep an eye on <span>needs more days</span></h4><ul><li>14 of 31 qualified signups (45%) have no country recorded. This is a tracking gap, not a growth problem, and yesterday it was lower than the recent daily average (-58%).</li></ul></div>
+      </div>
+    </div>
+  </section>
+  <section>
+    <div class="eyebrow">Yesterday vs Baselines</div>
+    <div class="kpis">
+      
+    <div class="kpi"><div class="lab">Total signups</div><div class="num">34</div>
+      <div class="chips">
+        <div class="chip"><span class="k">vs 7d avg 53.0</span><span class="delta down">-36%</span></div>
+        <div class="chip"><span class="k">vs Tue 34.5</span><span class="delta flat">-1%</span></div>
+      </div></div>
+      
+    <div class="kpi"><div class="lab">Qualified</div><div class="num">31</div>
+      <div class="chips">
+        <div class="chip"><span class="k">vs 7d avg 49.4</span><span class="delta down">-37%</span></div>
+        <div class="chip"><span class="k">vs Tue 31.0</span><span class="delta flat">+0%</span></div>
+      </div></div>
+      
+    <div class="kpi"><div class="lab">Airbnb auth</div><div class="num">17</div>
+      <div class="chips">
+        <div class="chip"><span class="k">vs 7d avg 15.7</span><span class="delta flat">+8%</span></div>
+        <div class="chip"><span class="k">vs Tue 14.5</span><span class="delta up">+17%</span></div>
+      </div></div>
+      
+    <div class="kpi"><div class="lab">Ready to Launch</div><div class="num">14</div>
+      <div class="chips">
+        <div class="chip"><span class="k">vs 7d avg 15.0</span><span class="delta flat">-7%</span></div>
+        <div class="chip"><span class="k">vs Tue 14.3</span><span class="delta flat">-2%</span></div>
+      </div></div>
+      
+    <div class="kpi"><div class="lab">Trials started</div><div class="num">8</div>
+      <div class="chips">
+        <div class="chip"><span class="k">vs 7d avg 8.3</span><span class="delta flat">-3%</span></div>
+        <div class="chip"><span class="k">vs Tue 9.3</span><span class="delta down">-14%</span></div>
+      </div></div>
+    </div>
+  </section>
+  <section class="grid2">
+    <div class="card"><h3>Within the week</h3><div class="note">Trials started and customers won each day, Monday through Tuesday</div>
+      <div class="wk2-row">
+      <div class="wk-day">Mon <span>7/6</span></div>
+      <div>
+        <div class="wk2-line"><div class="bar-track"><div class="bar-fill blue" style="width:91%"></div></div><div class="wk2-val">10</div></div>
+        <div class="wk2-line"><div class="bar-track"><div class="bar-fill green" style="width:100%"></div></div><div class="wk2-val">11</div></div>
+      </div>
+    </div><div class="wk2-row star">
+      <div class="wk-day">Tue <span>7/7 &#9733;</span></div>
+      <div>
+        <div class="wk2-line"><div class="bar-track"><div class="bar-fill blue" style="width:73%"></div></div><div class="wk2-val">8</div></div>
+        <div class="wk2-line"><div class="bar-track"><div class="bar-fill green" style="width:45%"></div></div><div class="wk2-val">5</div></div>
+      </div>
+    </div>
+      <div class="wk-legend"><span class="lg blue"></span>Trials started &middot; <span class="lg green"></span>Customers won &middot; counted by activity date, not signup date</div>
+    </div>
+    <div class="card"><h3>Funnel, yesterday</h3>
+      <div class="note">Conversion at each stage, yesterday vs the 14 day average. Qualified is a share of signups; the rest are a share of qualified.</div>
+      <div class="funnel">
+        <div class="fn-row"><div class="fn-lab">Total signups</div><div class="fn-bar" style="width:100%">34</div><div class="fn-cmp"><span>3 DQ, 8.8%</span></div></div>
+        <div class="fn-row"><div class="fn-lab">Qualified</div><div class="fn-bar" style="width:91%">31</div><div class="fn-cmp"><b class="delta flat">91.2%</b><span>14d 92.7%</span></div></div>
+        <div class="fn-row"><div class="fn-lab">Airbnb authorized</div><div class="fn-bar dim" style="width:50%">17</div><div class="fn-cmp"><b class="delta up">54.8%</b><span>14d 37.9%</span></div></div>
+        <div class="fn-row"><div class="fn-lab">Ready to launch</div><div class="fn-bar dim" style="width:41%">14</div><div class="fn-cmp"><b class="delta up">45.2%</b><span>14d 34.4%</span></div></div>
+        <div class="fn-row"><div class="fn-lab">Trials <span>from cohort</span></div><div class="fn-bar dim" style="width:21%">7</div><div class="fn-cmp"><b class="delta up">22.6%</b><span>14d 11.1%</span></div></div>
+      </div>
+      <div class="wk-legend" style="margin-top:16px">This funnel counts trials from yesterday's signup cohort only (7), matching the dashboard funnel card. The headline Trials KPI above counts trial starts by activity date, the dashboard KPI-tile definition, which is why it reads 8. Both are correct; they answer different questions.</div>
+    </div>
+  </section>
+  <section class="grid2">
+    <div class="card"><h3>Spend &amp; efficiency</h3>
+      <div class="note">Meta spend $2,861, down 6% vs the 7 day average of $3,042</div>
+      <div style="display:flex;gap:22px;margin-bottom:16px">
+        <div><div class="lab" style="font-size:12px;color:var(--muted);font-weight:600">Blended CPS</div><div style="font-size:26px;font-weight:800;letter-spacing:-.02em">$92</div></div>
+        <div><div class="lab" style="font-size:12px;color:var(--muted);font-weight:600">Cost per trial</div><div style="font-size:26px;font-weight:800;letter-spacing:-.02em">$358</div></div>
+      </div>
+      <div class="tbl-scroll"><table><thead><tr><th>Top Meta campaigns by spend</th><th class="num">Spend</th></tr></thead><tbody><tr><td>16.03 &amp;middot; | Direct Website Booking | Subscribe Event | Static &amp; Video Ads | Campaign</td><td class="num">$2,298</td></tr><tr><td>05.03 &amp;middot; | Direct Website Booking | Static &amp; Video Ads | Campaign</td><td class="num">$130</td></tr><tr><td>12.05 &amp;middot; | Syerena | Direct Website Booking | Video | Campaign</td><td class="num">$103</td></tr><tr><td>07.07 &amp;middot; | Airbnb Listing Optimization | Subscribe Event | Static | Campaign</td><td class="num">$100</td></tr><tr><td>06.07 &amp;middot; | DWB | Subscribe Event | Static Ads | Campaign</td><td class="num">$96</td></tr></tbody></table></div>
+    </div>
+    <div class="card"><h3>Top creatives &amp; campaigns</h3><div class="note">Ranked by Ready to Launch, yesterday's cohort</div>
+      <div class="tbl-scroll"><table><thead><tr><th>Ad asset</th><th></th><th class="num">RTL</th><th class="num">Trials</th></tr></thead><tbody><tr><td class="code">Video | FS_VRBO_H2 | Text Variation - 1</td><td><span class="pill meta">Meta</span></td><td class="num">4</td><td class="num">2</td></tr><tr><td class="code">Revised | Video | Concept - 4B | Text Variation - 2</td><td><span class="pill meta">Meta</span></td><td class="num">3</td><td class="num">1</td></tr><tr><td class="code">Static 1 | Text Variation - 1</td><td><span class="pill meta">Meta</span></td><td class="num">2</td><td class="num">1</td></tr></tbody></table></div>
+      <div class="tbl-scroll" style="margin-top:14px"><table><thead><tr><th>Campaign</th><th></th><th class="num">RTL</th><th class="num">Trials</th></tr></thead><tbody><tr><td>16.03 | Direct Website Booking |</td><td><span class="pill meta">Meta</span></td><td class="num">9</td><td class="num">3</td></tr><tr><td>direct</td><td><span class="pill other">Other</span></td><td class="num">2</td><td class="num">2</td></tr><tr><td>06.07 | DWB | Subscribe Event | </td><td><span class="pill meta">Meta</span></td><td class="num">1</td><td class="num">1</td></tr></tbody></table></div>
+    </div>
+  </section>
+  <section>
+    <div class="eyebrow">New Launches, last 7 days</div>
+    <div class="card"><div class="tbl-scroll"><table><thead><tr><th>Created</th><th>Ad name</th><th class="num">Impressions</th><th class="num">Spend</th></tr></thead><tbody><tr><td class="code">2026-06-30</td><td class="code">30.06 | Video | FS_VRBO_H2 | Text Variation - 1 | LP - Direct-booking-website</td><td class="num">197,193</td><td class="num">$9,047</td></tr><tr><td class="code">2026-06-30</td><td class="code">30.06 | Video | Revised_FS_C4B_Number_facts | Text Variation - 1 | LP - Direct-booking-website</td><td class="num">14,344</td><td class="num">$760</td></tr><tr><td class="code">2026-06-30</td><td class="code">30.06 | Video | Revised_FS_C4B_Gain | Text Variation - 1 | LP - Direct-booking-website</td><td class="num">10,143</td><td class="num">$525</td></tr><tr><td class="code">2026-06-30</td><td class="code">30.06 | Video | Revised_FS_C4B_Fear | Text Variation - 1 | LP - Direct-booking-website</td><td class="num">5,277</td><td class="num">$236</td></tr><tr><td class="code">2026-06-30</td><td class="code">30.06 | Video | FS_BOOKING_H2 | Text Variation - 1 | LP - Direct-booking-website</td><td class="num">4,888</td><td class="num">$253</td></tr><tr><td class="code">2026-07-01</td><td class="code">01.07 | Syerena - Video 7 | LP - Syerena-orr</td><td class="num">4,377</td><td class="num">$407</td></tr></tbody></table></div></div>
+  </section>
+  <section>
+    <div class="eyebrow">Zombie Ads, worst 6</div>
+    <div class="card"><div class="note">10+ days old, $100+ spend, zero attributed trials in 14 days. Severity by 14 day burn.</div>
+      <div class="tbl-scroll"><table><thead><tr><th>Ad name</th><th class="num">Prev 7d</th><th class="num">Last 7d</th><th class="num">14d spend</th><th class="num">Age</th><th>Campaign</th></tr></thead><tbody><tr class="sev"><td class="code">05.03 | Static | Concept - 4 | Text Variation - 3 | LP - Direct-booking-website</td><td class="num">$180</td><td class="num">$1,950</td><td class="num">$2,130</td><td class="num">125d</td><td class="code">05.03 US &amp;amp; CA | Di</td></tr><tr class="sev warn"><td class="code">24.06 | Revised | Video | Concept - 6 V1 H1 | Text Variation - 4 | LP - Direct-booking-website</td><td class="num">$670</td><td class="num">$725</td><td class="num">$1,395</td><td class="num">14d</td><td class="code">22.06 US &amp;amp; CA | DW</td></tr><tr class="sev warn"><td class="code">26.06 | Syerena - Video 6 | LP - Syerena-orr</td><td class="num">$840</td><td class="num">$379</td><td class="num">$1,219</td><td class="num">12d</td><td class="code">12.05 US &amp;amp; CA | Sy</td></tr><tr class="sev warn"><td class="code">26.06 | Syerena - Video 6 | Subscribe Event | LP - Syerena-orr</td><td class="num">$456</td><td class="num">$500</td><td class="num">$956</td><td class="num">12d</td><td class="code">22.06 US &amp;amp; CA | Sy</td></tr><tr class="sev warn"><td class="code">24.06 | Revised | Video | Concept 3A | Text Variation - 1 | LP - Direct-Booking-Sales</td><td class="num">$905</td><td class="num">$5</td><td class="num">$910</td><td class="num">14d</td><td class="code">16.03 US &amp;amp; CA | Di</td></tr><tr class="sev warn"><td class="code">05.03 | Static | Concept - 6 | Text Variation - 3 | LP - Direct-booking-website</td><td class="num">$387</td><td class="num">$302</td><td class="num">$689</td><td class="num">125d</td><td class="code">05.03 US &amp;amp; CA | Di</td></tr></tbody></table></div>
+      <div class="wk-legend" style="margin-top:14px"><b style="color:var(--warn)">Watchlist</b>, under 10 days old, $100+ spent, no trials yet: 30.06 | Video | Revised_FS_C4B_Number_facts | Text Variation - 1 | LP - Direct-booking-website $820 (8d) &middot; 30.06 | Video | FS_BOOKING_H2 | Text Variation - 1 | LP - Direct-booking-website $588 (8d) &middot; 30.06 | Video | Revised_FS_C4B_Gain | Text Variation - 1 | LP - Direct-booking-website $558 (8d) &middot; 01.07 | Syerena - Video 7 | LP - Syerena-orr $407 (7d)</div>
+    </div>
+  </section>
+  <section class="grid2">
+    <div class="card"><h3>Meta age mix by channel family</h3><div class="note">Share of impressions. Weighted average age at right.</div>
+      <div class="tbl-scroll"><table><thead><tr><th>Channel</th><th>Distribution (18 to 65+)</th><th class="num">Avg</th></tr></thead><tbody><tr><td>DW Booking</td><td><div class="agebar"><i style="width:15.1%;background:#C9D6FA"></i><i style="width:16.5%;background:#9DB4F5"></i><i style="width:20.8%;background:#6E8CEF"></i><i style="width:15.6%;background:#4E6BE9"></i><i style="width:17.9%;background:#3E51D9"></i><i style="width:14.1%;background:#543CE8"></i></div></td><td class="num">44.5</td></tr><tr><td>DWB Subscribe</td><td><div class="agebar"><i style="width:13.8%;background:#C9D6FA"></i><i style="width:20.1%;background:#9DB4F5"></i><i style="width:19.6%;background:#6E8CEF"></i><i style="width:20.0%;background:#4E6BE9"></i><i style="width:15.8%;background:#3E51D9"></i><i style="width:10.7%;background:#543CE8"></i></div></td><td class="num">43.4</td></tr><tr><td>Syerena</td><td><div class="agebar"><i style="width:3.6%;background:#C9D6FA"></i><i style="width:14.7%;background:#9DB4F5"></i><i style="width:25.3%;background:#6E8CEF"></i><i style="width:23.7%;background:#4E6BE9"></i><i style="width:20.0%;background:#3E51D9"></i><i style="width:12.6%;background:#543CE8"></i></div></td><td class="num">47.6</td></tr><tr><td>Charles</td><td><div class="agebar"><i style="width:1.6%;background:#C9D6FA"></i><i style="width:9.8%;background:#9DB4F5"></i><i style="width:27.1%;background:#6E8CEF"></i><i style="width:25.3%;background:#4E6BE9"></i><i style="width:23.5%;background:#3E51D9"></i><i style="width:12.8%;background:#543CE8"></i></div></td><td class="num">49.4</td></tr><tr><td>Airbnb Opt</td><td><div class="agebar"><i style="width:5.7%;background:#C9D6FA"></i><i style="width:17.1%;background:#9DB4F5"></i><i style="width:24.2%;background:#6E8CEF"></i><i style="width:23.9%;background:#4E6BE9"></i><i style="width:16.9%;background:#3E51D9"></i><i style="width:12.1%;background:#543CE8"></i></div></td><td class="num">46.2</td></tr></tbody></table></div>
+      <div class="wk-legend" style="margin-top:12px">Bands light to dark: 18-24, 25-34, 35-44, 45-54, 55-64, 65+. Google does not expose per impression age.</div>
+    </div>
+    <div class="card"><h3>Disqualification reasons</h3><div class="note">Yesterday vs daily average over the prior 7 days</div>
+      <div class="tbl-scroll"><table><thead><tr><th>Reason</th><th class="num">Yday</th><th class="num">Daily avg</th><th class="num">&Delta;</th></tr></thead><tbody><tr><td>Incomplete Address</td><td class="num">2</td><td class="num">0.6</td><td class="num"><span class="delta down">+250%</span></td></tr><tr><td>Unsupported Country</td><td class="num">1</td><td class="num">0.9</td><td class="num"><span class="delta down">+17%</span></td></tr><tr><td>No Published Listings Found</td><td class="num">0</td><td class="num">2.1</td><td class="num"><span class="delta up">-100%</span></td></tr></tbody></table></div>
+    </div>
+  </section>
+  <section>
+    <div class="card"><h3>Source insights</h3><div class="note">Top sources yesterday, with signups, quality and movement</div>
+      <div class="tbl-scroll"><table><thead><tr><th>Source</th><th class="num">Signups</th><th class="num">Qual</th><th class="num">RTL</th><th class="num">Trials</th><th class="num">vs 7d</th></tr></thead><tbody><tr><td>facebook</td><td class="num">24</td><td class="num">23</td><td class="num">11</td><td class="num">4</td><td class="num"><span class="delta down">-28%</span></td></tr><tr><td>direct</td><td class="num">7</td><td class="num">6</td><td class="num">2</td><td class="num">2</td><td class="num"><span class="delta up">+34%</span></td></tr><tr><td>google</td><td class="num">3</td><td class="num">2</td><td class="num">1</td><td class="num">1</td><td class="num"><span class="delta down">-74%</span></td></tr></tbody></table></div>
+      <div class="wk-legend" style="margin-top:12px"><b style="color:var(--bad)">Dropping</b> google -74%</div>
+    </div>
+  </section>
+  <div class="foot">
+    <b>Definitions.</b> Qualified: signup with no Airbnb DQ reason. Headline trials are counted by trial-start date with no lifecycle gate (dashboard KPI-tile definition), so the day's figure is complete. The funnel counts trials from the day's signup cohort only, matching the dashboard funnel card. Baselines: 7 day rolling average and the last 4 same weekday values. All day bucketing in America/New_York.<br>
+    <b>Sources.</b> HubSpot contacts and first touch attribution, Meta Marketing API insights, Google Ads ad group data. Channel attribution via the dashboard's campaign matching helpers.
+  </div>
+</div>
