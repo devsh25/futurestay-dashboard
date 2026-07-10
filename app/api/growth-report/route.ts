@@ -25,6 +25,15 @@ import { computeGrowthReport, renderGrowthReportHtml, renderGrowthReportSlack, t
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+// Cold compute pulls HubSpot contacts + 6 Meta Graph windows + 2
+// Google Ads queries and can take 40 to 60 seconds. Vercel's default
+// function timeout is 60s on Pro / 10s on Hobby. Bump to 300 so cold
+// runs finish inside the window instead of getting killed mid-flight.
+// If deployed on Hobby the runtime ignores anything over 10 seconds;
+// switch this deployment to Pro (or precompute the report via a cron
+// snapshot) if the request keeps timing out.
+export const maxDuration = 300;
+export const runtime = "nodejs";
 
 type Format = "html" | "slack" | "json";
 
