@@ -124,6 +124,43 @@ export async function GET(request: NextRequest) {
     const weekendRate = rate(weekend);
     const weekdayRate = rate(weekday);
 
+    // ---- Volume vs conversion: is the weekend trialist dip driven by fewer
+    // signups (volume) or by lower RTL→trial conversion? Count QUALIFIED
+    // SIGNUPS (not just RTL) by signup day, plus RTL and trialists, and
+    // normalize to per-day so the 5:2 weekday:weekend day-count doesn't skew.
+    const dowDays = [0, 0, 0, 0, 0, 0, 0]; // # of each DOW in the window
+    for (let t = startDay.getTime(); t <= endDay.getTime(); t += 86_400_000) {
+      dowDays[tzDayOfWeek(new Date(t + 12 * 3_600_000))] += 1; // midday probe = DST-safe
+    }
+    const weekendDays = dowDays[5] + dowDays[6];
+    const weekdayDays = dowDays[0] + dowDays[1] + dowDays[2] + dowDays[3] + dowDays[4];
+
+    const vol = {
+      weekend: { signups: 0, rtl: 0, trialists: 0 },
+      weekday: { signups: 0, rtl: 0, trialists: 0 },
+    };
+    for (const c of clean) {
+      if (!(isSignup(c) && !hasDQ(c) && inWindow(c.createdate))) continue;
+      const g = isWeekendDow(tzDayOfWeek(new Date(c.createdate))) ? vol.weekend : vol.weekday;
+      g.signups += 1;
+      if (isReadyToLaunch(c)) {
+        g.rtl += 1;
+        if (trialDateOf(c) != null) g.trialists += 1;
+      }
+    }
+    const per = (n: number, days: number) => (days > 0 ? Math.round((n / days) * 100) / 100 : null);
+    const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 1000) / 10 : null);
+    const volGroup = (g: { signups: number; rtl: number; trialists: number }, days: number) => ({
+      signups: g.signups,
+      signupsPerDay: per(g.signups, days),
+      rtl: g.rtl,
+      rtlPerDay: per(g.rtl, days),
+      trialists: g.trialists,
+      trialistsPerDay: per(g.trialists, days),
+      signupToRtlPct: pct(g.rtl, g.signups),
+      rtlToTrialPct: pct(g.trialists, g.rtl),
+    });
+
     // Per-week breakdown (each Mon–Sun week that has cohort members), oldest
     // → newest, so the weekend-vs-weekday gap can be read week by week.
     const byWeek = Array.from(weekMap.entries())
@@ -164,6 +201,14 @@ export async function GET(request: NextRequest) {
           conversionPct: rate(b),
         })),
         byWeek,
+      },
+      volume: {
+        definition:
+          "Qualified signups by signup day-of-week — separates VOLUME (are weekend signups fewer?) from CONVERSION (does RTL→trial drop?). Per-day divides by the number of such days in the window (weekday:weekend day counts differ 5:2).",
+        weekendDays,
+        weekdayDays,
+        weekend: volGroup(vol.weekend, weekendDays),
+        weekday: volGroup(vol.weekday, weekdayDays),
       },
       runRateAligned: {
         definition:
