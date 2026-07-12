@@ -7,7 +7,7 @@ import {
   isSignup,
   hasDQ,
 } from "@/lib/funnel";
-import { tzDateKey, tzDayOfWeek, tzStartOfDay, tzEndOfDay, tzAddDays } from "@/lib/timezone";
+import { tzDateKey, tzDayOfWeek, tzStartOfDay, tzEndOfDay, tzAddDays, tzStartOfWeek } from "@/lib/timezone";
 import type { HubSpotContact } from "@/lib/types";
 
 /**
@@ -75,17 +75,27 @@ export async function GET(request: NextRequest) {
     const weekend = mk();
     const weekday = mk();
     const dow: Bucket[] = Array.from({ length: 7 }, mk); // 0=Mon…6=Sun
+    // Per-week (Mon–Sun) split so the weekend deficit can be checked for
+    // consistency across the 5 weeks rather than only in aggregate.
+    const weekMap = new Map<string, { weekend: Bucket; weekday: Bucket }>();
 
     for (const c of rtlCohort) {
-      const d = tzDayOfWeek(new Date(c.createdate));
+      const signup = new Date(c.createdate);
+      const d = tzDayOfWeek(signup);
+      const isWknd = isWeekendDow(d);
       const trialed = trialDateOf(c) != null;
-      const target = isWeekendDow(d) ? weekend : weekday;
+      const target = isWknd ? weekend : weekday;
       target.rtl += 1;
       dow[d].rtl += 1;
-      if (trialed) {
-        target.trialed += 1;
-        dow[d].trialed += 1;
-      }
+      if (trialed) target.trialed += 1;
+      if (trialed) dow[d].trialed += 1;
+
+      const wkKey = tzDateKey(tzStartOfWeek(signup));
+      let wk = weekMap.get(wkKey);
+      if (!wk) { wk = { weekend: mk(), weekday: mk() }; weekMap.set(wkKey, wk); }
+      const wkTarget = isWknd ? wk.weekend : wk.weekday;
+      wkTarget.rtl += 1;
+      if (trialed) wkTarget.trialed += 1;
     }
 
     const rate = (b: Bucket) => (b.rtl > 0 ? (b.trialed / b.rtl) * 100 : null);
@@ -114,6 +124,22 @@ export async function GET(request: NextRequest) {
     const weekendRate = rate(weekend);
     const weekdayRate = rate(weekday);
 
+    // Per-week breakdown (each Mon–Sun week that has cohort members), oldest
+    // → newest, so the weekend-vs-weekday gap can be read week by week.
+    const byWeek = Array.from(weekMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([weekStart, wk]) => {
+        const we = rate(wk.weekend);
+        const wd = rate(wk.weekday);
+        return {
+          weekStart,
+          weekEnd: tzDateKey(tzAddDays(new Date(weekStart + "T12:00:00Z"), 6)),
+          weekend: { ...wk.weekend, conversionPct: we },
+          weekday: { ...wk.weekday, conversionPct: wd },
+          differencePctPoints: we != null && wd != null ? Math.round((we - wd) * 10) / 10 : null,
+        };
+      });
+
     return NextResponse.json({
       window: {
         weeks,
@@ -137,6 +163,7 @@ export async function GET(request: NextRequest) {
           trialed: b.trialed,
           conversionPct: rate(b),
         })),
+        byWeek,
       },
       runRateAligned: {
         definition:
