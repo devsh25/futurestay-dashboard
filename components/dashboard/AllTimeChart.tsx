@@ -655,13 +655,22 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
                   />
                   <Tooltip
                     cursor={{ stroke: "#1F2937", strokeWidth: 1 }}
-                    // Pin the tooltip near the bottom of the 360px chart
-                    // area so it doesn't overlap the lines the user is
-                    // trying to read. The y is fixed; x still follows
-                    // the cursor. Slight transparency keeps the mark it
-                    // hovers over visible when the tooltip drifts on top.
-                    position={{ y: 250 }}
-                    wrapperStyle={{ opacity: 0.9, pointerEvents: "none" }}
+                    // Anchor the tooltip to grow UPWARD from near the
+                    // chart's bottom edge. `position.y` = 355 puts the
+                    // wrapper's top edge just above the x-axis; the
+                    // `translateY(-100%)` transform in wrapperStyle
+                    // shifts the box up by its own height so its
+                    // BOTTOM lands at 355. Result: the tooltip always
+                    // sits at the bottom of the chart no matter how
+                    // tall the content grows (6+ visible metrics), and
+                    // doesn't overlap the lines the user is reading.
+                    // The x still tracks the cursor.
+                    position={{ y: 355 }}
+                    wrapperStyle={{
+                      opacity: 0.9,
+                      pointerEvents: "none",
+                      transform: "translateY(-100%)",
+                    }}
                     // Custom content so we can render colour dots before
                     // each metric name AND show step-to-step conversion %
                     // between adjacent visible metrics (e.g. Trials/QS).
