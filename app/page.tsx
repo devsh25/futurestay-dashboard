@@ -12,9 +12,6 @@ import RetentionCurveChart from "@/components/dashboard/RetentionCurveChart";
 import FunnelCard from "@/components/dashboard/FunnelCard";
 import DQChartCard from "@/components/dashboard/DQChartCard";
 import AdSpendCard from "@/components/dashboard/AdSpendCard";
-import CampaignAnalysisCard from "@/components/dashboard/CampaignAnalysisCard";
-import AdHealthSignalsCard, { type AdHealthData } from "@/components/dashboard/AdHealthSignalsCard";
-import AdHealthDetailCard from "@/components/dashboard/AdHealthDetailCard";
 import SectionHeading, { Icons } from "@/components/dashboard/SectionHeading";
 import ActiveFilterChips from "@/components/ActiveFilterChips";
 import DownloadPdfButton from "@/components/DownloadPdfButton";
@@ -56,22 +53,6 @@ export default function Dashboard() {
   const [customEnd, setCustomEnd] = useState(todayIso);
   const [countries, setCountries] = useState<string[]>([]);
   const [channels, setChannels] = useState<string[]>([]);
-
-  // Ad Health: single fetch + shared window toggle so the Signals card
-  // and Detail card never disagree. The toggle changes only the "Based
-  // on last N days" tag on Signals and the highlighted columns on
-  // Detail — winners / dying / actions are computed against BOTH
-  // windows server-side and don't change.
-  const [adHealth, setAdHealth] = useState<AdHealthData | null>(null);
-  const [activeWindow, setActiveWindow] = useState<"7d" | "14d">("7d");
-  useEffect(() => {
-    let cancelled = false;
-    fetch("/api/ad-health")
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((d: AdHealthData) => { if (!cancelled) setAdHealth(d); })
-      .catch(() => { if (!cancelled) setAdHealth(null); });
-    return () => { cancelled = true; };
-  }, []);
 
   // Cohort-maturity warning: end date inside the last 14 days (ET) means
   // trial and customer counts for recent signups haven't fully materialized.
@@ -251,15 +232,6 @@ export default function Dashboard() {
                 countries={countries}
                 channels={channels}
               />
-
-              <CampaignAnalysisCard
-                period={period}
-                customStart={customStart}
-                customEnd={customEnd}
-              />
-
-              <AdHealthSignalsCard data={adHealth} activeWindow={activeWindow} />
-              <AdHealthDetailCard data={adHealth} activeWindow={activeWindow} onWindowChange={setActiveWindow} />
 
               {/* Unified Ad Spend & Efficiency card. Was two cards
                   (Meta and Google) with impressions / CTR / CPC etc.
