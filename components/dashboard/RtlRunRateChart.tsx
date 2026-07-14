@@ -13,7 +13,7 @@ import {
 // Palette lifted from AllTimeChart so paired lines read as the same
 // system (amber Meta, violet Google, primary blue for RTL, soft blue
 // for the percentage).
-type MetricKey = "metaSpend" | "googleSpend" | "rtl" | "rtlToTrial";
+type MetricKey = "metaSpend" | "googleSpend" | "rtl" | "rtlToTrial" | "costPerRtl";
 
 const METRICS: {
   key: MetricKey;
@@ -28,6 +28,11 @@ const METRICS: {
   { key: "googleSpend", label: "Google budget", color: "#A78BFA", axis: "money", isCurrency: true, description: "Google Ads account-level daily spend" },
   { key: "rtl",         label: "RTLs",          color: "#1E6FFF", axis: "count",                   description: "Contacts flagged property_ready_to_launch on that day (qualified signups)" },
   { key: "rtlToTrial",  label: "RTL → Trial %", color: "#60A5FA", axis: "count", isPercent: true,  description: "For RTLs signed up in the bucket, share that started a trial" },
+  // Cost per RTL sits on the money axis with the two spend lines, and
+  // is dashed like them. Scale in $10-$500 range, so it renders as a
+  // low line near the bottom of the money axis when Meta/Google spend
+  // are also enabled — toggle those off to zoom in on this metric.
+  { key: "costPerRtl",  label: "Cost / RTL",    color: "#F87171", axis: "money", isCurrency: true, description: "(Meta + Google spend) / RTL count for the bucket" },
 ];
 
 type Granularity = "day" | "week" | "month";
@@ -56,6 +61,16 @@ function fmtTick(key: string, g: Granularity): string {
   const months = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   if (g === "month") return `${months[m]} '${String(y).slice(2)}`;
   return `${months[m]} ${d}`;
+}
+function fmtTooltipDate(key: string, g: Granularity): string {
+  // Tooltip header — same date shape as the x-axis tick, plus the day
+  // of week for daily and weekly views (skipped for monthly since the
+  // bucket key is always the 1st).
+  if (g === "month") return fmtTick(key, g);
+  const [y, m, d] = key.split("-").map(Number);
+  const dow = new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
+  const base = fmtTick(key, g);
+  return `${base} (${dow})`;
 }
 
 export default function RtlRunRateChart() {
@@ -97,7 +112,12 @@ export default function RtlRunRateChart() {
     return order.map((k) => {
       const b = buckets.get(k)!;
       const pct = b.rtl > 0 ? (b.trials / b.rtl) * 100 : null;
-      return { label: k, metaSpend: b.metaSpend, googleSpend: b.googleSpend, rtl: b.rtl, rtlToTrial: pct };
+      const costPerRtl = b.rtl > 0 ? (b.metaSpend + b.googleSpend) / b.rtl : null;
+      return {
+        label: k,
+        metaSpend: b.metaSpend, googleSpend: b.googleSpend,
+        rtl: b.rtl, rtlToTrial: pct, costPerRtl,
+      };
     });
   }, [data, granularity]);
 
@@ -112,6 +132,7 @@ export default function RtlRunRateChart() {
       googleSpend: sumGoogle,
       rtl:         sumRtl,
       rtlToTrial:  sumRtl > 0 ? (sumTr / sumRtl) * 100 : null,
+      costPerRtl:  sumRtl > 0 ? (sumMeta + sumGoogle) / sumRtl : null,
     };
   }, [data]);
 
@@ -231,13 +252,16 @@ export default function RtlRunRateChart() {
                   )}
                   <Tooltip
                     cursor={{ stroke: "#1F2937", strokeWidth: 1 }}
-                    // Fixed y = tooltip's TOP edge inside the 360px
-                    // chart. Do not use `transform: translateY(...)`
-                    // in wrapperStyle — Recharts uses that CSS
-                    // property for horizontal cursor tracking, so
-                    // overriding it pins the tooltip to the corner.
-                    position={{ y: 40 }}
-                    wrapperStyle={{ opacity: 0.9, pointerEvents: "none" }}
+                    // Fix BOTH x and y so the tooltip pins to the
+                    // upper-left region of the plot area, out of the
+                    // cursor's way. Do not set `transform` in
+                    // wrapperStyle — Recharts uses that CSS property
+                    // for cursor tracking, and overriding it strands
+                    // the wrapper in the corner (the very bug we hit
+                    // before). Opacity 0.65 so lines under the tooltip
+                    // stay readable.
+                    position={{ x: 40, y: 40 }}
+                    wrapperStyle={{ opacity: 0.65, pointerEvents: "none" }}
                     content={(props) => {
                       const { active: isActive, label, payload } = props as {
                         active?: boolean; label?: string;
@@ -246,7 +270,7 @@ export default function RtlRunRateChart() {
                       if (!isActive || !payload || payload.length === 0) return null;
                       return (
                         <div className="bg-[#0E1422] border border-[#1F2937] rounded-lg p-3 text-[11px] min-w-[220px]">
-                          <div className="text-[#8B92A3] mb-1">{label ? fmtTick(String(label), granularity) : ""}</div>
+                          <div className="text-[#8B92A3] mb-1">{label ? fmtTooltipDate(String(label), granularity) : ""}</div>
                           {METRICS.filter((m) => active.has(m.key)).map((m) => {
                             const row = payload.find((p) => p.dataKey === m.key);
                             if (!row || row.value === null || row.value === undefined) return null;

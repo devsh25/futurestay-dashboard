@@ -666,8 +666,8 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
                     // horizontally on cursor moves. Overriding it
                     // stops horizontal tracking and pins the tooltip
                     // to the chart's top-left corner.
-                    position={{ y: 40 }}
-                    wrapperStyle={{ opacity: 0.9, pointerEvents: "none" }}
+                    position={{ x: 40, y: 40 }}
+                    wrapperStyle={{ opacity: 0.65, pointerEvents: "none" }}
                     // Custom content so we can render colour dots before
                     // each metric name AND show step-to-step conversion %
                     // between adjacent visible metrics (e.g. Trials/QS).
@@ -728,9 +728,13 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
                         // convention used by the "Last week" filter.
                         dateStr = `Mon ${shortDate(labelStr)} – Sun ${shortDate(weekEnd)}${partial ? "  (partial week)" : ""}`;
                       } else if (labelStr && /^\d{4}-\d{2}-\d{2}/.test(labelStr)) {
-                        const [, m, d] = labelStr.split("-");
+                        const [y, m, d] = labelStr.split("-").map((s) => parseInt(s, 10));
                         const months = ["", "Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-                        dateStr = `${months[parseInt(m)]} ${parseInt(d)}, ${labelStr.split("-")[0]}`;
+                        // Append day-of-week so the reader can see at
+                        // a glance whether a spike lands on a weekday
+                        // or weekend without pattern-matching dates.
+                        const dow = new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
+                        dateStr = `${months[m]} ${d}, ${y} (${dow})`;
                       }
 
                       return (
