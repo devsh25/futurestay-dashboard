@@ -2,15 +2,13 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { DashboardData, PeriodFilter } from "@/lib/types";
-import { tzStartOfDay, tzAddDays, tzDateKey } from "@/lib/timezone";
+import { tzStartOfDay, tzAddDays, tzDateKey, tzStartOfWeek } from "@/lib/timezone";
 import FilterBar from "@/components/FilterBar";
 import KPICards from "@/components/dashboard/KPICards";
 import AllTimeChart from "@/components/dashboard/AllTimeChart";
 import DashboardSkeleton from "@/components/dashboard/DashboardSkeleton";
 import RetentionCurveChart from "@/components/dashboard/RetentionCurveChart";
 import FunnelCard from "@/components/dashboard/FunnelCard";
-import GeoCard from "@/components/dashboard/GeoCard";
-import RepCard from "@/components/dashboard/RepCard";
 import DQChartCard from "@/components/dashboard/DQChartCard";
 import MetaSpendCard from "@/components/dashboard/MetaSpendCard";
 import GoogleAdsCard from "@/components/dashboard/GoogleAdsCard";
@@ -38,17 +36,24 @@ export default function Dashboard() {
   const [hasInitialRunRate, setHasInitialRunRate] = useState(false);
   const firstFoldReady = hasInitialContacts && hasInitialRunRate;
   const isRefreshing = loading && firstFoldReady;
-  // Default custom range: May 1, 2026 → T−14d.
-  // T−14d enforces the cohort-maturity rule (Futurestay's median signup→customer
-  // is ~14 days, so anything fresher than that has unmatured conversion data).
-  // All date arithmetic in ET so the default + maturity warning are stable
-  // for any user regardless of their browser timezone.
+  // Default custom range: this week Monday → Sunday, ET. Weekly cadence
+  // matches how the team reads the dashboard day-to-day.
+  //
+  // All date arithmetic in ET so the default + maturity warning are
+  // stable for any user regardless of their browser timezone.
   const nowEt = tzStartOfDay(new Date());
+  const thisMonEt = tzStartOfWeek(nowEt);            // Monday of this week
+  const thisSunEt = tzAddDays(thisMonEt, 6);         // Sunday of this week
+  const thisMonIso = tzDateKey(thisMonEt);
+  const thisSunIso = tzDateKey(thisSunEt);
+  // Kept alongside the new default for the "Cohort still maturing"
+  // warning banner, which nudges the user back to T−14d if they
+  // extend the window into the recent 14 days.
   const tMinus14Iso = tzDateKey(tzAddDays(nowEt, -14));
 
   const [period, setPeriod] = useState<PeriodFilter>("custom");
-  const [customStart, setCustomStart] = useState("2026-05-01");
-  const [customEnd, setCustomEnd] = useState(tMinus14Iso);
+  const [customStart, setCustomStart] = useState(thisMonIso);
+  const [customEnd, setCustomEnd] = useState(thisSunIso);
   const [countries, setCountries] = useState<string[]>([]);
   const [channels, setChannels] = useState<string[]>([]);
 
@@ -257,22 +262,11 @@ export default function Dashboard() {
               <SectionHeading
                 icon={Icons.Shield}
                 title="Retention & Quality"
-                description="How long paying customers stick around, plus DQ reasons and sales rep performance"
+                description="How long paying customers stick around, plus DQ reasons"
                 iconColor="#93C5FD"
               />
               <RetentionCurveChart />
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                <DQChartCard data={data.dqWeekly} />
-                <RepCard reps={data.reps} />
-              </div>
-
-              <SectionHeading
-                icon={Icons.Globe}
-                title="Geography"
-                description="Country and city breakdown of qualified signups"
-                iconColor="#60A5FA"
-              />
-              <GeoCard geo={data.geo} />
+              <DQChartCard data={data.dqWeekly} />
             </>
           )}
         </div>

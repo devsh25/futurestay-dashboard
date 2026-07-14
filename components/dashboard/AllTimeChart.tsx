@@ -655,6 +655,13 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
                   />
                   <Tooltip
                     cursor={{ stroke: "#1F2937", strokeWidth: 1 }}
+                    // Pin the tooltip near the bottom of the 360px chart
+                    // area so it doesn't overlap the lines the user is
+                    // trying to read. The y is fixed; x still follows
+                    // the cursor. Slight transparency keeps the mark it
+                    // hovers over visible when the tooltip drifts on top.
+                    position={{ y: 250 }}
+                    wrapperStyle={{ opacity: 0.9, pointerEvents: "none" }}
                     // Custom content so we can render colour dots before
                     // each metric name AND show step-to-step conversion %
                     // between adjacent visible metrics (e.g. Trials/QS).
