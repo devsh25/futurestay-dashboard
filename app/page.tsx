@@ -6,6 +6,7 @@ import { tzStartOfDay, tzAddDays, tzDateKey, tzStartOfWeek } from "@/lib/timezon
 import FilterBar from "@/components/FilterBar";
 import KPICards from "@/components/dashboard/KPICards";
 import AllTimeChart from "@/components/dashboard/AllTimeChart";
+import RtlTrialChart from "@/components/dashboard/RtlTrialChart";
 import DashboardSkeleton from "@/components/dashboard/DashboardSkeleton";
 import RetentionCurveChart from "@/components/dashboard/RetentionCurveChart";
 import FunnelCard from "@/components/dashboard/FunnelCard";
@@ -219,6 +220,7 @@ export default function Dashboard() {
               {/* Headline timeseries — independent of period filter,
                   shows daily milestone counts since first signup. */}
               <AllTimeChart onReady={handleRunRateReady} />
+              <RtlTrialChart />
 
               <SectionHeading
                 icon={Icons.Funnel}
