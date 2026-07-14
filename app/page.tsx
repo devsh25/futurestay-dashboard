@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { DashboardData, PeriodFilter } from "@/lib/types";
-import { tzStartOfDay, tzAddDays, tzDateKey, tzStartOfWeek } from "@/lib/timezone";
+import { tzStartOfDay, tzAddDays, tzDateKey } from "@/lib/timezone";
 import FilterBar from "@/components/FilterBar";
 import KPICards from "@/components/dashboard/KPICards";
 import AllTimeChart from "@/components/dashboard/AllTimeChart";
@@ -39,24 +39,22 @@ export default function Dashboard() {
   const [hasInitialRunRate, setHasInitialRunRate] = useState(false);
   const firstFoldReady = hasInitialContacts && hasInitialRunRate;
   const isRefreshing = loading && firstFoldReady;
-  // Default custom range: this week Monday → Sunday, ET. Weekly cadence
-  // matches how the team reads the dashboard day-to-day.
+  // Default custom range: today (single-day window), ET. Matches how
+  // the team opens the dashboard first thing in the morning to see
+  // where the day already stands.
   //
   // All date arithmetic in ET so the default + maturity warning are
   // stable for any user regardless of their browser timezone.
   const nowEt = tzStartOfDay(new Date());
-  const thisMonEt = tzStartOfWeek(nowEt);            // Monday of this week
-  const thisSunEt = tzAddDays(thisMonEt, 6);         // Sunday of this week
-  const thisMonIso = tzDateKey(thisMonEt);
-  const thisSunIso = tzDateKey(thisSunEt);
+  const todayIso = tzDateKey(nowEt);
   // Kept alongside the new default for the "Cohort still maturing"
   // warning banner, which nudges the user back to T−14d if they
   // extend the window into the recent 14 days.
   const tMinus14Iso = tzDateKey(tzAddDays(nowEt, -14));
 
   const [period, setPeriod] = useState<PeriodFilter>("custom");
-  const [customStart, setCustomStart] = useState(thisMonIso);
-  const [customEnd, setCustomEnd] = useState(thisSunIso);
+  const [customStart, setCustomStart] = useState(todayIso);
+  const [customEnd, setCustomEnd] = useState(todayIso);
   const [countries, setCountries] = useState<string[]>([]);
   const [channels, setChannels] = useState<string[]>([]);
 
