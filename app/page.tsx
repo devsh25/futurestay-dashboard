@@ -11,8 +11,7 @@ import DashboardSkeleton from "@/components/dashboard/DashboardSkeleton";
 import RetentionCurveChart from "@/components/dashboard/RetentionCurveChart";
 import FunnelCard from "@/components/dashboard/FunnelCard";
 import DQChartCard from "@/components/dashboard/DQChartCard";
-import MetaSpendCard from "@/components/dashboard/MetaSpendCard";
-import GoogleAdsCard from "@/components/dashboard/GoogleAdsCard";
+import AdSpendCard from "@/components/dashboard/AdSpendCard";
 import CampaignAnalysisCard from "@/components/dashboard/CampaignAnalysisCard";
 import AdHealthSignalsCard, { type AdHealthData } from "@/components/dashboard/AdHealthSignalsCard";
 import AdHealthDetailCard from "@/components/dashboard/AdHealthDetailCard";
@@ -262,19 +261,14 @@ export default function Dashboard() {
               <AdHealthSignalsCard data={adHealth} activeWindow={activeWindow} />
               <AdHealthDetailCard data={adHealth} activeWindow={activeWindow} onWindowChange={setActiveWindow} />
 
-              {/* Meta + Google spend cards at the end of the funnel
-                  section so the spend numbers sit next to the campaign
-                  performance table they relate to, rather than
-                  splitting the funnel story in half. Stacked vertically
-                  rather than side-by-side because each card has its
-                  own per-campaign table — full width gives both the
-                  room they need without column-cramped numbers. */}
-              <MetaSpendCard
-                period={period}
-                customStart={customStart}
-                customEnd={customEnd}
-              />
-              <GoogleAdsCard
+              {/* Unified Ad Spend & Efficiency card. Was two cards
+                  (Meta and Google) with impressions / CTR / CPC etc.
+                  Merged into one focused on the five metrics the
+                  team actually acts on: total spend, cost per RTL,
+                  RTL to Trial %, cost per trial, cost per customer.
+                  Data comes from /api/campaigns/analysis so numbers
+                  cannot drift from the Campaign Analysis table above. */}
+              <AdSpendCard
                 period={period}
                 customStart={customStart}
                 customEnd={customEnd}
