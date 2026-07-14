@@ -655,22 +655,19 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
                   />
                   <Tooltip
                     cursor={{ stroke: "#1F2937", strokeWidth: 1 }}
-                    // Anchor the tooltip to grow UPWARD from near the
-                    // chart's bottom edge. `position.y` = 355 puts the
-                    // wrapper's top edge just above the x-axis; the
-                    // `translateY(-100%)` transform in wrapperStyle
-                    // shifts the box up by its own height so its
-                    // BOTTOM lands at 355. Result: the tooltip always
-                    // sits at the bottom of the chart no matter how
-                    // tall the content grows (6+ visible metrics), and
-                    // doesn't overlap the lines the user is reading.
-                    // The x still tracks the cursor.
-                    position={{ y: 355 }}
-                    wrapperStyle={{
-                      opacity: 0.9,
-                      pointerEvents: "none",
-                      transform: "translateY(-100%)",
-                    }}
+                    // Fixed y = tooltip's TOP edge inside the 360px
+                    // chart area. x still tracks the cursor. Sat at the
+                    // top-of-plot for visibility while keeping ~250px
+                    // of vertical space for the tallest content (6+
+                    // metrics with step-to-step % rows).
+                    //
+                    // Do NOT set `transform` in wrapperStyle — Recharts
+                    // uses that CSS property to translate the wrapper
+                    // horizontally on cursor moves. Overriding it
+                    // stops horizontal tracking and pins the tooltip
+                    // to the chart's top-left corner.
+                    position={{ y: 40 }}
+                    wrapperStyle={{ opacity: 0.9, pointerEvents: "none" }}
                     // Custom content so we can render colour dots before
                     // each metric name AND show step-to-step conversion %
                     // between adjacent visible metrics (e.g. Trials/QS).

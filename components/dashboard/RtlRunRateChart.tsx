@@ -231,8 +231,13 @@ export default function RtlRunRateChart() {
                   )}
                   <Tooltip
                     cursor={{ stroke: "#1F2937", strokeWidth: 1 }}
-                    position={{ y: 355 }}
-                    wrapperStyle={{ opacity: 0.9, pointerEvents: "none", transform: "translateY(-100%)" }}
+                    // Fixed y = tooltip's TOP edge inside the 360px
+                    // chart. Do not use `transform: translateY(...)`
+                    // in wrapperStyle — Recharts uses that CSS
+                    // property for horizontal cursor tracking, so
+                    // overriding it pins the tooltip to the corner.
+                    position={{ y: 40 }}
+                    wrapperStyle={{ opacity: 0.9, pointerEvents: "none" }}
                     content={(props) => {
                       const { active: isActive, label, payload } = props as {
                         active?: boolean; label?: string;
