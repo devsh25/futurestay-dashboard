@@ -112,11 +112,15 @@ export async function GET(request: NextRequest) {
     const metaCampSpend = new Map<string, number>();
     for (const c of mi.campaigns) metaCampSpend.set(c.name, c.spend);
 
-    // Meta ad spend by (campaign, ad name)
+    // Meta ad spend by (campaign, shortAd(ad_name)). The ad-asset lookup
+    // key in the attribution loop below is `shortAd(utm_content)`, which
+    // strips the "DD.MM | " date prefix and " | LP - ..." suffix. Meta's
+    // raw ad_name carries both, so we normalize the platform side the
+    // same way — without this, every Meta ad-asset row gets $0 spend.
     const metaAdSpend = new Map<string, number>();
     for (const r of metaAdDaily) {
       if (!r.campaign_name || !r.ad_name) continue;
-      const key = `${r.campaign_name}::${r.ad_name}`;
+      const key = `${r.campaign_name}::${shortAd(r.ad_name)}`;
       metaAdSpend.set(key, (metaAdSpend.get(key) || 0) + r.spend);
     }
 
