@@ -4,32 +4,55 @@ import { useEffect, useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { CampaignAnalysisData, CampaignAnalysisRow, PeriodFilter } from "@/lib/types";
+import { ChevronRight, ChevronDown } from "lucide-react";
+import type { PeriodFilter } from "@/lib/types";
 
 /**
- * Ad Spend & Efficiency — merges what used to be Meta Ads and Google
- * Ads spend cards into one view. Reuses /api/campaigns/analysis (which
- * already joins ad-platform spend with HubSpot funnel counts by
- * campaign / ad group), so the numbers cannot drift from the Campaign
- * Analysis rows above.
+ * RTL Campaign Analysis — one card, Meta + Google, per campaign with
+ * an expandable per-ad-asset drill-down.
  *
- * The four efficiency metrics the team actually acts on:
- *   Cost per RTL     = spend / readyToLaunch
- *   RTL → Trial %    = trials / readyToLaunch
- *   Cost per Trial   = spend / trials
- *   Cost per Customer = spend / customers
- * Plus Total Spend for the window.
+ * Reads /api/rtl-campaign-analysis, which returns campaigns[] with a
+ * nested adAssets[] rolled up under each. Attribution goes through the
+ * canonical dashboard helpers so numbers agree with Campaign Analysis
+ * and Ad Health. Partner + test contacts excluded upstream.
  *
- * Meta = row.optSignal !== "google" (call + self-serve campaigns).
- * Google = row.optSignal === "google" (Google ad groups and Pmax
- * rollups, all treated as one platform).
+ * Five columns the team acts on (per campaign, and per ad asset when
+ * expanded): Spend, Cost/RTL, RTL → Trial %, Cost/Trial, Cost/Customer.
+ * RTL count sits in the Cost/RTL cell as a subtext so we can drop it
+ * as a separate column and keep Cost/Customer visible without
+ * horizontal scroll on standard desktop widths.
  */
+
+type Platform = "Meta" | "Google";
+
+interface AdAssetRow {
+  key: string;
+  platform: Platform;
+  spend: number;
+  rtl: number;
+  trials: number;
+  customers: number;
+}
+interface CampaignRow {
+  campaign: string;
+  platform: Platform;
+  spend: number;
+  rtl: number;
+  trials: number;
+  customers: number;
+  adAssets: AdAssetRow[];
+}
+interface ApiResponse {
+  since: string;
+  until: string;
+  rows: CampaignRow[];
+}
 
 function fmtMoney(n: number | null): string {
   if (n === null || !isFinite(n)) return "—";
   if (n === 0) return "$0";
   if (n >= 10_000) return `$${(n / 1000).toFixed(1)}K`;
-  if (n >= 1000) return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  if (n >= 1000)   return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   return `$${n.toFixed(0)}`;
 }
 function fmtNum(n: number | null): string {
@@ -51,16 +74,17 @@ function shortCampaign(name: string): string {
   return filtered.join(" | ");
 }
 
-function isGoogleRow(r: CampaignAnalysisRow) {
-  return r.optSignal === "google";
-}
-function platformOf(r: CampaignAnalysisRow): "Meta" | "Google" {
-  return isGoogleRow(r) ? "Google" : "Meta";
-}
-function pillClass(p: "Meta" | "Google") {
+function pillClass(p: Platform) {
   return p === "Meta"
     ? "text-[#A78BFA] bg-[#A78BFA]/15 border-[#A78BFA]/30"
     : "text-[#60A5FA] bg-[#60A5FA]/15 border-[#60A5FA]/30";
+}
+
+function pctColor(pct: number | null): string {
+  if (pct === null) return "text-[#5B6478]";
+  if (pct >= 40) return "text-[#10B981]";
+  if (pct >= 20) return "text-[#F59E0B]";
+  return "text-[#F87171]";
 }
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -73,6 +97,21 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
   );
 }
 
+interface Deriveable {
+  spend: number;
+  rtl: number;
+  trials: number;
+  customers: number;
+}
+function derive(r: Deriveable) {
+  return {
+    costPerRtl:      r.rtl > 0 ? r.spend / r.rtl : null,
+    rtlToTrial:      r.rtl > 0 ? (r.trials / r.rtl) * 100 : null,
+    costPerTrial:    r.trials > 0 ? r.spend / r.trials : null,
+    costPerCustomer: r.customers > 0 ? r.spend / r.customers : null,
+  };
+}
+
 export default function AdSpendCard({
   period, customStart, customEnd,
 }: {
@@ -80,10 +119,11 @@ export default function AdSpendCard({
   customStart: string;
   customEnd: string;
 }) {
-  const [data, setData] = useState<CampaignAnalysisData | null>(null);
+  const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [platform, setPlatform] = useState<"All" | "Meta" | "Google">("All");
+  const [platform, setPlatform] = useState<"All" | Platform>("All");
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -94,7 +134,7 @@ export default function AdSpendCard({
       params.set("start", customStart);
       params.set("end", customEnd);
     }
-    fetch(`/api/campaigns/analysis?${params}`)
+    fetch(`/api/rtl-campaign-analysis?${params}`)
       .then(async (r) => {
         if (!r.ok) {
           const j = await r.json().catch(() => ({}));
@@ -102,7 +142,7 @@ export default function AdSpendCard({
         }
         return r.json();
       })
-      .then((d: CampaignAnalysisData) => { if (!cancelled) setData(d); })
+      .then((d: ApiResponse) => { if (!cancelled) setData(d); })
       .catch((e: Error) => { if (!cancelled) setError(e.message); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -110,47 +150,38 @@ export default function AdSpendCard({
 
   const filteredRows = useMemo(() => {
     if (!data) return [];
-    const rows = data.rows.filter((r) => r.spend > 0 || r.readyToLaunch > 0 || r.trials > 0 || r.customers > 0);
-    if (platform === "Meta") return rows.filter((r) => !isGoogleRow(r));
-    if (platform === "Google") return rows.filter((r) => isGoogleRow(r));
+    const rows = data.rows.filter(
+      (r) => r.spend > 0 || r.rtl > 0 || r.trials > 0 || r.customers > 0,
+    );
+    if (platform === "Meta") return rows.filter((r) => r.platform === "Meta");
+    if (platform === "Google") return rows.filter((r) => r.platform === "Google");
     return rows;
   }, [data, platform]);
 
   const totals = useMemo(() => {
     let spend = 0, rtl = 0, trials = 0, customers = 0;
     for (const r of filteredRows) {
-      spend += r.spend;
-      rtl += r.readyToLaunch;
-      trials += r.trials;
-      customers += r.customers;
+      spend += r.spend; rtl += r.rtl; trials += r.trials; customers += r.customers;
     }
-    return {
-      spend, rtl, trials, customers,
-      costPerRtl:      rtl > 0 ? spend / rtl : null,
-      rtlToTrial:      rtl > 0 ? (trials / rtl) * 100 : null,
-      costPerTrial:    trials > 0 ? spend / trials : null,
-      costPerCustomer: customers > 0 ? spend / customers : null,
-    };
+    return { spend, rtl, trials, customers, ...derive({ spend, rtl, trials, customers }) };
   }, [filteredRows]);
 
-  const sortedRows = useMemo(() => {
-    // Sort by spend desc within the filtered set (headline campaigns
-    // are the ones burning budget). Ties fall through to name for
-    // stable ordering.
-    return [...filteredRows].sort((a, b) => {
-      if (b.spend !== a.spend) return b.spend - a.spend;
-      return a.campaign.localeCompare(b.campaign);
+  function toggle(campaign: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(campaign)) next.delete(campaign); else next.add(campaign);
+      return next;
     });
-  }, [filteredRows]);
+  }
 
   return (
     <Card className="bg-[#11182B] border border-[#1F2937] rounded-2xl shadow-none">
       <CardHeader className="pb-3 border-b border-[#1F2937]">
         <CardTitle className="flex items-center justify-between text-[15px] font-semibold text-white tracking-tight gap-3">
-          <span>Ad Spend & Efficiency</span>
+          <span>RTL Campaign Analysis</span>
           <div className="flex items-center gap-2">
             <Badge className="bg-[#1E6FFF]/15 text-[#60A5FA] border-[#1E6FFF]/25 text-[10px] font-medium">
-              Meta + Google · joined to HubSpot
+              Meta + Google · click a campaign to expand
             </Badge>
             <div className="inline-flex h-7 rounded-full bg-[#0E1422] border border-[#1F2937] p-0.5">
               {(["All", "Meta", "Google"] as const).map((p) => (
@@ -170,18 +201,15 @@ export default function AdSpendCard({
         <p className="text-[13px] text-[#8B92A3] mt-1.5 leading-relaxed">
           <span className="text-[#60A5FA] font-medium">Cohort-based.</span>{" "}
           Ad-platform spend joined to HubSpot contacts whose <code className="text-[#C9C9D1]">createdate</code>
-          {" "}falls in the window and who attribute to the campaign / ad group. RTL uses
-          <code className="text-[#C9C9D1]"> property_ready_to_launch</code>; RTL → Trial % is
-          trials on qualified signups from this cohort divided by RTLs from the same cohort.
+          {" "}falls in the window and who attribute to the campaign / ad group. Click a campaign row to
+          reveal per-ad-asset detail underneath.
         </p>
       </CardHeader>
       <CardContent className="pt-4">
-        {loading && !data && (
-          <p className="text-[12px] text-[#8B92A3] py-8 text-center">Loading…</p>
-        )}
+        {loading && !data && <p className="text-[12px] text-[#8B92A3] py-8 text-center">Loading…</p>}
         {error && (
           <div className="bg-[#2D1B21] border border-[#EF4444]/30 rounded-xl p-3 text-[#FCA5A5] text-[12px]">
-            <p className="font-semibold">Couldn&apos;t load ad spend data</p>
+            <p className="font-semibold">Couldn&apos;t load RTL campaign data</p>
             <p className="text-[11px] mt-1">{error}</p>
           </div>
         )}
@@ -198,51 +226,91 @@ export default function AdSpendCard({
 
             <div className="mt-4">
               <p className="text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold mb-2">
-                Per-Campaign ({sortedRows.length}{platform !== "All" ? ` · ${platform}` : ""})
+                Per-Campaign ({filteredRows.length}{platform !== "All" ? ` · ${platform}` : ""})
               </p>
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow className="border-[#1F2937] hover:bg-transparent">
                       <TableHead className="text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Campaign</TableHead>
-                      <TableHead className="text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Platform</TableHead>
+                      <TableHead className="text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Plat.</TableHead>
                       <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Spend</TableHead>
-                      <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">RTL</TableHead>
                       <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Cost / RTL</TableHead>
                       <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">RTL → Trial</TableHead>
                       <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Cost / Trial</TableHead>
-                      <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Cost / Customer</TableHead>
+                      <TableHead className="text-right text-[10px] uppercase tracking-wider text-[#8B92A3] font-semibold">Cost / Cust</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sortedRows.map((r) => {
-                      const plat = platformOf(r);
-                      const costPerRtl = r.readyToLaunch > 0 ? r.spend / r.readyToLaunch : null;
-                      const rtlToT = r.readyToLaunch > 0 ? (r.trials / r.readyToLaunch) * 100 : null;
-                      const pctCls = rtlToT === null ? "text-[#5B6478]"
-                        : rtlToT >= 40 ? "text-[#10B981]"
-                        : rtlToT >= 20 ? "text-[#F59E0B]"
-                        : "text-[#F87171]";
-                      return (
-                        <TableRow key={r.campaign} className="border-[#1F2937] hover:bg-[#0E1422] transition-colors">
-                          <TableCell className="font-medium text-[12px] text-white whitespace-nowrap max-w-[280px] truncate" title={r.campaign}>
-                            {shortCampaign(r.campaign)}
+                    {filteredRows.map((r) => {
+                      const d = derive(r);
+                      const isExpanded = expanded.has(r.campaign);
+                      const hasAssets = r.adAssets.length > 0;
+                      return [
+                        // Campaign row
+                        <TableRow
+                          key={r.campaign}
+                          onClick={() => hasAssets && toggle(r.campaign)}
+                          className={`border-[#1F2937] transition-colors ${
+                            hasAssets
+                              ? "cursor-pointer hover:bg-[#0E1422]"
+                              : "hover:bg-transparent"
+                          } ${isExpanded ? "bg-[#0E1422]" : ""}`}
+                        >
+                          <TableCell className="font-medium text-[12px] text-white max-w-[220px]" title={r.campaign}>
+                            <div className="flex items-center gap-1.5">
+                              {hasAssets ? (
+                                isExpanded
+                                  ? <ChevronDown className="h-3 w-3 flex-none text-[#8B92A3]" />
+                                  : <ChevronRight className="h-3 w-3 flex-none text-[#8B92A3]" />
+                              ) : (
+                                <span className="w-3 h-3 flex-none" />
+                              )}
+                              <span className="truncate">{shortCampaign(r.campaign)}</span>
+                              {hasAssets && <span className="text-[10px] text-[#5B6478] font-mono ml-1">{r.adAssets.length}</span>}
+                            </div>
                           </TableCell>
                           <TableCell>
-                            <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded border ${pillClass(plat)}`}>{plat}</span>
+                            <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded border ${pillClass(r.platform)}`}>{r.platform}</span>
                           </TableCell>
                           <TableCell className="text-right font-mono text-[12px] tabular-nums text-white">{fmtMoney(r.spend)}</TableCell>
-                          <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">{fmtNum(r.readyToLaunch)}</TableCell>
-                          <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">{fmtMoney(costPerRtl)}</TableCell>
-                          <TableCell className={`text-right font-mono text-[12px] tabular-nums ${pctCls}`}>{fmtPct(rtlToT)}</TableCell>
-                          <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">{fmtMoney(r.costPerTrial)}</TableCell>
-                          <TableCell className="text-right font-mono text-[12px] tabular-nums text-white font-semibold">{fmtMoney(r.costPerCustomer)}</TableCell>
-                        </TableRow>
-                      );
+                          <TableCell className="text-right font-mono text-[12px] tabular-nums">
+                            <div className="text-[#C9D1DC]">{fmtMoney(d.costPerRtl)}</div>
+                            <div className="text-[10px] text-[#5B6478]">{r.rtl} RTL</div>
+                          </TableCell>
+                          <TableCell className={`text-right font-mono text-[12px] tabular-nums ${pctColor(d.rtlToTrial)}`}>{fmtPct(d.rtlToTrial)}</TableCell>
+                          <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">{fmtMoney(d.costPerTrial)}</TableCell>
+                          <TableCell className="text-right font-mono text-[12px] tabular-nums text-white font-semibold">{fmtMoney(d.costPerCustomer)}</TableCell>
+                        </TableRow>,
+                        // Ad-asset rows (only when expanded)
+                        ...(isExpanded ? r.adAssets.map((a) => {
+                          const ad = derive(a);
+                          return (
+                            <TableRow key={`${r.campaign}::${a.key}`} className="border-[#1F2937] bg-[#0B111C]">
+                              <TableCell className="text-[12px] max-w-[220px] pl-6" title={a.key}>
+                                <div className="flex items-center gap-1.5 text-[#C9D1DC]">
+                                  <span className="w-3 h-3 flex-none" />
+                                  <span className="text-[#5B6478] font-mono">↳</span>
+                                  <span className="truncate">{a.key}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell><span className="text-[10px] text-[#5B6478]">ad</span></TableCell>
+                              <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">{fmtMoney(a.spend)}</TableCell>
+                              <TableCell className="text-right font-mono text-[12px] tabular-nums">
+                                <div className="text-[#C9D1DC]">{fmtMoney(ad.costPerRtl)}</div>
+                                <div className="text-[10px] text-[#5B6478]">{a.rtl} RTL</div>
+                              </TableCell>
+                              <TableCell className={`text-right font-mono text-[12px] tabular-nums ${pctColor(ad.rtlToTrial)}`}>{fmtPct(ad.rtlToTrial)}</TableCell>
+                              <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">{fmtMoney(ad.costPerTrial)}</TableCell>
+                              <TableCell className="text-right font-mono text-[12px] tabular-nums text-[#C9D1DC]">{fmtMoney(ad.costPerCustomer)}</TableCell>
+                            </TableRow>
+                          );
+                        }) : []),
+                      ];
                     })}
-                    {sortedRows.length === 0 && (
+                    {filteredRows.length === 0 && (
                       <TableRow className="border-[#1F2937]">
-                        <TableCell colSpan={8} className="text-center text-[12px] text-[#8B92A3] py-6">
+                        <TableCell colSpan={7} className="text-center text-[12px] text-[#8B92A3] py-6">
                           No campaigns with spend or funnel activity in this window.
                         </TableCell>
                       </TableRow>
@@ -253,8 +321,7 @@ export default function AdSpendCard({
             </div>
 
             <p className="text-[11px] text-[#5B6478] mt-4">
-              RTL → Trial % is a cohort measure: for RTLs from signups in the selected window,
-              what share went on to trial (whenever the trial started). Cell shading:
+              Click any campaign with a chevron to reveal its ad assets. RTL → Trial cell colours:
               <span className="text-[#10B981] mx-1">green ≥40%</span>·
               <span className="text-[#F59E0B] mx-1">amber 20–39%</span>·
               <span className="text-[#F87171] mx-1">red &lt;20%</span>
