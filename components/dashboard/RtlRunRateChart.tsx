@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -114,7 +114,10 @@ export default function RtlRunRateChart() {
       b.rtl        += data.rtl[i]         || 0;
       b.trials     += data.trials[i]      || 0;
     }
-    return order.map((k) => {
+
+    // Compute derived values per bucket.
+    type Row = { label: string; metaSpend: number; googleSpend: number; rtl: number; rtlToTrial: number | null; costPerRtl: number | null; costPerTrial: number | null };
+    const base: Row[] = order.map((k) => {
       const b = buckets.get(k)!;
       const pct = b.rtl > 0 ? (b.trials / b.rtl) * 100 : null;
       const costPerRtl = b.rtl > 0 ? (b.metaSpend + b.googleSpend) / b.rtl : null;
@@ -124,6 +127,39 @@ export default function RtlRunRateChart() {
         metaSpend: b.metaSpend, googleSpend: b.googleSpend,
         rtl: b.rtl, rtlToTrial: pct, costPerRtl, costPerTrial,
       };
+    });
+
+    // Mark the LAST bucket as partial in every granularity.
+    // Daily: today (still accumulating). Weekly: current Mon-Sun.
+    // Monthly: current calendar month. Split each metric's series into
+    // solid (complete buckets) + dashed (partial bucket) so the current
+    // period renders dotted. The boundary point (last complete bucket)
+    // is duplicated into the dashed series so the line visually
+    // connects across the transition rather than gapping.
+    const N = base.length;
+    const partial: boolean[] = new Array(N).fill(false);
+    if (N > 0) partial[N - 1] = true;
+    const numericKeys = ["metaSpend", "googleSpend", "rtl", "rtlToTrial", "costPerRtl", "costPerTrial"] as const;
+    function split(values: (number | null)[]): { solid: (number | null)[]; dashed: (number | null)[] } {
+      const solid: (number | null)[] = new Array(N).fill(null);
+      const dashed: (number | null)[] = new Array(N).fill(null);
+      for (let i = 0; i < N; i++) (partial[i] ? dashed : solid)[i] = values[i];
+      for (let i = 1; i < N; i++) {
+        if (partial[i] && !partial[i - 1]) dashed[i - 1] = values[i - 1];
+        else if (!partial[i] && partial[i - 1]) solid[i - 1] = values[i - 1];
+      }
+      return { solid, dashed };
+    }
+    const splits: Record<string, { solid: (number | null)[]; dashed: (number | null)[] }> = {};
+    for (const k of numericKeys) splits[k] = split(base.map((r) => r[k] as number | null));
+
+    return base.map((r, i) => {
+      const row: Record<string, number | string | null> = { ...r };
+      for (const k of numericKeys) {
+        row[`${k}_solid`] = splits[k].solid[i];
+        row[`${k}_dashed`] = splits[k].dashed[i];
+      }
+      return row;
     });
   }, [data, granularity]);
 
@@ -272,16 +308,28 @@ export default function RtlRunRateChart() {
                     content={(props) => {
                       const { active: isActive, label, payload } = props as {
                         active?: boolean; label?: string;
-                        payload?: ReadonlyArray<{ name?: string; value?: number | null; color?: string; dataKey?: string }>;
+                        payload?: ReadonlyArray<{ payload?: Record<string, number | null | string | boolean> }>;
                       };
                       if (!isActive || !payload || payload.length === 0) return null;
+                      // Read raw values off the row payload — the base
+                      // metric keys are still present alongside the
+                      // _solid / _dashed split fields, so a lookup here
+                      // works regardless of which line the cursor was
+                      // over. Also means the tooltip shows all active
+                      // metrics for the bucket, not just the one line.
+                      const raw = payload[0]?.payload ?? {};
+                      const isPartial = !!raw.metaSpend_dashed || !!raw.rtl_dashed;
                       return (
                         <div className="bg-[#0E1422] border border-[#1F2937] rounded-lg p-3 text-[11px] min-w-[220px]">
-                          <div className="text-[#8B92A3] mb-1">{label ? fmtTooltipDate(String(label), granularity) : ""}</div>
+                          <div className="text-[#8B92A3] mb-1">
+                            {label ? fmtTooltipDate(String(label), granularity) : ""}
+                            {isPartial && <span className="ml-1 text-[#F59E0B]">· partial</span>}
+                          </div>
                           {METRICS.filter((m) => active.has(m.key)).map((m) => {
-                            const row = payload.find((p) => p.dataKey === m.key);
-                            if (!row || row.value === null || row.value === undefined) return null;
-                            const v = row.value as number;
+                            const rv = raw[m.key];
+                            if (rv === null || rv === undefined) return null;
+                            const v = typeof rv === "number" ? rv : Number(rv);
+                            if (!Number.isFinite(v)) return null;
                             const display = m.isPercent
                               ? `${v.toFixed(1)}%`
                               : m.isCurrency
@@ -301,23 +349,48 @@ export default function RtlRunRateChart() {
                       );
                     }}
                   />
+                  {/* Two Line components per metric: solid stroke for
+                      complete buckets, dotted stroke for the current
+                      partial bucket. The split arrays computed in
+                      `rows` above ensure the dotted segment starts
+                      at the last-complete bucket so the transition
+                      reads as one continuous line with a texture
+                      change instead of a gap. */}
                   {METRICS.map((m) => {
                     if (!active.has(m.key)) return null;
+                    const solidDash = m.isCurrency ? "4 4" : undefined;
                     return (
-                      <Line
-                        key={m.key}
-                        type="monotone"
-                        dataKey={m.key}
-                        name={m.label}
-                        yAxisId={m.axis}
-                        stroke={m.color}
-                        strokeWidth={2}
-                        strokeDasharray={m.isCurrency ? "4 4" : undefined}
-                        dot={false}
-                        activeDot={{ r: 4 }}
-                        isAnimationActive={false}
-                        connectNulls={false}
-                      />
+                      <React.Fragment key={m.key}>
+                        <Line
+                          key={m.key + "_solid"}
+                          type="monotone"
+                          dataKey={`${m.key}_solid`}
+                          name={m.label}
+                          yAxisId={m.axis}
+                          stroke={m.color}
+                          strokeWidth={2}
+                          strokeDasharray={solidDash}
+                          dot={false}
+                          activeDot={{ r: 4 }}
+                          isAnimationActive={false}
+                          connectNulls={false}
+                        />
+                        <Line
+                          key={m.key + "_dashed"}
+                          type="monotone"
+                          dataKey={`${m.key}_dashed`}
+                          name={`${m.label}__dashed`}
+                          yAxisId={m.axis}
+                          stroke={m.color}
+                          strokeWidth={2}
+                          strokeDasharray="2 4"
+                          dot={false}
+                          activeDot={{ r: 4 }}
+                          isAnimationActive={false}
+                          connectNulls={false}
+                          legendType="none"
+                        />
+                      </React.Fragment>
                     );
                   })}
                 </LineChart>
