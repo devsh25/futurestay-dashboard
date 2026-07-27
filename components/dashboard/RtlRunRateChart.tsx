@@ -13,7 +13,7 @@ import {
 // Palette lifted from AllTimeChart so paired lines read as the same
 // system (amber Meta, violet Google, primary blue for RTL, soft blue
 // for the percentage).
-type MetricKey = "metaSpend" | "googleSpend" | "rtl" | "rtlToTrial" | "costPerRtl";
+type MetricKey = "metaSpend" | "googleSpend" | "rtl" | "rtlToTrial" | "costPerRtl" | "costPerTrial";
 
 const METRICS: {
   key: MetricKey;
@@ -32,7 +32,12 @@ const METRICS: {
   // is dashed like them. Scale in $10-$500 range, so it renders as a
   // low line near the bottom of the money axis when Meta/Google spend
   // are also enabled — toggle those off to zoom in on this metric.
-  { key: "costPerRtl",  label: "Cost / RTL",    color: "#F87171", axis: "money", isCurrency: true, description: "(Meta + Google spend) / RTL count for the bucket" },
+  { key: "costPerRtl",   label: "Cost / RTL",   color: "#F87171", axis: "money", isCurrency: true, description: "(Meta + Google spend) / RTL count for the bucket" },
+  // Cost per Trialist — same shape as Cost / RTL but divided by trials
+  // instead. Runs a bit hotter numerically (trials are ~40% of RTLs on
+  // average, so $/Trial is roughly 2.5x $/RTL). Warm orange colour to
+  // read as related-to-cost-efficiency but distinct from Cost / RTL.
+  { key: "costPerTrial", label: "Cost / Trial", color: "#FB923C", axis: "money", isCurrency: true, description: "(Meta + Google spend) / Trial count for the bucket" },
 ];
 
 type Granularity = "day" | "week" | "month";
@@ -113,10 +118,11 @@ export default function RtlRunRateChart() {
       const b = buckets.get(k)!;
       const pct = b.rtl > 0 ? (b.trials / b.rtl) * 100 : null;
       const costPerRtl = b.rtl > 0 ? (b.metaSpend + b.googleSpend) / b.rtl : null;
+      const costPerTrial = b.trials > 0 ? (b.metaSpend + b.googleSpend) / b.trials : null;
       return {
         label: k,
         metaSpend: b.metaSpend, googleSpend: b.googleSpend,
-        rtl: b.rtl, rtlToTrial: pct, costPerRtl,
+        rtl: b.rtl, rtlToTrial: pct, costPerRtl, costPerTrial,
       };
     });
   }, [data, granularity]);
@@ -128,11 +134,12 @@ export default function RtlRunRateChart() {
     const sumRtl = data.rtl.reduce((s, v) => s + v, 0);
     const sumTr  = data.trials.reduce((s, v) => s + v, 0);
     return {
-      metaSpend:   sumMeta,
-      googleSpend: sumGoogle,
-      rtl:         sumRtl,
-      rtlToTrial:  sumRtl > 0 ? (sumTr / sumRtl) * 100 : null,
-      costPerRtl:  sumRtl > 0 ? (sumMeta + sumGoogle) / sumRtl : null,
+      metaSpend:     sumMeta,
+      googleSpend:   sumGoogle,
+      rtl:           sumRtl,
+      rtlToTrial:    sumRtl > 0 ? (sumTr / sumRtl) * 100 : null,
+      costPerRtl:    sumRtl > 0 ? (sumMeta + sumGoogle) / sumRtl : null,
+      costPerTrial:  sumTr  > 0 ? (sumMeta + sumGoogle) / sumTr  : null,
     };
   }, [data]);
 
