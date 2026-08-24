@@ -19,10 +19,16 @@
 import type { CampaignRow } from "./types";
 
 // Bump this when Google rolls a new GA version. Quarterly cadence.
-// v17/v18/v19 returned HTTP 404 in production probe (decommissioned);
-// v20/v21 are the active versions as of probe date. Sticking to v21
-// since it's the newer of the two — released 2025.
-const GOOGLE_ADS_API_VERSION = "v21";
+// Decommission history (all returned HTTP 404 in production probes):
+//   v17, v18, v19 — sunset 2025
+//   v20 — sunset early 2026
+//   v21 — sunset 2026 (a "your API version is out of date" email
+//         from Google in Aug 2026 was the prompt for this bump)
+// v22, v23, v24 all responded 200 with identical shape on a
+// SELECT campaign.id probe against this MCC. Sticking to v23 as a
+// middle-of-active choice — v24 is likely the newest and closer to
+// the next deprecation, v22 is the immediate replacement for v21.
+const GOOGLE_ADS_API_VERSION = "v23";
 
 void ({} as CampaignRow);  // suppress unused-import nit until consumed by a card
 
