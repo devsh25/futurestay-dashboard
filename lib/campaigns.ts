@@ -61,14 +61,38 @@ export const CAMPAIGN_DEFS: {
  *  Meta ad click, while ref_source persists — so for these codes we
  *  trust ref_source over UTM.
  *
+ *  DESIGN DECISION — this map is an OVERRIDE, not a fallback. Any
+ *  contact whose ref_source matches an entry here attributes to the
+ *  influencer's campaign, EVEN IF their UTM points at a different
+ *  campaign they clicked through afterwards. The rationale is that
+ *  the influencer generated the demand — the ad the person happened
+ *  to click en route to signing up is a downstream artefact. Applied
+ *  uniformly to every entry: SORR, KENDRA, CHARLES all move the
+ *  contact off any sibling-ad-attributed campaign onto the influencer
+ *  campaign. Under strict URL-based attribution Charles would drop
+ *  one trial and one customer all time; we accept that trade-off in
+ *  exchange for consistent influencer-credit behaviour.
+ *
  *  Add entries as new custom-LP campaigns launch.
  *    key   = referral_source value (uppercase, trimmed)
  *    value = case-insensitive substring that MUST appear in the
  *            Meta campaign's name (so we still respect the active
  *            campaign roster — if the targeted campaign isn't
- *            currently active, the override is a no-op). */
+ *            currently active, the override is a no-op).
+ *
+ *  Not mapped (no dedicated Meta campaign exists — flagged for
+ *  follow-up if we ever want them visible in the dashboard):
+ *    SSJ / SSJ25  Stacey St. John, ~38 contacts
+ *    TATI         Olivia Tati,     ~3 contacts. Do NOT add without
+ *                 a Meta campaign to point at; the substring "tati"
+ *                 appears inside "Static" and would misattribute
+ *                 the entire "Static & Video Ads" family (>$200K
+ *                 spend) if used as a case-insensitive hint.
+ *    AYSHA        Aysha Chaudhry,  ~3 contacts */
 export const REF_SOURCE_TO_CAMPAIGN_HINT: Record<string, string> = {
-  SORR: "Syerena",   // Syerena Orr influencer LP
+  SORR:    "Syerena",   // Syerena Orr influencer LP
+  KENDRA:  "Kendra",    // Kendra "The Key Resource" influencer LP + KENDRA20 coupon URL
+  CHARLES: "Charles",   // Charles Lamplough influencer LP
 };
 
 /** Attribute a HubSpot contact to a specific Meta campaign (by name).
