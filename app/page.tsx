@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { DashboardData, PeriodFilter } from "@/lib/types";
-import { tzStartOfDay, tzAddDays, tzDateKey } from "@/lib/timezone";
+import { tzStartOfDay, tzStartOfMonth, tzAddDays, tzDateKey } from "@/lib/timezone";
+import { targetForRange } from "@/lib/customer-targets";
 import FilterBar from "@/components/FilterBar";
 import KPICards from "@/components/dashboard/KPICards";
 import AllTimeChart from "@/components/dashboard/AllTimeChart";
 import RtlRunRateChart from "@/components/dashboard/RtlRunRateChart";
+import PaidCustomerRunRateChart from "@/components/dashboard/PaidCustomerRunRateChart";
 import DashboardSkeleton from "@/components/dashboard/DashboardSkeleton";
 import RetentionCurveChart from "@/components/dashboard/RetentionCurveChart";
 import FunnelCard from "@/components/dashboard/FunnelCard";
@@ -35,21 +37,24 @@ export default function Dashboard() {
   const [hasInitialRunRate, setHasInitialRunRate] = useState(false);
   const firstFoldReady = hasInitialContacts && hasInitialRunRate;
   const isRefreshing = loading && firstFoldReady;
-  // Default custom range: today (single-day window), ET. Matches how
-  // the team opens the dashboard first thing in the morning to see
-  // where the day already stands.
+  // Default custom range: this calendar month to date (ET). The team
+  // tracks performance against monthly targets, so opening the
+  // dashboard on month-to-date is the natural reference view. Switch
+  // back to a single-day or trailing window via the filter bar when a
+  // narrower cut is wanted.
   //
   // All date arithmetic in ET so the default + maturity warning are
   // stable for any user regardless of their browser timezone.
   const nowEt = tzStartOfDay(new Date());
   const todayIso = tzDateKey(nowEt);
+  const monthStartIso = tzDateKey(tzStartOfMonth(nowEt));
   // Kept alongside the new default for the "Cohort still maturing"
   // warning banner, which nudges the user back to T−14d if they
   // extend the window into the recent 14 days.
   const tMinus14Iso = tzDateKey(tzAddDays(nowEt, -14));
 
   const [period, setPeriod] = useState<PeriodFilter>("custom");
-  const [customStart, setCustomStart] = useState(todayIso);
+  const [customStart, setCustomStart] = useState(monthStartIso);
   const [customEnd, setCustomEnd] = useState(todayIso);
   const [countries, setCountries] = useState<string[]>([]);
   const [channels, setChannels] = useState<string[]>([]);
@@ -62,6 +67,19 @@ export default function Dashboard() {
     const cutoffEt = tzAddDays(nowEt, -14);
     return endEt > cutoffEt;
   })();
+
+  // Prorated customer target for the active window. Only computed for
+  // "custom" periods right now because the FilterBar's preset periods
+  // (last 7 / 30 / 90 days, this/last week etc.) don't have an
+  // obvious month-anchored target interpretation; those presets show
+  // no target chip, which is the right default. If a preset ever
+  // needs a target, resolve its date range here and reuse
+  // targetForRange on it.
+  const customerTarget = useMemo(() => {
+    if (period !== "custom") return undefined;
+    const t = targetForRange(customStart, customEnd);
+    return t > 0 ? t : undefined;
+  }, [period, customStart, customEnd]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -211,12 +229,13 @@ export default function Dashboard() {
                 description="Headline metrics with 14-day trend vs prior period"
                 iconColor="#60A5FA"
               />
-              <KPICards kpis={data.kpis} cohort={data.cohort} />
+              <KPICards kpis={data.kpis} cohort={data.cohort} customerTarget={customerTarget} />
 
               {/* Headline timeseries — independent of period filter,
                   shows daily milestone counts since first signup. */}
               <AllTimeChart onReady={handleRunRateReady} />
               <RtlRunRateChart />
+              <PaidCustomerRunRateChart />
 
               <SectionHeading
                 icon={Icons.Funnel}

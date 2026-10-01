@@ -24,10 +24,37 @@ function TrendBadge({ delta }: { delta: TrendDelta }) {
 }
 
 /**
+ * Pace-to-target chip. Shows actual-vs-prorated-target as a percentage
+ * with a plain-English label. Color codes against 100% (green at or
+ * above, blue in the 80 to 100 band, amber below). Rendered under the
+ * sparkline row so it reads as a secondary attribute of the KPI
+ * without competing with the hero number.
+ */
+function TargetChip({ actual, target }: { actual: number; target: number }) {
+  if (target <= 0) return null;
+  const pct = (actual / target) * 100;
+  const tone =
+    pct >= 100 ? "text-[#10B981]" :
+    pct >= 80  ? "text-[#60A5FA]" :
+                 "text-[#F59E0B]";
+  return (
+    <p className="text-[11px] text-[#8B92A3] mt-2 tabular-nums">
+      <span className={`font-semibold ${tone}`}>{pct.toFixed(0)}%</span>
+      <span className="ml-1">of target</span>
+      <span className="ml-1 opacity-60">({actual.toLocaleString()} / {Math.round(target).toLocaleString()})</span>
+    </p>
+  );
+}
+
+/**
  * One KPI cell inside the divided container. Big number + label + optional
  * sparkline. The container provides surrounding padding and dividers, so
  * the cell has no border/radius of its own — that's the whole point of the
  * pattern: 4 metrics in a single visual unit, separated by hairlines.
+ *
+ * Optional `targetValue` renders a pace-to-target chip under the sparkline
+ * row — used by the Total Customers cell to show the window's prorated
+ * monthly customer target.
  */
 function KPICell({
   label,
@@ -36,6 +63,7 @@ function KPICell({
   sparklineData,
   sparklineColor,
   basis,
+  targetValue,
 }: {
   label: string;
   value: number;
@@ -45,6 +73,7 @@ function KPICell({
   // "cohort" = filtered by createdate in window
   // "period" = filtered by lifecycle-event date in window (trial/customer entry)
   basis: "cohort" | "period";
+  targetValue?: number;
 }) {
   // Tiny corner indicator so the basis is glanceable without reading the
   // methodology paragraph. Uses the same blue tone for both so it
@@ -71,6 +100,7 @@ function KPICell({
         <p className="text-[12px] text-[#8B92A3] font-medium truncate">{label}</p>
         <Sparkline data={sparklineData} color={sparklineColor} width={56} height={22} />
       </div>
+      {targetValue !== undefined && <TargetChip actual={value} target={targetValue} />}
     </div>
   );
 }
@@ -113,9 +143,14 @@ function RateCard({
 export default function KPICards({
   kpis,
   cohort,
+  customerTarget,
 }: {
   kpis: KPIs;
   cohort: CohortData;
+  // Prorated monthly customer target for the active window. Rendered as
+  // a pace-to-target chip under the Total Customers tile. Undefined =
+  // no chip (e.g. for windows that fall entirely outside the target map).
+  customerTarget?: number;
 }) {
   return (
     <div className="space-y-5">
@@ -188,6 +223,7 @@ export default function KPICards({
             sparklineData={kpis.sparkline.customers}
             sparklineColor="#1E6FFF"
             basis="period"
+            targetValue={customerTarget}
           />
         </div>
       </div>
