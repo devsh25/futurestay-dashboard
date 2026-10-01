@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { DashboardData, PeriodFilter } from "@/lib/types";
 import { tzStartOfDay, tzStartOfMonth, tzAddDays, tzDateKey } from "@/lib/timezone";
-import { targetForRange } from "@/lib/customer-targets";
+import { fullMonthTargetForRange } from "@/lib/customer-targets";
 import FilterBar from "@/components/FilterBar";
 import KPICards from "@/components/dashboard/KPICards";
 import AllTimeChart from "@/components/dashboard/AllTimeChart";
@@ -68,16 +68,18 @@ export default function Dashboard() {
     return endEt > cutoffEt;
   })();
 
-  // Prorated customer target for the active window. Only computed for
-  // "custom" periods right now because the FilterBar's preset periods
-  // (last 7 / 30 / 90 days, this/last week etc.) don't have an
-  // obvious month-anchored target interpretation; those presets show
-  // no target chip, which is the right default. If a preset ever
-  // needs a target, resolve its date range here and reuse
-  // targetForRange on it.
+  // Headline customer target for the KPI chip: sum of the FULL monthly
+  // targets for every calendar month the window overlaps. A single day
+  // in October counts the whole 165 as the goal, not a prorated share.
+  //
+  // Only computed for "custom" periods right now because the FilterBar's
+  // preset periods (last 7 / 30 / 90 days, this/last week etc.) don't
+  // have an obvious month-anchored target interpretation. If a preset
+  // ever needs one, resolve its date range here and reuse
+  // fullMonthTargetForRange on it.
   const customerTarget = useMemo(() => {
     if (period !== "custom") return undefined;
-    const t = targetForRange(customStart, customEnd);
+    const t = fullMonthTargetForRange(customStart, customEnd);
     return t > 0 ? t : undefined;
   }, [period, customStart, customEnd]);
 

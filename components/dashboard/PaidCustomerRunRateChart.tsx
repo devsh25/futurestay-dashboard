@@ -7,6 +7,7 @@ import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
+import { MONTHLY_CUSTOMER_TARGETS } from "@/lib/customer-targets";
 
 /**
  * Paid Customer Run Rate — cumulative actual vs cumulative monthly
@@ -118,10 +119,14 @@ export default function PaidCustomerRunRateChart() {
 
     // 3) Walk the buckets in order and compute CUMULATIVE actual + target.
     //    These are the series the chart plots. The per-bucket raw values
-    //    stay in the row so the tooltip can show both.
+    //    stay in the row so the tooltip can show both. For monthly
+    //    buckets we also carry the FULL-month target (from the lookup
+    //    map) so the tooltip can show the real monthly goal — 165 for
+    //    Oct on day 1 — rather than the day-prorated share (5) that
+    //    the running cumulative line uses.
     type Row = {
       label: string;
-      actualBucket: number; targetBucket: number;
+      actualBucket: number; targetBucket: number; monthlyTargetFull: number | null;
       actualCum: number;    targetCum: number;
       surplus: number;
     };
@@ -130,9 +135,16 @@ export default function PaidCustomerRunRateChart() {
       const b = buckets.get(k)!;
       aCum += b.actual;
       tCum += b.target;
+      // Monthly bucket labels are "YYYY-MM-01" — strip the day to
+      // index into MONTHLY_CUSTOMER_TARGETS. Other granularities
+      // leave monthlyTargetFull null (not meaningful across week /
+      // day boundaries).
+      const monthlyTargetFull = granularity === "month"
+        ? (MONTHLY_CUSTOMER_TARGETS[k.slice(0, 7)] ?? null)
+        : null;
       return {
         label: k,
-        actualBucket: b.actual, targetBucket: b.target,
+        actualBucket: b.actual, targetBucket: b.target, monthlyTargetFull,
         actualCum: aCum,        targetCum: tCum,
         surplus: aCum - tCum,
       };
@@ -186,12 +198,12 @@ export default function PaidCustomerRunRateChart() {
     if (firstTargetDay === -1) firstTargetDay = 0;
     const sumActual = data.actual.slice(firstTargetDay).reduce((s, v) => s + v, 0);
     const sumTarget = data.target.slice(firstTargetDay).reduce((s, v) => s + v, 0);
-    // Round the surplus before storing so the chip label never flips
-    // to "Deficit" or prints "-0" because of a float-arithmetic sliver.
+    // Round + `+ 0` normalises negative-zero so the chip never
+    // reads "Deficit -0" because of a float-arithmetic sliver.
     return {
       actualCum: sumActual,
       targetCum: sumTarget,
-      surplus:   Math.round(sumActual - sumTarget),
+      surplus:   Math.round(sumActual - sumTarget) + 0,
     };
   }, [data]);
 
@@ -300,50 +312,84 @@ export default function PaidCustomerRunRateChart() {
                       const aCum = Number(raw.actualCum ?? 0);
                       const tCum = Number(raw.targetCum ?? 0);
                       const aBkt = Number(raw.actualBucket ?? 0);
-                      const tBkt = Number(raw.targetBucket ?? 0);
-                      // Round before comparing so a float-arithmetic
-                      // sliver (e.g. 154 - 153.999999... = -1e-14) does
-                      // not flip the sign of a value that is really 0.
-                      // Keeps the chip from ever printing "-0".
-                      const surplus       = Math.round(aCum - tCum);
-                      const bucketSurplus = Math.round(aBkt - tBkt);
+                      // In monthly view, swap in the FULL-month target
+                      // (165 for Oct) in place of the day-prorated share
+                      // (5 for Oct on day 1). The user wants to read
+                      // the actual against the real monthly goal in the
+                      // tooltip's per-month section. Daily / weekly
+                      // keep the bucket's own prorated target because
+                      // "full-month target" doesn't apply across
+                      // sub-month windows.
+                      const tBktRaw = Number(raw.targetBucket ?? 0);
+                      const monthlyFull = raw.monthlyTargetFull as number | null | undefined;
+                      const tBkt = (granularity === "month" && monthlyFull != null)
+                        ? monthlyFull
+                        : tBktRaw;
+                      // Round + `+ 0` normalises float-arithmetic
+                      // slivers (154 - 153.999... = -1e-14, which
+                      // Math.round preserves as `-0`) so the chip
+                      // never prints "-0". The `+ 0` is load-bearing:
+                      // `-0 + 0 === +0` while `Math.round` alone
+                      // keeps the negative sign.
+                      const surplus       = Math.round(aCum - tCum) + 0;
+                      const bucketSurplus = Math.round(aBkt - tBkt) + 0;
+                      // "this month / week / day" copy follows the
+                      // granularity so the per-bucket block reads
+                      // naturally regardless of toggle.
+                      const bucketWord =
+                        granularity === "month" ? "This month" :
+                        granularity === "week"  ? "This week"  :
+                                                  "This day";
                       return (
                         <div className="bg-[#0E1422] border border-[#1F2937] rounded-lg p-3 text-[11px] min-w-[240px]">
-                          <div className="text-[#8B92A3] mb-1">
+                          <div className="text-[#8B92A3] mb-2">
                             {label ? fmtTooltipDate(String(label), granularity) : ""}
                             {isPartial && <span className="ml-1 text-[#F59E0B]">· partial</span>}
                           </div>
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="flex items-center gap-2 min-w-0">
-                              <span className="h-2 w-2 rounded-full flex-none" style={{ backgroundColor: "#1E6FFF" }} />
-                              <span className="text-white truncate">Actual (cumulative)</span>
-                            </span>
-                            <span className="font-mono tabular-nums text-white flex-none">
-                              {Math.round(aCum).toLocaleString()}
-                              <span className="opacity-50 ml-1">(+{aBkt.toLocaleString()})</span>
-                            </span>
+
+                          {/* Per-bucket block — the actual and target
+                              for just this month / week / day, plus the
+                              surplus or deficit for the same window. */}
+                          <div className="mb-2">
+                            <div className="text-[10px] uppercase tracking-wider text-[#5B6478] mb-1">{bucketWord}</div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="flex items-center gap-2 min-w-0">
+                                <span className="h-2 w-2 rounded-full flex-none" style={{ backgroundColor: "#1E6FFF" }} />
+                                <span className="text-white">Actual</span>
+                              </span>
+                              <span className="font-mono tabular-nums text-white">{aBkt.toLocaleString()}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="flex items-center gap-2 min-w-0">
+                                <span className="h-2 w-2 rounded-full flex-none" style={{ backgroundColor: "#A78BFA" }} />
+                                <span className="text-white">Target</span>
+                              </span>
+                              <span className="font-mono tabular-nums text-white">{Math.round(tBkt).toLocaleString()}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-[#8B92A3]">Surplus / deficit</span>
+                              <span className={`font-mono tabular-nums font-semibold ${bucketSurplus >= 0 ? "text-[#10B981]" : "text-[#EF4444]"}`}>
+                                {bucketSurplus > 0 ? "+" : ""}{bucketSurplus.toLocaleString()}
+                              </span>
+                            </div>
                           </div>
-                          <div className="flex items-center justify-between gap-3">
-                            <span className="flex items-center gap-2 min-w-0">
-                              <span className="h-2 w-2 rounded-full flex-none" style={{ backgroundColor: "#A78BFA" }} />
-                              <span className="text-white truncate">Target (cumulative)</span>
-                            </span>
-                            <span className="font-mono tabular-nums text-white flex-none">
-                              {Math.round(tCum).toLocaleString()}
-                              <span className="opacity-50 ml-1">(+{Math.round(tBkt).toLocaleString()})</span>
-                            </span>
-                          </div>
-                          <div className="mt-2 pt-2 border-t border-[#1F2937]">
+
+                          {/* Cumulative block — totals from the start of
+                              the window to the end of this bucket. */}
+                          <div className="pt-2 border-t border-[#1F2937]">
+                            <div className="text-[10px] uppercase tracking-wider text-[#5B6478] mb-1">Cumulative to date</div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-white">Actual</span>
+                              <span className="font-mono tabular-nums text-white">{Math.round(aCum).toLocaleString()}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-white">Target</span>
+                              <span className="font-mono tabular-nums text-white">{Math.round(tCum).toLocaleString()}</span>
+                            </div>
                             <div className="flex items-center justify-between gap-3">
                               <span className="text-[#8B92A3]">Surplus / deficit</span>
                               <span className={`font-mono tabular-nums font-semibold ${surplus >= 0 ? "text-[#10B981]" : "text-[#EF4444]"}`}>
                                 {surplus > 0 ? "+" : ""}{surplus.toLocaleString()}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between gap-3 opacity-70">
-                              <span className="text-[#8B92A3]">This bucket</span>
-                              <span className={`font-mono tabular-nums ${bucketSurplus >= 0 ? "text-[#10B981]" : "text-[#EF4444]"}`}>
-                                {bucketSurplus > 0 ? "+" : ""}{bucketSurplus.toLocaleString()}
                               </span>
                             </div>
                           </div>

@@ -24,24 +24,27 @@ function TrendBadge({ delta }: { delta: TrendDelta }) {
 }
 
 /**
- * Pace-to-target chip. Shows actual-vs-prorated-target as a percentage
- * with a plain-English label. Color codes against 100% (green at or
- * above, blue in the 80 to 100 band, amber below). Rendered under the
- * sparkline row so it reads as a secondary attribute of the KPI
- * without competing with the hero number.
+ * Progress-to-target chip. Shows actual-vs-full-monthly-target as a
+ * percentage with a plain-English label — e.g. "6% of target (10 /
+ * 165)" on Oct 1 for the 165-customer October goal. The target is the
+ * sum of full monthly goals for every month the window overlaps, so a
+ * one-day window still reads against the real monthly goal rather
+ * than a near-zero prorated denominator.
+ *
+ * Because this is a progress reading rather than a pace reading, the
+ * color is kept neutral (muted text) until the goal is actually hit —
+ * green only once the window reaches or exceeds 100% of its target so
+ * day-one of a month doesn't light up in warning colors.
  */
 function TargetChip({ actual, target }: { actual: number; target: number }) {
   if (target <= 0) return null;
   const pct = (actual / target) * 100;
-  const tone =
-    pct >= 100 ? "text-[#10B981]" :
-    pct >= 80  ? "text-[#60A5FA]" :
-                 "text-[#F59E0B]";
+  const tone = pct >= 100 ? "text-[#10B981]" : "text-white";
   return (
     <p className="text-[11px] text-[#8B92A3] mt-2 tabular-nums">
       <span className={`font-semibold ${tone}`}>{pct.toFixed(0)}%</span>
       <span className="ml-1">of target</span>
-      <span className="ml-1 opacity-60">({actual.toLocaleString()} / {Math.round(target).toLocaleString()})</span>
+      <span className="ml-1 opacity-60">({actual.toLocaleString()} / {target.toLocaleString()})</span>
     </p>
   );
 }
@@ -52,9 +55,10 @@ function TargetChip({ actual, target }: { actual: number; target: number }) {
  * the cell has no border/radius of its own — that's the whole point of the
  * pattern: 4 metrics in a single visual unit, separated by hairlines.
  *
- * Optional `targetValue` renders a pace-to-target chip under the sparkline
- * row — used by the Total Customers cell to show the window's prorated
- * monthly customer target.
+ * Optional `targetValue` renders a progress-to-target chip under the
+ * sparkline row — used by the Total Customers cell to show the window's
+ * full-month customer target (sum of each full monthly target the window
+ * overlaps).
  */
 function KPICell({
   label,
@@ -147,9 +151,10 @@ export default function KPICards({
 }: {
   kpis: KPIs;
   cohort: CohortData;
-  // Prorated monthly customer target for the active window. Rendered as
-  // a pace-to-target chip under the Total Customers tile. Undefined =
-  // no chip (e.g. for windows that fall entirely outside the target map).
+  // Full-month customer target(s) covering the active window. Rendered
+  // as a progress-to-target chip under the Total Customers tile.
+  // Undefined = no chip (e.g. for windows that fall entirely outside
+  // the target map).
   customerTarget?: number;
 }) {
   return (

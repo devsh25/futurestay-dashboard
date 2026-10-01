@@ -47,7 +47,8 @@ export function dailyTarget(dateIso: string): number {
  *
  * Walks the range day by day and sums `dailyTarget` for each day. This
  * is simple, correct across month boundaries, and cheap for the
- * ranges the dashboard works with (<= 1 year).
+ * ranges the dashboard works with (<= 1 year). Used by the run-rate
+ * chart where each day on the x-axis needs its own target share.
  */
 export function targetForRange(startIso: string, endIso: string): number {
   if (!startIso || !endIso || endIso < startIso) return 0;
@@ -61,6 +62,35 @@ export function targetForRange(startIso: string, endIso: string): number {
     const iso = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
     total += dailyTarget(iso);
   }
+  return total;
+}
+
+/**
+ * Full-month target(s) covering an inclusive ET date range.
+ *
+ * Returns the SUM of unprorated monthly targets for every calendar
+ * month the range touches, so the headline "% of target" chip reads
+ * against the real goal (e.g. "10 / 165" on Oct 1) instead of a
+ * day-prorated share that collapses to a near-zero denominator
+ * early in a month.
+ *
+ * Range entirely inside Oct → 165. Range spanning Sep + Oct → 319.
+ * A single day in a month still contributes that month's full
+ * target — the chip is a goal reference, not a pace estimate.
+ */
+export function fullMonthTargetForRange(startIso: string, endIso: string): number {
+  if (!startIso || !endIso || endIso < startIso) return 0;
+  const [sy, sm, sd] = startIso.split("-").map(Number);
+  const [ey, em, ed] = endIso.split("-").map(Number);
+  const startMs = Date.UTC(sy, sm - 1, sd);
+  const endMs = Date.UTC(ey, em - 1, ed);
+  const months = new Set<string>();
+  for (let t = startMs; t <= endMs; t += 86_400_000) {
+    const d = new Date(t);
+    months.add(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
+  }
+  let total = 0;
+  for (const ym of months) total += MONTHLY_CUSTOMER_TARGETS[ym] || 0;
   return total;
 }
 
