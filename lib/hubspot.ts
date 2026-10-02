@@ -1,4 +1,4 @@
-import { head, put } from "@vercel/blob";
+import { get, put } from "@vercel/blob";
 import { HubSpotContact } from "./types";
 
 const HUBSPOT_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN!;
@@ -139,21 +139,18 @@ async function hubspotFetch(
  * Read a cached JSON payload from Vercel Blob. Returns null if the
  * blob is missing, unreachable, or malformed — the caller falls back
  * to HubSpot in that case.
+ *
+ * The project's Blob store is configured private, so we authenticate
+ * via `get({ access: "private" })` — fetching the public URL from
+ * `head()` would 403.
  */
 async function readFromBlob<T>(path: string): Promise<T | null> {
   try {
-    const info = await head(path);
-    if (!info?.url) return null;
-    // Blob URLs are public and content-addressable; `cache: "no-store"`
-    // skips the fetch cache so we always see the latest version after
-    // a warm-cache run. Blob itself is fronted by Vercel's CDN so this
-    // is still quick (~200-500 ms for ~5 MB).
-    const res = await fetch(info.url, { cache: "no-store" });
-    if (!res.ok) return null;
-    return (await res.json()) as T;
+    const result = await get(path, { access: "private", useCache: false });
+    if (!result?.stream) return null;
+    const text = await new Response(result.stream).text();
+    return JSON.parse(text) as T;
   } catch (err) {
-    // Blob missing is the common case (fresh deploy, first run). We
-    // don't want to spam logs with those; log everything else.
     const msg = err instanceof Error ? err.message : String(err);
     if (!/not.?found|BlobNotFound/i.test(msg)) {
       console.log(`[hubspot] blob read failed for ${path}: ${msg}`);
@@ -164,7 +161,7 @@ async function readFromBlob<T>(path: string): Promise<T | null> {
 
 async function writeToBlob(path: string, data: unknown): Promise<void> {
   await put(path, JSON.stringify(data), {
-    access: "public",
+    access: "private",
     contentType: "application/json",
     allowOverwrite: true,
     addRandomSuffix: false,
