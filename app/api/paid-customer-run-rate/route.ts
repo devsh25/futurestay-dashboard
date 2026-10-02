@@ -33,8 +33,10 @@ import { dailyTarget, lastTargetDateIso } from "@/lib/customer-targets";
  * Partner + test contacts excluded upstream to match everywhere else.
  */
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+// ISR: cache the full JSON response for 5 minutes. The handler itself
+// runs in ~1-2s once fetchAllContacts is warm; cached hits bypass it
+// and come straight from Vercel's edge cache.
+export const revalidate = 300;
 
 export async function GET() {
   try {

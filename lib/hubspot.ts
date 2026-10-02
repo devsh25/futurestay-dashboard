@@ -1,7 +1,16 @@
+import { unstable_cache } from "next/cache";
 import { HubSpotContact } from "./types";
 
 const HUBSPOT_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN!;
 const BASE_URL = "https://api.hubapi.com";
+
+// Cross-invocation TTL for the Vercel Data Cache. 5 minutes matches
+// the in-memory CACHE_TTL below, so the two layers decay together.
+// Bump the version suffix on the cache key when CONTACT_PROPERTIES
+// changes shape so old cached payloads are not served to new code
+// that expects extra fields.
+const DATA_CACHE_TTL_SECONDS = 300;
+const CACHE_KEY_VERSION = "v1";
 
 const CONTACT_PROPERTIES = [
   "account_lifecycle",
@@ -117,20 +126,46 @@ async function hubspotFetch(
   throw new Error("HubSpot API rate limit — please refresh in ~30 seconds");
 }
 
+// Three-layer cache for the full-contacts fetch:
+//   1. Per-container in-memory cache (<1ms, hits within one serverless
+//      container's warm lifetime; CACHE_TTL above).
+//   2. Single-flight dedupe so 6 endpoints that mount in parallel don't
+//      each start a 39s HubSpot pagination on a cold cache.
+//   3. Vercel Data Cache via unstable_cache — persists across cold
+//      starts and deployments, so even a brand-new container served
+//      first serves from this layer rather than paying the full 39s.
+//      Backs onto filesystem in local dev and the hosted Data Cache in
+//      production.
+//
+// Flow (cold Vercel container, warm Data Cache):
+//   fetchAllContacts → in-memory miss → single-flight → unstable_cache
+//     hit (~50ms) → in-memory populated → data returned
+//
+// Flow (both layers cold):
+//   fetchAllContacts → in-memory miss → single-flight →
+//     unstable_cache miss → doFetchAllContacts (~39s) →
+//     unstable_cache populated → in-memory populated → data returned
+const cachedFetchAllContacts = unstable_cache(
+  doFetchAllContacts,
+  [`hubspot:fetchAllContacts:${CACHE_KEY_VERSION}`],
+  { revalidate: DATA_CACHE_TTL_SECONDS, tags: ["hubspot-contacts"] },
+);
+
 export async function fetchAllContacts(): Promise<HubSpotContact[]> {
-  // Check cache
   if (contactsCache && Date.now() - contactsCache.timestamp < CACHE_TTL) {
     return contactsCache.data;
   }
-  // If another caller is already fetching, wait for that fetch instead
-  // of starting our own. Single-flight prevents cache stampede when
-  // multiple endpoints load simultaneously on a cold cache.
   if (contactsInFlight) {
     return contactsInFlight;
   }
-  contactsInFlight = doFetchAllContacts().finally(() => {
-    contactsInFlight = null;
-  });
+  contactsInFlight = cachedFetchAllContacts()
+    .then((data) => {
+      contactsCache = { data, timestamp: Date.now() };
+      return data;
+    })
+    .finally(() => {
+      contactsInFlight = null;
+    });
   return contactsInFlight;
 }
 
@@ -234,8 +269,9 @@ async function doFetchAllContacts(): Promise<HubSpotContact[]> {
     if (after) await sleep(150);
   } while (after && pageCount < MAX_PAGES);
 
-  // Update cache
-  contactsCache = { data: allContacts, timestamp: Date.now() };
+  // In-memory cache is populated by the fetchAllContacts wrapper so
+  // that cached-via-unstable_cache responses populate it too; no write
+  // needed here.
   return allContacts;
 }
 
@@ -255,14 +291,26 @@ async function doFetchAllContacts(): Promise<HubSpotContact[]> {
  *
  * The data shape is the same as fetchAllContacts() — same field set.
  */
+// Same three-layer cache as fetchAllContacts — see the comment there.
+const cachedFetchAllCustomers = unstable_cache(
+  doFetchAllCustomers,
+  [`hubspot:fetchAllCustomers:${CACHE_KEY_VERSION}`],
+  { revalidate: DATA_CACHE_TTL_SECONDS, tags: ["hubspot-contacts"] },
+);
+
 export async function fetchAllCustomers(): Promise<HubSpotContact[]> {
   if (customersCache && Date.now() - customersCache.timestamp < CACHE_TTL) {
     return customersCache.data;
   }
   if (customersInFlight) return customersInFlight;
-  customersInFlight = doFetchAllCustomers().finally(() => {
-    customersInFlight = null;
-  });
+  customersInFlight = cachedFetchAllCustomers()
+    .then((data) => {
+      customersCache = { data, timestamp: Date.now() };
+      return data;
+    })
+    .finally(() => {
+      customersInFlight = null;
+    });
   return customersInFlight;
 }
 
@@ -351,18 +399,30 @@ async function doFetchAllCustomers(): Promise<HubSpotContact[]> {
     if (after) await sleep(150);
   } while (after && pageCount < MAX_PAGES);
 
-  customersCache = { data: all, timestamp: Date.now() };
+  // In-memory cache is populated by fetchAllCustomers wrapper.
   return all;
 }
+
+// Owners rarely change; same persistent cache treatment.
+const cachedFetchOwnerNames = unstable_cache(
+  doFetchOwnerNames,
+  [`hubspot:fetchOwnerNames:${CACHE_KEY_VERSION}`],
+  { revalidate: DATA_CACHE_TTL_SECONDS, tags: ["hubspot-owners"] },
+);
 
 export async function fetchOwnerNames(): Promise<Record<string, string>> {
   if (ownersCache && Date.now() - ownersCache.timestamp < CACHE_TTL) {
     return ownersCache.data;
   }
   if (ownersInFlight) return ownersInFlight;
-  ownersInFlight = doFetchOwnerNames().finally(() => {
-    ownersInFlight = null;
-  });
+  ownersInFlight = cachedFetchOwnerNames()
+    .then((data) => {
+      ownersCache = { data, timestamp: Date.now() };
+      return data;
+    })
+    .finally(() => {
+      ownersInFlight = null;
+    });
   return ownersInFlight;
 }
 
@@ -381,7 +441,7 @@ async function doFetchOwnerNames(): Promise<Record<string, string>> {
     map[owner.id] = name || owner.email || owner.id;
   }
 
-  ownersCache = { data: map, timestamp: Date.now() };
+  // In-memory cache is populated by the fetchOwnerNames wrapper.
   return map;
 }
 

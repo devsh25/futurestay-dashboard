@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { fetchAllCustomers } from "@/lib/hubspot";
 import { computeRetention } from "@/lib/retention";
 
+// ISR: cache the retention JSON for 5 minutes. Retention curves move
+// slowly (customer-month granularity) so a 5-minute staleness is a
+// non-issue, and cached hits bypass the ~18s cold handler entirely.
+export const revalidate = 300;
+
 /**
  * Retention curve data — % of paying-customer cohort retained at
  * each milestone post-entry, segmented by plan family (Amplify / Flex).

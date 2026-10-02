@@ -4,6 +4,12 @@ import { computeTimeSeries } from "@/lib/funnel";
 import { fetchMetaInsights } from "@/lib/meta";
 import { fetchGoogleAdsDaily } from "@/lib/google";
 
+// ISR: cache the all-time timeseries JSON for 5 minutes. No request
+// params, so one cache entry covers every viewer. First cold hit still
+// pays the full fetchAllContacts + Meta + Google round-trip; everything
+// after is served straight from Vercel's edge cache.
+export const revalidate = 300;
+
 /**
  * All-time daily timeseries for the headline KPIs.
  *

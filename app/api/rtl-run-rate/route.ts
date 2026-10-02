@@ -30,8 +30,12 @@ import { tzDateKey } from "@/lib/timezone";
  * Partner + test contacts excluded upstream.
  */
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+// ISR: cache the full JSON response for 5 minutes. The Hobby tier
+// gets 10s per invocation and the handler takes ~2s once fetchAllContacts
+// is warm, so the first cold hit still fits inside the limit; cached
+// hits after that skip the handler entirely and are served from
+// Vercel's edge cache.
+export const revalidate = 300;
 
 export async function GET() {
   try {
