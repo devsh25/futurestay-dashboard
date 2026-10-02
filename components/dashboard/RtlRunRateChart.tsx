@@ -16,8 +16,8 @@ import {
 type MetricKey = "metaSpend" | "googleSpend" | "rtl" | "rtlToTrial" | "costPerRtl" | "costPerTrial" | "customers" | "costPerCustomer";
 
 // Order matters: this is also the chip-row order and the default
-// toggle set is the first two (Cost / RTL + Cost / Customer). The
-// efficiency metrics lead because this card is the "Efficiency
+// toggle set is the first two (Cost / Customer + Cost / Trial). The
+// three $/ratio metrics lead because this card is the "Efficiency
 // Chart" — the volume + budget series below are secondary context
 // you toggle in when a cost shift needs an explanation.
 const METRICS: {
@@ -29,20 +29,18 @@ const METRICS: {
   isCurrency?: boolean;
   description: string;
 }[] = [
-  // Cost per RTL — the primary efficiency reading. Sits on the money
-  // axis; dashed stroke so it reads as a derived $/ratio rather than
-  // a raw spend amount.
-  { key: "costPerRtl",      label: "Cost / RTL",      color: "#F87171", axis: "money", isCurrency: true, description: "(Meta + Google spend) / RTL count for the bucket" },
-  // Cost per Customer — the money-axis sibling of Customers. Hottest
-  // numerically (customers are a fraction of trials), so expect it to
-  // sit well above $/Trial and $/RTL on the same axis. Teal to tie
-  // visually to the green Customers line without colliding.
+  // Cost per Customer — the headline efficiency reading. Teal to tie
+  // visually to the green Customers line below without colliding.
   { key: "costPerCustomer", label: "Cost / Customer", color: "#2DD4BF", axis: "money", isCurrency: true, description: "(Meta + Google spend) / Customer count for the bucket" },
-  // Cost per Trialist — same shape as Cost / RTL but divided by trials
-  // instead. Runs a bit hotter numerically (trials are ~40% of RTLs on
-  // average, so $/Trial is roughly 2.5x $/RTL). Warm orange colour to
-  // read as related-to-cost-efficiency but distinct from Cost / RTL.
+  // Cost per Trialist — the mid-funnel efficiency reading. Trials are
+  // ~40% of RTLs on average, so $/Trial sits roughly 2.5x $/RTL.
+  // Warm orange so it reads as cost-efficiency and distinct from
+  // Cost / Customer and Cost / RTL on the same axis.
   { key: "costPerTrial",    label: "Cost / Trial",    color: "#FB923C", axis: "money", isCurrency: true, description: "(Meta + Google spend) / Trial count for the bucket" },
+  // Cost per RTL — the top-of-funnel efficiency reading. Cheapest of
+  // the three $/ratios so it tends to sit near the bottom of the
+  // money axis when all three are on.
+  { key: "costPerRtl",      label: "Cost / RTL",      color: "#F87171", axis: "money", isCurrency: true, description: "(Meta + Google spend) / RTL count for the bucket" },
   { key: "metaSpend",       label: "Meta budget",     color: "#F59E0B", axis: "money", isCurrency: true, description: "Meta account-level daily spend" },
   { key: "googleSpend",     label: "Google budget",   color: "#A78BFA", axis: "money", isCurrency: true, description: "Google Ads account-level daily spend" },
   { key: "rtl",             label: "RTLs",            color: "#1E6FFF", axis: "count",                   description: "Contacts flagged property_ready_to_launch on that day (qualified signups)" },
@@ -97,11 +95,12 @@ export default function RtlRunRateChart() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [granularity, setGranularity] = useState<Granularity>("week");
-  // Default toggle set: Cost / RTL + Cost / Customer. The card is
+  // Default toggle set: Cost / Customer + Cost / Trial. The card is
   // framed as the "Efficiency Chart", so these two are the headline
-  // lines on load; everything else is one click away.
+  // lines on load; everything else (Cost / RTL, Meta/Google budget,
+  // RTLs, RTL -> Trial %, Customers) is one click away.
   const [active, setActive] = useState<Set<MetricKey>>(
-    new Set<MetricKey>(["costPerRtl", "costPerCustomer"]),
+    new Set<MetricKey>(["costPerCustomer", "costPerTrial"]),
   );
 
   useEffect(() => {
