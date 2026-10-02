@@ -82,10 +82,10 @@ export default function PaidCustomerRunRateChart() {
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Default to month view since targets are set monthly — makes the
-  // target line step cleanly on each 1st and the gap column read as
-  // "monthly surplus / deficit".
-  const [granularity, setGranularity] = useState<Granularity>("month");
+  // Default to weekly — matches the Run Rate chart above so the two
+  // read against the same cadence, and gives finer resolution than
+  // monthly without the day-view noise.
+  const [granularity, setGranularity] = useState<Granularity>("week");
 
   useEffect(() => {
     let cancelled = false;
@@ -245,16 +245,16 @@ export default function PaidCustomerRunRateChart() {
 
   return (
     <Card className="bg-[#11182B] border border-[#1F2937] rounded-2xl shadow-none">
-      <CardHeader className="pb-4 border-b border-[#1F2937]">
-        <CardTitle className="flex items-center justify-between text-[17px] font-semibold text-white tracking-tight">
+      <CardHeader className="pb-5 border-b border-[#1F2937]">
+        <CardTitle className="flex items-center justify-between text-[22px] font-semibold text-white tracking-tight">
           <span>Paid Customer Run Rate</span>
-          <Badge className="bg-[#1E6FFF]/15 text-[#60A5FA] border-[#1E6FFF]/25 text-[11px] font-medium">
+          <Badge className="bg-[#1E6FFF]/15 text-[#60A5FA] border-[#1E6FFF]/25 text-[13px] font-semibold px-3 py-1">
             Cumulative actual vs projected target · through Dec 2026
           </Badge>
         </CardTitle>
-        <p className="text-[13px] text-[#8B92A3] mt-2 leading-relaxed">
-          <span className="text-[#1E6FFF] font-medium">Period-based.</span>{" "}
-          Running total of real paid customers (date = <code className="text-[#C9D1DC]">hs_v2_date_entered_customer</code>) alongside the
+        <p className="text-[15px] text-[#C9D1DC] mt-3 leading-relaxed">
+          <span className="text-[#60A5FA] font-semibold">Period-based.</span>{" "}
+          Running total of real paid customers (date = <code className="text-[#E6EBF3] bg-[#0E1422] px-1.5 py-0.5 rounded">hs_v2_date_entered_customer</code>) alongside the
           running total of the monthly customer target, prorated per day. The actual line stops at today;
           the target line projects forward through the end of the last target month so the remaining goal
           is visible. Target months currently loaded: Aug to Dec 2026. Excludes partner referrals and
@@ -262,12 +262,12 @@ export default function PaidCustomerRunRateChart() {
         </p>
       </CardHeader>
 
-      <CardContent className="pt-5">
-        {loading && !data && <p className="text-[12px] text-[#8B92A3] py-12 text-center">Loading…</p>}
+      <CardContent className="pt-6">
+        {loading && !data && <p className="text-[14px] text-[#C9D1DC] py-16 text-center">Loading…</p>}
         {error && (
-          <div className="bg-[#11182B] border border-[#1F2937] rounded-xl p-3 text-[#C9D1DC] text-[12px]">
-            <p className="font-semibold text-white">Failed to load</p>
-            <p className="text-[11px] mt-1 text-[#8B92A3]">{error}</p>
+          <div className="bg-[#11182B] border border-[#1F2937] rounded-xl p-4 text-[#C9D1DC] text-[14px]">
+            <p className="font-semibold text-white text-[15px]">Failed to load</p>
+            <p className="text-[13px] mt-1 text-[#8B92A3]">{error}</p>
           </div>
         )}
 
@@ -284,14 +284,16 @@ export default function PaidCustomerRunRateChart() {
             </div>
 
             {/* Granularity toggle — moved to its own row so it keeps the
-                same right-aligned pill it had next to the old chip row. */}
+                same right-aligned pill it had next to the old chip row.
+                Larger text / taller control for prominence on this
+                headline chart. */}
             <div className="flex items-center justify-end mb-5">
-              <div className="inline-flex h-8 rounded-full bg-[#0E1422] border border-[#1F2937] p-0.5">
+              <div className="inline-flex h-10 rounded-full bg-[#0E1422] border border-[#1F2937] p-1">
                 {(["day", "week", "month"] as const).map((g) => (
                   <button
                     key={g}
                     onClick={() => setGranularity(g)}
-                    className={`px-3 rounded-full text-[12px] font-medium transition-colors cursor-pointer ${
+                    className={`px-4 rounded-full text-[14px] font-semibold transition-colors cursor-pointer ${
                       granularity === g ? "bg-[#1E6FFF] text-white" : "text-[#8B92A3] hover:text-white"
                     }`}
                   >
@@ -301,28 +303,28 @@ export default function PaidCustomerRunRateChart() {
               </div>
             </div>
 
-            <div className="h-[360px]">
+            <div className="h-[440px]">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={rows} margin={{ top: 10, right: 16, bottom: 0, left: -8 }}>
                   <CartesianGrid stroke="#1F2937" strokeDasharray="3 6" vertical={false} />
                   <XAxis
                     dataKey="label"
-                    tick={{ fill: "#8B92A3", fontSize: 11 }}
+                    tick={{ fill: "#C9D1DC", fontSize: 13 }}
                     tickLine={false}
                     axisLine={{ stroke: "#1F2937" }}
                     tickFormatter={(v: string) => fmtTick(v, granularity)}
                     minTickGap={24}
                   />
                   <YAxis
-                    tick={{ fill: "#8B92A3", fontSize: 11 }}
+                    tick={{ fill: "#C9D1DC", fontSize: 13 }}
                     tickLine={false}
                     axisLine={{ stroke: "#1F2937" }}
                     allowDecimals={false}
                   />
                   <Tooltip
-                    cursor={{ stroke: "#1F2937", strokeWidth: 1 }}
+                    cursor={{ stroke: "#60A5FA", strokeWidth: 1.5 }}
                     position={{ x: 40, y: 40 }}
-                    wrapperStyle={{ opacity: 0.65, pointerEvents: "none" }}
+                    wrapperStyle={{ opacity: 0.95, pointerEvents: "none" }}
                     content={(props) => {
                       const { active: isActive, label, payload } = props as {
                         active?: boolean; label?: string;
@@ -386,34 +388,34 @@ export default function PaidCustomerRunRateChart() {
                         return v >= 0 ? "text-[#10B981]" : "text-[#EF4444]";
                       };
                       return (
-                        <div className="bg-[#0E1422] border border-[#1F2937] rounded-lg p-3 text-[11px] min-w-[240px]">
-                          <div className="text-[#8B92A3] mb-2">
+                        <div className="bg-[#0E1422] border border-[#1F2937] rounded-xl p-4 text-[14px] min-w-[300px] shadow-xl">
+                          <div className="text-[#C9D1DC] mb-3 text-[14px] font-semibold">
                             {label ? fmtTooltipDate(String(label), granularity) : ""}
-                            {tagText && <span className="ml-1 text-[#F59E0B]">· {tagText}</span>}
+                            {tagText && <span className="ml-2 text-[#F59E0B]">· {tagText}</span>}
                           </div>
 
                           {/* Per-bucket block — the actual and target
                               for just this month / week / day, plus the
                               surplus or deficit for the same window. */}
-                          <div className="mb-2">
-                            <div className="text-[10px] uppercase tracking-wider text-[#5B6478] mb-1">{bucketWord}</div>
-                            <div className="flex items-center justify-between gap-3">
+                          <div className="mb-3">
+                            <div className="text-[11px] uppercase tracking-wider text-[#8B92A3] mb-1.5 font-semibold">{bucketWord}</div>
+                            <div className="flex items-center justify-between gap-4 py-0.5">
                               <span className="flex items-center gap-2 min-w-0">
-                                <span className="h-2 w-2 rounded-full flex-none" style={{ backgroundColor: "#1E6FFF" }} />
+                                <span className="h-2.5 w-2.5 rounded-full flex-none" style={{ backgroundColor: "#1E6FFF" }} />
                                 <span className="text-white">Actual</span>
                               </span>
-                              <span className="font-mono tabular-nums text-white">{fmtNum(aBkt)}</span>
+                              <span className="font-mono tabular-nums text-white text-[15px] font-semibold">{fmtNum(aBkt)}</span>
                             </div>
-                            <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center justify-between gap-4 py-0.5">
                               <span className="flex items-center gap-2 min-w-0">
-                                <span className="h-2 w-2 rounded-full flex-none" style={{ backgroundColor: "#A78BFA" }} />
+                                <span className="h-2.5 w-2.5 rounded-full flex-none" style={{ backgroundColor: "#A78BFA" }} />
                                 <span className="text-white">Target</span>
                               </span>
-                              <span className="font-mono tabular-nums text-white">{Math.round(tBkt).toLocaleString()}</span>
+                              <span className="font-mono tabular-nums text-white text-[15px] font-semibold">{Math.round(tBkt).toLocaleString()}</span>
                             </div>
-                            <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center justify-between gap-4 py-0.5">
                               <span className="text-[#8B92A3]">Surplus / deficit</span>
-                              <span className={`font-mono tabular-nums font-semibold ${deltaTone(bucketSurplus)}`}>
+                              <span className={`font-mono tabular-nums font-bold text-[15px] ${deltaTone(bucketSurplus)}`}>
                                 {fmtDelta(bucketSurplus)}
                               </span>
                             </div>
@@ -427,19 +429,19 @@ export default function PaidCustomerRunRateChart() {
                               the end of the bucket, with actual either
                               frozen at today (current) or dashed as
                               unknown (future). */}
-                          <div className="pt-2 border-t border-[#1F2937]">
-                            <div className="text-[10px] uppercase tracking-wider text-[#5B6478] mb-1">Cumulative at end of period</div>
-                            <div className="flex items-center justify-between gap-3">
+                          <div className="pt-3 border-t border-[#1F2937]">
+                            <div className="text-[11px] uppercase tracking-wider text-[#8B92A3] mb-1.5 font-semibold">Cumulative at end of period</div>
+                            <div className="flex items-center justify-between gap-4 py-0.5">
                               <span className="text-white">Actual</span>
-                              <span className="font-mono tabular-nums text-white">{fmtRnd(aCum)}</span>
+                              <span className="font-mono tabular-nums text-white text-[15px] font-semibold">{fmtRnd(aCum)}</span>
                             </div>
-                            <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center justify-between gap-4 py-0.5">
                               <span className="text-white">Target</span>
-                              <span className="font-mono tabular-nums text-white">{Math.round(tCum).toLocaleString()}</span>
+                              <span className="font-mono tabular-nums text-white text-[15px] font-semibold">{Math.round(tCum).toLocaleString()}</span>
                             </div>
-                            <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center justify-between gap-4 py-0.5">
                               <span className="text-[#8B92A3]">Surplus / deficit</span>
-                              <span className={`font-mono tabular-nums font-semibold ${deltaTone(surplus)}`}>
+                              <span className={`font-mono tabular-nums font-bold text-[15px] ${deltaTone(surplus)}`}>
                                 {fmtDelta(surplus)}
                               </span>
                             </div>
@@ -455,10 +457,10 @@ export default function PaidCustomerRunRateChart() {
                         dataKey={`${m.key}_solid`}
                         name={m.label}
                         stroke={m.color}
-                        strokeWidth={2}
-                        strokeDasharray={m.dashed ? "6 4" : undefined}
+                        strokeWidth={3}
+                        strokeDasharray={m.dashed ? "7 5" : undefined}
                         dot={false}
-                        activeDot={{ r: 4 }}
+                        activeDot={{ r: 5 }}
                         isAnimationActive={false}
                         connectNulls={false}
                       />
@@ -467,10 +469,10 @@ export default function PaidCustomerRunRateChart() {
                         dataKey={`${m.key}_dashed`}
                         name={`${m.label}__dashed`}
                         stroke={m.color}
-                        strokeWidth={2}
-                        strokeDasharray="2 4"
+                        strokeWidth={3}
+                        strokeDasharray="3 5"
                         dot={false}
-                        activeDot={{ r: 4 }}
+                        activeDot={{ r: 5 }}
                         isAnimationActive={false}
                         connectNulls={false}
                         legendType="none"

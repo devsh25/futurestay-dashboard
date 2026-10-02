@@ -3,7 +3,7 @@ import { fetchAllContacts } from "@/lib/hubspot";
 import {
   everBecameRealCustomer, isPartnerReferral, isTestContact,
 } from "@/lib/funnel";
-import { tzDateKey } from "@/lib/timezone";
+import { tzAddDays, tzDateKey, tzStartOfDay } from "@/lib/timezone";
 import { dailyTarget, lastTargetDateIso } from "@/lib/customer-targets";
 
 /**
@@ -18,9 +18,14 @@ import { dailyTarget, lastTargetDateIso } from "@/lib/customer-targets";
  *                        falls on that day AND they ever became a
  *                        real paid customer. Null for future days
  *                        (no data yet, chart stops the actual line).
- *   target   float        Prorated per-day monthly customer target
- *                        (monthlyTarget / daysInMonth). Zero on days
- *                        with no configured target.
+ *   target   float        Per-day customer target. For past days this
+ *                        is the full prorated share (monthlyTarget /
+ *                        daysInMonth). For TODAY the share is scaled
+ *                        by the fraction of the day elapsed in ET, so
+ *                        the cumulative-through-today target ticks up
+ *                        through the day at the same cadence the
+ *                        actual customer count does. Zero on days
+ *                        with no configured monthly target.
  *   isFuture boolean     True for days strictly after today ET, so
  *                        the chart can style the forward segment
  *                        differently (projected target).
@@ -74,10 +79,31 @@ export async function GET() {
 
     const contacts = await fetchAllContacts();
 
+    // Fraction of today (ET) that has elapsed. Scales today's target
+    // contribution so the top-of-dashboard "actual / target" chip
+    // compares like-with-like: actual is a running count that grows
+    // through the day, so target has to tick up through the day too.
+    //
+    // Pure past days: full dailyTarget.
+    // Today: dailyTarget * elapsedFraction (0 at midnight ET, 1 at
+    //        23:59 ET).
+    // Future: full dailyTarget (projection assumes each future day
+    //        is realised in full).
+    const todayStart = tzStartOfDay(new Date(nowMs));
+    const tomorrowStart = tzStartOfDay(tzAddDays(new Date(nowMs), 1));
+    const todayFraction = Math.max(
+      0,
+      Math.min(1, (nowMs - todayStart.getTime()) / (tomorrowStart.getTime() - todayStart.getTime())),
+    );
+
     // actual: null for future days so the client can stop the line
     // at today; 0 for past days with no customer activity.
     const actual: (number | null)[] = days.map((d) => d > todayIso ? null : 0);
-    const target: number[] = days.map(dailyTarget);
+    const target: number[] = days.map((d) => {
+      const base = dailyTarget(d);
+      if (d === todayIso) return base * todayFraction;
+      return base;
+    });
     const isFuture: boolean[] = days.map((d) => d > todayIso);
 
     for (const c of contacts) {

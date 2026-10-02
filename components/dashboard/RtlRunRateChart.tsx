@@ -13,7 +13,7 @@ import {
 // Palette lifted from AllTimeChart so paired lines read as the same
 // system (amber Meta, violet Google, primary blue for RTL, soft blue
 // for the percentage).
-type MetricKey = "metaSpend" | "googleSpend" | "rtl" | "rtlToTrial" | "costPerRtl" | "costPerTrial";
+type MetricKey = "metaSpend" | "googleSpend" | "rtl" | "rtlToTrial" | "costPerRtl" | "costPerTrial" | "customers" | "costPerCustomer";
 
 const METRICS: {
   key: MetricKey;
@@ -28,6 +28,10 @@ const METRICS: {
   { key: "googleSpend", label: "Google budget", color: "#A78BFA", axis: "money", isCurrency: true, description: "Google Ads account-level daily spend" },
   { key: "rtl",         label: "RTLs",          color: "#1E6FFF", axis: "count",                   description: "Contacts flagged property_ready_to_launch on that day (qualified signups)" },
   { key: "rtlToTrial",  label: "RTL → Trial %", color: "#60A5FA", axis: "count", isPercent: true,  description: "For RTLs signed up in the bucket, share that started a trial" },
+  // Customers — contacts who entered the real paid-customer stage in
+  // this bucket. Green so it reads distinct from the two blue
+  // RTL / RTL% lines on the count axis.
+  { key: "customers",    label: "Customers",    color: "#10B981", axis: "count",                   description: "Contacts who became a real paid customer in that bucket (same filter as the top Paid Customers tile)" },
   // Cost per RTL sits on the money axis with the two spend lines, and
   // is dashed like them. Scale in $10-$500 range, so it renders as a
   // low line near the bottom of the money axis when Meta/Google spend
@@ -38,6 +42,11 @@ const METRICS: {
   // average, so $/Trial is roughly 2.5x $/RTL). Warm orange colour to
   // read as related-to-cost-efficiency but distinct from Cost / RTL.
   { key: "costPerTrial", label: "Cost / Trial", color: "#FB923C", axis: "money", isCurrency: true, description: "(Meta + Google spend) / Trial count for the bucket" },
+  // Cost per Customer — the money-axis sibling of Customers. Hottest
+  // numerically (customers are a fraction of trials), so expect it to
+  // sit well above $/Trial and $/RTL on the same axis. Teal to tie
+  // visually to the green Customers line without colliding.
+  { key: "costPerCustomer", label: "Cost / Customer", color: "#2DD4BF", axis: "money", isCurrency: true, description: "(Meta + Google spend) / Customer count for the bucket" },
 ];
 
 type Granularity = "day" | "week" | "month";
@@ -48,6 +57,7 @@ interface ApiResponse {
   googleSpend: number[];
   rtl: number[];
   trials: number[];
+  customers: number[];
 }
 
 function bucketKey(day: string, g: Granularity): string {
@@ -100,32 +110,37 @@ export default function RtlRunRateChart() {
 
   const rows = useMemo(() => {
     if (!data) return [] as Array<Record<string, number | string | null>>;
-    // Aggregate the 4 daily series into buckets, then compute the % from
-    // bucket totals so it reads correctly at every granularity.
-    type Agg = { metaSpend: number; googleSpend: number; rtl: number; trials: number };
+    // Aggregate the 5 daily series into buckets, then compute the %
+    // and cost-per metrics from bucket totals so each ratio reads
+    // correctly at every granularity.
+    type Agg = { metaSpend: number; googleSpend: number; rtl: number; trials: number; customers: number };
     const buckets = new Map<string, Agg>();
     const order: string[] = [];
     for (let i = 0; i < data.days.length; i++) {
       const k = bucketKey(data.days[i], granularity);
       let b = buckets.get(k);
-      if (!b) { b = { metaSpend: 0, googleSpend: 0, rtl: 0, trials: 0 }; buckets.set(k, b); order.push(k); }
+      if (!b) { b = { metaSpend: 0, googleSpend: 0, rtl: 0, trials: 0, customers: 0 }; buckets.set(k, b); order.push(k); }
       b.metaSpend  += data.metaSpend[i]   || 0;
       b.googleSpend+= data.googleSpend[i] || 0;
       b.rtl        += data.rtl[i]         || 0;
       b.trials     += data.trials[i]      || 0;
+      b.customers  += data.customers?.[i] || 0;
     }
 
     // Compute derived values per bucket.
-    type Row = { label: string; metaSpend: number; googleSpend: number; rtl: number; rtlToTrial: number | null; costPerRtl: number | null; costPerTrial: number | null };
+    type Row = { label: string; metaSpend: number; googleSpend: number; rtl: number; rtlToTrial: number | null; costPerRtl: number | null; costPerTrial: number | null; customers: number; costPerCustomer: number | null };
     const base: Row[] = order.map((k) => {
       const b = buckets.get(k)!;
       const pct = b.rtl > 0 ? (b.trials / b.rtl) * 100 : null;
-      const costPerRtl = b.rtl > 0 ? (b.metaSpend + b.googleSpend) / b.rtl : null;
-      const costPerTrial = b.trials > 0 ? (b.metaSpend + b.googleSpend) / b.trials : null;
+      const spend = b.metaSpend + b.googleSpend;
+      const costPerRtl = b.rtl > 0 ? spend / b.rtl : null;
+      const costPerTrial = b.trials > 0 ? spend / b.trials : null;
+      const costPerCustomer = b.customers > 0 ? spend / b.customers : null;
       return {
         label: k,
         metaSpend: b.metaSpend, googleSpend: b.googleSpend,
         rtl: b.rtl, rtlToTrial: pct, costPerRtl, costPerTrial,
+        customers: b.customers, costPerCustomer,
       };
     });
 
@@ -139,7 +154,7 @@ export default function RtlRunRateChart() {
     const N = base.length;
     const partial: boolean[] = new Array(N).fill(false);
     if (N > 0) partial[N - 1] = true;
-    const numericKeys = ["metaSpend", "googleSpend", "rtl", "rtlToTrial", "costPerRtl", "costPerTrial"] as const;
+    const numericKeys = ["metaSpend", "googleSpend", "rtl", "rtlToTrial", "costPerRtl", "costPerTrial", "customers", "costPerCustomer"] as const;
     function split(values: (number | null)[]): { solid: (number | null)[]; dashed: (number | null)[] } {
       const solid: (number | null)[] = new Array(N).fill(null);
       const dashed: (number | null)[] = new Array(N).fill(null);
@@ -169,13 +184,17 @@ export default function RtlRunRateChart() {
     const sumGoogle = data.googleSpend.reduce((s, v) => s + v, 0);
     const sumRtl = data.rtl.reduce((s, v) => s + v, 0);
     const sumTr  = data.trials.reduce((s, v) => s + v, 0);
+    const sumCustomers = (data.customers ?? []).reduce((s, v) => s + v, 0);
+    const sumSpend = sumMeta + sumGoogle;
     return {
-      metaSpend:     sumMeta,
-      googleSpend:   sumGoogle,
-      rtl:           sumRtl,
-      rtlToTrial:    sumRtl > 0 ? (sumTr / sumRtl) * 100 : null,
-      costPerRtl:    sumRtl > 0 ? (sumMeta + sumGoogle) / sumRtl : null,
-      costPerTrial:  sumTr  > 0 ? (sumMeta + sumGoogle) / sumTr  : null,
+      metaSpend:       sumMeta,
+      googleSpend:     sumGoogle,
+      rtl:             sumRtl,
+      rtlToTrial:      sumRtl > 0 ? (sumTr / sumRtl) * 100 : null,
+      costPerRtl:      sumRtl > 0 ? sumSpend / sumRtl : null,
+      costPerTrial:    sumTr  > 0 ? sumSpend / sumTr  : null,
+      customers:       sumCustomers,
+      costPerCustomer: sumCustomers > 0 ? sumSpend / sumCustomers : null,
     };
   }, [data]);
 

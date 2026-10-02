@@ -252,11 +252,14 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
   const [data, setData] = useState<Series | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Default toggle set: just Trialists + Customers at Weekly cadence.
+  // The six-metric default used to overcrowd the chart; this is the
+  // two the team actually reads at a glance.
   const [active, setActive] = useState<Set<MetricKey>>(
-    new Set(["signups", "airbnbConnects", "trials", "customers", "metaSpend", "googleSpend"])
+    new Set(["trials", "customers"])
   );
   const [smoothed, setSmoothed] = useState(true);
-  const [granularity, setGranularity] = useState<Granularity>("day");
+  const [granularity, setGranularity] = useState<Granularity>("week");
   // "count"  → raw daily/weekly/monthly volumes.
   // "percent"→ each milestone as a % of Qualified Signups in the SAME bucket,
   //            i.e. funnel conversion rates over time (Qualified Signups = 100%).

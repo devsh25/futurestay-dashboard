@@ -4,6 +4,7 @@ import { fetchMetaInsights } from "@/lib/meta";
 import { fetchGoogleAdsDaily } from "@/lib/google";
 import {
   isSignup, hasDQ, isReadyToLaunch, isPartnerReferral, isTestContact,
+  everBecameRealCustomer,
 } from "@/lib/funnel";
 import { tzDateKey } from "@/lib/timezone";
 
@@ -21,11 +22,16 @@ import { tzDateKey } from "@/lib/timezone";
  *   trials     count  Contacts whose trial-entry date is on that day
  *                     (used only to derive RTL → Trial % client-side —
  *                     the tooltip doesn't show trial count directly)
+ *   customers  count  Contacts who ever became a real paid customer
+ *                     AND whose hs_v2_date_entered_customer falls on
+ *                     that day. Powers the Customers line and the
+ *                     Cost / Customer metric client-side.
  *
- * The chart component computes RTL → Trial % per bucket client-side
- * so weekly / monthly aggregation just needs to sum RTL and trials
- * per bucket and recompute the ratio. Aggregation client-side keeps
- * the endpoint deterministic (one shape, no toggles).
+ * The chart component computes RTL → Trial %, Cost / RTL, Cost / Trial
+ * and Cost / Customer per bucket client-side so weekly / monthly
+ * aggregation just needs to sum the base series per bucket and
+ * recompute the ratio. Aggregation client-side keeps the endpoint
+ * deterministic (one shape, no toggles).
  *
  * Partner + test contacts excluded upstream.
  */
@@ -63,6 +69,7 @@ export async function GET() {
     const googleSpend: number[] = new Array(days.length).fill(0);
     const rtl: number[] = new Array(days.length).fill(0);
     const trials: number[] = new Array(days.length).fill(0);
+    const customers: number[] = new Array(days.length).fill(0);
 
     // Meta daily spend — the /insights level=account time_increment=1 payload
     // returns one row per day.
@@ -88,13 +95,19 @@ export async function GET() {
         const i = dayIndex.get(tzDateKey(td));
         if (i !== undefined) trials[i]++;
       }
+      // Customers → bucket by customer-entry date, filter for real
+      // paid customers (same gate as the top metric row).
+      if (everBecameRealCustomer(c) && c.hs_v2_date_entered_customer) {
+        const i = dayIndex.get(tzDateKey(c.hs_v2_date_entered_customer));
+        if (i !== undefined) customers[i]++;
+      }
     }
 
-    return NextResponse.json({ days, metaSpend, googleSpend, rtl, trials });
+    return NextResponse.json({ days, metaSpend, googleSpend, rtl, trials, customers });
   } catch (err) {
     console.error("[/api/rtl-run-rate] failed:", err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Unknown error", days: [], metaSpend: [], googleSpend: [], rtl: [], trials: [] },
+      { error: err instanceof Error ? err.message : "Unknown error", days: [], metaSpend: [], googleSpend: [], rtl: [], trials: [], customers: [] },
       { status: 500 },
     );
   }
