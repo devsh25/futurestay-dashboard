@@ -16,7 +16,6 @@ import AdSpendCard from "@/components/dashboard/AdSpendCard";
 import SectionHeading, { Icons } from "@/components/dashboard/SectionHeading";
 import DownloadPdfButton from "@/components/DownloadPdfButton";
 import DownloadDataButton from "@/components/DownloadDataButton";
-import GrowthReportButton from "@/components/GrowthReportButton";
 
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -119,17 +118,10 @@ export default function Dashboard() {
                 <span className="text-[#1F2937]">›</span>
                 <span className="text-white font-semibold tracking-tight">Growth Dashboard</span>
               </div>
-              {data && (
-                <span className="hidden md:inline-flex items-center gap-1.5 ml-2 px-3 py-1 rounded-full bg-[#11182B] border border-[#1F2937] text-[12px] text-[#C9D1DC] font-medium tabular-nums">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#10B981]" />
-                  {data.totalContacts.toLocaleString()} qualified signups
-                </span>
-              )}
             </div>
             <div className="flex items-center gap-3">
               <DownloadPdfButton />
               <DownloadDataButton period={period} customStart={customStart} customEnd={customEnd} />
-              <GrowthReportButton />
               <div className="no-print contents">
                 <FilterBar
                   period={period}
