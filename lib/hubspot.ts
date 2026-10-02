@@ -1,20 +1,25 @@
-import { unstable_cache } from "next/cache";
+import { head, put } from "@vercel/blob";
 import { HubSpotContact } from "./types";
 
 const HUBSPOT_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN!;
 const BASE_URL = "https://api.hubapi.com";
 
-// Cross-invocation TTL for the Vercel Data Cache. 25 hours gives
-// the daily warm-cache cron a comfortable overlap (if the cron runs
-// at 06:00 UTC, cache is still valid when the next day's cron starts
-// at 06:00). Dashboard freshness is handled by the cron frequency,
-// not this TTL — users always see data as fresh as the last cron run.
+// Vercel Blob is the cross-container cache. We used to use
+// unstable_cache / Vercel Data Cache for this, but the serialised
+// fetchAllContacts payload (~9,900 contacts × ~500 bytes = ~5 MB)
+// exceeds Data Cache's 2 MB per-entry limit and was being silently
+// dropped — every "cold" container ended up re-paginating HubSpot
+// and the parallel dashboard load deadlocked on HubSpot's rate
+// limit. Blob has no practical size limit for our payload, round
+// trips in ~500 ms, and is already configured in the project
+// (BLOB_READ_WRITE_TOKEN).
 //
-// Bump the version suffix on the cache key when CONTACT_PROPERTIES
-// changes shape so old cached payloads are not served to new code
-// that expects extra fields.
-const DATA_CACHE_TTL_SECONDS = 25 * 60 * 60;
-const CACHE_KEY_VERSION = "v1";
+// Bump the version suffix when CONTACT_PROPERTIES changes so old
+// cached payloads are not deserialised against a new shape.
+const BLOB_KEY_VERSION = "v1";
+const CONTACTS_BLOB_PATH = `cache/hubspot/all-contacts-${BLOB_KEY_VERSION}.json`;
+const CUSTOMERS_BLOB_PATH = `cache/hubspot/all-customers-${BLOB_KEY_VERSION}.json`;
+const OWNERS_BLOB_PATH = `cache/hubspot/all-owners-${BLOB_KEY_VERSION}.json`;
 
 const CONTACT_PROPERTIES = [
   "account_lifecycle",
@@ -130,46 +135,93 @@ async function hubspotFetch(
   throw new Error("HubSpot API rate limit — please refresh in ~30 seconds");
 }
 
-// Three-layer cache for the full-contacts fetch:
-//   1. Per-container in-memory cache (<1ms, hits within one serverless
-//      container's warm lifetime; CACHE_TTL above).
-//   2. Single-flight dedupe so 6 endpoints that mount in parallel don't
-//      each start a 39s HubSpot pagination on a cold cache.
-//   3. Vercel Data Cache via unstable_cache — persists across cold
-//      starts and deployments, so even a brand-new container served
-//      first serves from this layer rather than paying the full 39s.
-//      Backs onto filesystem in local dev and the hosted Data Cache in
-//      production.
-//
-// Flow (cold Vercel container, warm Data Cache):
-//   fetchAllContacts → in-memory miss → single-flight → unstable_cache
-//     hit (~50ms) → in-memory populated → data returned
-//
-// Flow (both layers cold):
-//   fetchAllContacts → in-memory miss → single-flight →
-//     unstable_cache miss → doFetchAllContacts (~39s) →
-//     unstable_cache populated → in-memory populated → data returned
-const cachedFetchAllContacts = unstable_cache(
-  doFetchAllContacts,
-  [`hubspot:fetchAllContacts:${CACHE_KEY_VERSION}`],
-  { revalidate: DATA_CACHE_TTL_SECONDS, tags: ["hubspot-contacts"] },
-);
+/**
+ * Read a cached JSON payload from Vercel Blob. Returns null if the
+ * blob is missing, unreachable, or malformed — the caller falls back
+ * to HubSpot in that case.
+ */
+async function readFromBlob<T>(path: string): Promise<T | null> {
+  try {
+    const info = await head(path);
+    if (!info?.url) return null;
+    // Blob URLs are public and content-addressable; `cache: "no-store"`
+    // skips the fetch cache so we always see the latest version after
+    // a warm-cache run. Blob itself is fronted by Vercel's CDN so this
+    // is still quick (~200-500 ms for ~5 MB).
+    const res = await fetch(info.url, { cache: "no-store" });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch (err) {
+    // Blob missing is the common case (fresh deploy, first run). We
+    // don't want to spam logs with those; log everything else.
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!/not.?found|BlobNotFound/i.test(msg)) {
+      console.log(`[hubspot] blob read failed for ${path}: ${msg}`);
+    }
+    return null;
+  }
+}
 
-export async function fetchAllContacts(): Promise<HubSpotContact[]> {
-  if (contactsCache && Date.now() - contactsCache.timestamp < CACHE_TTL) {
+async function writeToBlob(path: string, data: unknown): Promise<void> {
+  await put(path, JSON.stringify(data), {
+    access: "public",
+    contentType: "application/json",
+    allowOverwrite: true,
+    addRandomSuffix: false,
+  });
+}
+
+/**
+ * Three-layer cache for the full-contacts fetch:
+ *   1. Per-container in-memory cache (<1ms within one serverless
+ *      container's warm lifetime; CACHE_TTL below).
+ *   2. Single-flight dedupe so endpoints firing in parallel don't
+ *      each start a HubSpot pagination on a cold in-memory cache.
+ *   3. Vercel Blob — the cross-container cache. Populated by the
+ *      /api/cron/warm-cache endpoint (daily), read by every
+ *      dashboard route handler when its in-memory layer is cold.
+ *
+ * Flow when Blob is populated (expected steady state):
+ *   fetchAllContacts → in-memory miss → single-flight → Blob read
+ *     (~500 ms) → in-memory populated → data returned
+ *
+ * Flow when Blob is missing (first run after deploy, or before the
+ * first warm-cache cron):
+ *   fetchAllContacts → in-memory miss → single-flight → Blob miss →
+ *     doFetchAllContacts (~30 s) → Blob write + in-memory populated →
+ *     data returned
+ *
+ * Pass `{ force: true }` to skip the in-memory and Blob layers and
+ * always re-paginate from HubSpot (used by the warm-cache cron).
+ */
+export async function fetchAllContacts(options?: { force?: boolean }): Promise<HubSpotContact[]> {
+  if (!options?.force && contactsCache && Date.now() - contactsCache.timestamp < CACHE_TTL) {
     return contactsCache.data;
   }
   if (contactsInFlight) {
     return contactsInFlight;
   }
-  contactsInFlight = cachedFetchAllContacts()
-    .then((data) => {
-      contactsCache = { data, timestamp: Date.now() };
-      return data;
-    })
-    .finally(() => {
-      contactsInFlight = null;
+
+  contactsInFlight = (async () => {
+    if (!options?.force) {
+      const fromBlob = await readFromBlob<HubSpotContact[]>(CONTACTS_BLOB_PATH);
+      if (fromBlob && Array.isArray(fromBlob) && fromBlob.length > 0) {
+        contactsCache = { data: fromBlob, timestamp: Date.now() };
+        return fromBlob;
+      }
+    }
+    const data = await doFetchAllContacts();
+    contactsCache = { data, timestamp: Date.now() };
+    // Fire-and-forget — if the write fails, next container will
+    // fall back to HubSpot too, which is still correct.
+    writeToBlob(CONTACTS_BLOB_PATH, data).catch((err) => {
+      console.error(`[hubspot] blob write failed for ${CONTACTS_BLOB_PATH}:`, err);
     });
+    return data;
+  })().finally(() => {
+    contactsInFlight = null;
+  });
+
   return contactsInFlight;
 }
 
@@ -273,9 +325,8 @@ async function doFetchAllContacts(): Promise<HubSpotContact[]> {
     if (after) await sleep(25);
   } while (after && pageCount < MAX_PAGES);
 
-  // In-memory cache is populated by the fetchAllContacts wrapper so
-  // that cached-via-unstable_cache responses populate it too; no write
-  // needed here.
+  // In-memory + Blob cache are populated by the fetchAllContacts
+  // wrapper; nothing to write here.
   return allContacts;
 }
 
@@ -296,25 +347,30 @@ async function doFetchAllContacts(): Promise<HubSpotContact[]> {
  * The data shape is the same as fetchAllContacts() — same field set.
  */
 // Same three-layer cache as fetchAllContacts — see the comment there.
-const cachedFetchAllCustomers = unstable_cache(
-  doFetchAllCustomers,
-  [`hubspot:fetchAllCustomers:${CACHE_KEY_VERSION}`],
-  { revalidate: DATA_CACHE_TTL_SECONDS, tags: ["hubspot-contacts"] },
-);
-
-export async function fetchAllCustomers(): Promise<HubSpotContact[]> {
-  if (customersCache && Date.now() - customersCache.timestamp < CACHE_TTL) {
+export async function fetchAllCustomers(options?: { force?: boolean }): Promise<HubSpotContact[]> {
+  if (!options?.force && customersCache && Date.now() - customersCache.timestamp < CACHE_TTL) {
     return customersCache.data;
   }
   if (customersInFlight) return customersInFlight;
-  customersInFlight = cachedFetchAllCustomers()
-    .then((data) => {
-      customersCache = { data, timestamp: Date.now() };
-      return data;
-    })
-    .finally(() => {
-      customersInFlight = null;
+
+  customersInFlight = (async () => {
+    if (!options?.force) {
+      const fromBlob = await readFromBlob<HubSpotContact[]>(CUSTOMERS_BLOB_PATH);
+      if (fromBlob && Array.isArray(fromBlob) && fromBlob.length > 0) {
+        customersCache = { data: fromBlob, timestamp: Date.now() };
+        return fromBlob;
+      }
+    }
+    const data = await doFetchAllCustomers();
+    customersCache = { data, timestamp: Date.now() };
+    writeToBlob(CUSTOMERS_BLOB_PATH, data).catch((err) => {
+      console.error(`[hubspot] blob write failed for ${CUSTOMERS_BLOB_PATH}:`, err);
     });
+    return data;
+  })().finally(() => {
+    customersInFlight = null;
+  });
+
   return customersInFlight;
 }
 
@@ -407,26 +463,31 @@ async function doFetchAllCustomers(): Promise<HubSpotContact[]> {
   return all;
 }
 
-// Owners rarely change; same persistent cache treatment.
-const cachedFetchOwnerNames = unstable_cache(
-  doFetchOwnerNames,
-  [`hubspot:fetchOwnerNames:${CACHE_KEY_VERSION}`],
-  { revalidate: DATA_CACHE_TTL_SECONDS, tags: ["hubspot-owners"] },
-);
-
-export async function fetchOwnerNames(): Promise<Record<string, string>> {
-  if (ownersCache && Date.now() - ownersCache.timestamp < CACHE_TTL) {
+// Owners rarely change; same Blob-backed cache treatment.
+export async function fetchOwnerNames(options?: { force?: boolean }): Promise<Record<string, string>> {
+  if (!options?.force && ownersCache && Date.now() - ownersCache.timestamp < CACHE_TTL) {
     return ownersCache.data;
   }
   if (ownersInFlight) return ownersInFlight;
-  ownersInFlight = cachedFetchOwnerNames()
-    .then((data) => {
-      ownersCache = { data, timestamp: Date.now() };
-      return data;
-    })
-    .finally(() => {
-      ownersInFlight = null;
+
+  ownersInFlight = (async () => {
+    if (!options?.force) {
+      const fromBlob = await readFromBlob<Record<string, string>>(OWNERS_BLOB_PATH);
+      if (fromBlob && typeof fromBlob === "object" && Object.keys(fromBlob).length > 0) {
+        ownersCache = { data: fromBlob, timestamp: Date.now() };
+        return fromBlob;
+      }
+    }
+    const data = await doFetchOwnerNames();
+    ownersCache = { data, timestamp: Date.now() };
+    writeToBlob(OWNERS_BLOB_PATH, data).catch((err) => {
+      console.error(`[hubspot] blob write failed for ${OWNERS_BLOB_PATH}:`, err);
     });
+    return data;
+  })().finally(() => {
+    ownersInFlight = null;
+  });
+
   return ownersInFlight;
 }
 

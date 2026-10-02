@@ -60,9 +60,12 @@ export async function GET(request: NextRequest) {
   // Sequential — two parallel full-paginations against HubSpot search
   // compete for the same rate budget and both end up slower overall
   // than running one after the other.
+  // `force: true` bypasses the Blob read inside each fetcher so this
+  // cron always re-paginates HubSpot and overwrites the Blob — the
+  // whole point of a scheduled warm.
   try {
     const t0 = Date.now();
-    const contacts = await fetchAllContacts();
+    const contacts = await fetchAllContacts({ force: true });
     timings.fetchAllContactsMs = Date.now() - t0;
     counts.contacts = contacts.length;
   } catch (err) {
@@ -74,7 +77,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const t0 = Date.now();
-    const customers = await fetchAllCustomers();
+    const customers = await fetchAllCustomers({ force: true });
     timings.fetchAllCustomersMs = Date.now() - t0;
     counts.customers = customers.length;
   } catch (err) {
@@ -90,6 +93,6 @@ export async function GET(request: NextRequest) {
     totalMs,
     timings,
     counts,
-    note: "HubSpot Data Cache warmed. Dashboard routes will now serve from cache for ~25h.",
+    note: "HubSpot Blob cache refreshed. Dashboard routes will serve from Blob until the next cron run.",
   });
 }
