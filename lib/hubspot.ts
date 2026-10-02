@@ -4,12 +4,16 @@ import { HubSpotContact } from "./types";
 const HUBSPOT_TOKEN = process.env.HUBSPOT_ACCESS_TOKEN!;
 const BASE_URL = "https://api.hubapi.com";
 
-// Cross-invocation TTL for the Vercel Data Cache. 5 minutes matches
-// the in-memory CACHE_TTL below, so the two layers decay together.
+// Cross-invocation TTL for the Vercel Data Cache. 25 hours gives
+// the daily warm-cache cron a comfortable overlap (if the cron runs
+// at 06:00 UTC, cache is still valid when the next day's cron starts
+// at 06:00). Dashboard freshness is handled by the cron frequency,
+// not this TTL — users always see data as fresh as the last cron run.
+//
 // Bump the version suffix on the cache key when CONTACT_PROPERTIES
 // changes shape so old cached payloads are not served to new code
 // that expects extra fields.
-const DATA_CACHE_TTL_SECONDS = 300;
+const DATA_CACHE_TTL_SECONDS = 25 * 60 * 60;
 const CACHE_KEY_VERSION = "v1";
 
 const CONTACT_PROPERTIES = [
@@ -266,7 +270,7 @@ async function doFetchAllContacts(): Promise<HubSpotContact[]> {
     pageCount++;
 
     // Small delay between pages to avoid rate limits
-    if (after) await sleep(150);
+    if (after) await sleep(25);
   } while (after && pageCount < MAX_PAGES);
 
   // In-memory cache is populated by the fetchAllContacts wrapper so
@@ -396,7 +400,7 @@ async function doFetchAllCustomers(): Promise<HubSpotContact[]> {
     }
     after = (data.paging as Record<string, Record<string, string>>)?.next?.after;
     pageCount++;
-    if (after) await sleep(150);
+    if (after) await sleep(25);
   } while (after && pageCount < MAX_PAGES);
 
   // In-memory cache is populated by fetchAllCustomers wrapper.

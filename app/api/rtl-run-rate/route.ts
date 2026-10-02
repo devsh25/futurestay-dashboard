@@ -30,12 +30,15 @@ import { tzDateKey } from "@/lib/timezone";
  * Partner + test contacts excluded upstream.
  */
 
-// ISR: cache the full JSON response for 5 minutes. The Hobby tier
-// gets 10s per invocation and the handler takes ~2s once fetchAllContacts
-// is warm, so the first cold hit still fits inside the limit; cached
-// hits after that skip the handler entirely and are served from
-// Vercel's edge cache.
-export const revalidate = 300;
+// Dynamic. We tried ISR here (revalidate = 300) but it combined
+// poorly with the cold-cache + concurrent-load pattern on Vercel —
+// first user after cache expiry sometimes sees a 60s timeout when
+// 9 serverless containers race to repopulate fetchAllContacts in
+// parallel and hit HubSpot's rate limit. The warm-cache cron below
+// is the real pre-fill mechanism; routes read from the Data Cache.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const maxDuration = 60;
 
 export async function GET() {
   try {

@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import { fetchAllCustomers } from "@/lib/hubspot";
 import { computeRetention } from "@/lib/retention";
 
-// ISR: cache the retention JSON for 5 minutes. Retention curves move
-// slowly (customer-month granularity) so a 5-minute staleness is a
-// non-issue, and cached hits bypass the ~18s cold handler entirely.
-export const revalidate = 300;
+// Dynamic — see /api/rtl-run-rate for the ISR-vs-cold-cache note.
+// The warm-cache cron pre-populates fetchAllCustomers; this route
+// then takes 1-5s warm, ~18s cold worst case.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const maxDuration = 60;
 
 /**
  * Retention curve data — % of paying-customer cohort retained at

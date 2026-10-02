@@ -33,10 +33,13 @@ import { dailyTarget, lastTargetDateIso } from "@/lib/customer-targets";
  * Partner + test contacts excluded upstream to match everywhere else.
  */
 
-// ISR: cache the full JSON response for 5 minutes. The handler itself
-// runs in ~1-2s once fetchAllContacts is warm; cached hits bypass it
-// and come straight from Vercel's edge cache.
-export const revalidate = 300;
+// Dynamic for the same reason as /api/rtl-run-rate — see the note
+// there. The warm-cache cron keeps fetchAllContacts hot in the Data
+// Cache so this handler finishes in 1-2s on warm, ~29s on worst-case
+// cold (fits in the 60s cap).
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+export const maxDuration = 60;
 
 export async function GET() {
   try {
