@@ -41,6 +41,44 @@ export async function GET(request: NextRequest) {
     uploadedAt: b.uploadedAt,
   }));
 
+  // 1b) list top-level too to prove Blob works for other paths
+  //     (growth-report writes under growth-report/ — if that shows up
+  //     Blob is clearly operational and the issue is specific to
+  //     cache/ writes).
+  const topListing = await list({ prefix: "", limit: 10 });
+  const topListed = topListing.blobs.map((b) => ({
+    pathname: b.pathname,
+    size: b.size,
+    uploadedAt: b.uploadedAt,
+  }));
+
+  // 1c) try a tiny canary write + readback to catch write errors
+  //     (fire-and-forget writeToBlob calls silently swallow errors).
+  let writeTest: Record<string, unknown> = {};
+  try {
+    const { put } = await import("@vercel/blob");
+    const canary = { test: true, at: new Date().toISOString() };
+    const t0 = Date.now();
+    const res = await put("cache/hubspot/canary.json", JSON.stringify(canary), {
+      access: "public",
+      contentType: "application/json",
+      allowOverwrite: true,
+      addRandomSuffix: false,
+    });
+    writeTest = {
+      ok: true,
+      writeMs: Date.now() - t0,
+      url: res.url,
+      pathname: res.pathname,
+    };
+  } catch (err) {
+    writeTest = {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+      hasToken: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+    };
+  }
+
   // 2) for each expected path, HEAD + fetch and time it
   const diagnostics: Record<string, unknown> = {};
   for (const path of paths) {
@@ -72,5 +110,10 @@ export async function GET(request: NextRequest) {
     diagnostics[path] = { headMs, size: info.size, url: info.url, fetchStatus, fetchMs, bytes };
   }
 
-  return NextResponse.json({ listing: listed, diagnostics });
+  return NextResponse.json({
+    listing: listed,
+    topListing: topListed,
+    writeTest,
+    diagnostics,
+  });
 }
