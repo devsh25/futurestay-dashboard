@@ -178,7 +178,7 @@ export default function AdSpendCard({
     <Card className="bg-[#11182B] border border-[#1F2937] rounded-2xl shadow-none">
       <CardHeader className="pb-3 border-b border-[#1F2937]">
         <CardTitle className="flex items-center justify-between text-[15px] font-semibold text-white tracking-tight gap-3">
-          <span>RTL Campaign Analysis</span>
+          <span>Detailed Campaign Analysis</span>
           <div className="flex items-center gap-2">
             <Badge className="bg-[#1E6FFF]/15 text-[#60A5FA] border-[#1E6FFF]/25 text-[10px] font-medium">
               Meta + Google · click a campaign to expand
