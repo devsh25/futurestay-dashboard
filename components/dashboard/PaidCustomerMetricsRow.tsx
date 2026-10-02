@@ -7,24 +7,21 @@ import Sparkline from "./Sparkline";
 /**
  * Headline metrics row shown at the top of the dashboard.
  *
- * Five big tiles in one divided container (same visual pattern the hero
+ * Three big tiles in one divided container (same visual pattern the hero
  * KPI row used to use):
- *   1. Actual (cumulative)      — paid customers acquired since the
- *                                 start of the chart window
- *   2. Target (cumulative)      — prorated monthly target through today
- *   3. Current Status           — Surplus / Deficit label plus the
- *                                 signed gap number, color-coded
- *   4. Horizon target           — full-horizon goal through Dec 2026
- *   5. Total Customers (filtered) — the filter-bar-scoped Total
- *                                 Customers tile, with its trend badge,
- *                                 sparkline and "% of target" chip
+ *   1. Paid Customer Status  — combined "actual / target" number with
+ *                              the signed surplus-or-deficit written
+ *                              under the label. Invariant to the top
+ *                              filter bar; always covers the chart
+ *                              horizon so the number stays stable.
+ *   2. Paid Customers        — filter-bar-scoped count of real paid
+ *                              customers, with trend badge, sparkline
+ *                              and "% of target" chip.
+ *   3. Trials                — filter-bar-scoped count of trials
+ *                              started, with trend badge and sparkline.
  *
- * The first four come from the Paid Customer Run Rate endpoint and are
- * invariant to the top filter bar (they always cover the full chart
- * horizon). The fifth is the per-filter count, kept for the detail /
- * drill-down story the filter bar supports.
- *
- * The chart card below reuses the same four big tiles — see
+ * The chart card below reuses the same Paid Customer Status trio
+ * (actual, target, surplus) as four big tiles — see
  * PaidCustomerRunRateChart — so the top-of-dashboard numbers and the
  * card's own headline numbers always match.
  */
@@ -167,6 +164,42 @@ export function PaidCustomerFourTiles({ totals }: { totals: PaidCustomerSummary 
   );
 }
 
+/**
+ * Combined "Paid Customer Status" tile. Big "actual / target" fraction
+ * on top, "Paid Customer Status" label, surplus / deficit line in
+ * green or red below. Collapses what used to be three separate tiles
+ * (Actual cumulative, Target cumulative, Current Status) into one
+ * reading because the three numbers only ever get interpreted
+ * together.
+ */
+function PaidCustomerStatusTile({ totals }: { totals: PaidCustomerSummary | null }) {
+  if (!totals) {
+    return (
+      <div className="relative px-5 py-5 first:pl-6 last:pr-6">
+        <p className="text-[44px] xl:text-[52px] leading-none font-bold text-white tracking-tight tabular-nums mb-3">…</p>
+        <p className="text-[12px] text-[#8B92A3] font-medium">Paid Customer Status</p>
+      </div>
+    );
+  }
+  const isSurplus = totals.surplus >= 0;
+  const toneClass = isSurplus ? "text-[#10B981]" : "text-[#EF4444]";
+  const word = isSurplus ? "Surplus" : "Deficit";
+  const signed = `${totals.surplus > 0 ? "+" : ""}${totals.surplus.toLocaleString()}`;
+  return (
+    <div className="relative px-5 py-5 first:pl-6 last:pr-6">
+      <p className="text-[44px] xl:text-[52px] leading-none font-bold text-white tracking-tight tabular-nums mb-3">
+        <span>{totals.actualCum.toLocaleString()}</span>
+        <span className="opacity-40 mx-1.5">/</span>
+        <span className="opacity-70">{totals.targetCum.toLocaleString()}</span>
+      </p>
+      <p className="text-[12px] text-[#8B92A3] font-medium">Paid Customer Status</p>
+      <p className={`text-[12px] mt-1 font-semibold tabular-nums ${toneClass}`}>
+        {word} {signed}
+      </p>
+    </div>
+  );
+}
+
 export default function PaidCustomerMetricsRow({
   kpis,
   customerTarget,
@@ -189,11 +222,17 @@ export default function PaidCustomerMetricsRow({
 
   return (
     <div className="bg-[#11182B] border border-[#1F2937] rounded-2xl overflow-hidden">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-[#1F2937]">
-        <PaidCustomerFourTiles totals={totals} />
+      <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-[#1F2937]">
+        {/* 1. Paid Customer Status — combined cumulative-actual /
+            cumulative-target with surplus/deficit under the label.
+            Invariant to the top filter bar; always covers the full
+            chart horizon from the paid-customer run-rate endpoint. */}
+        <PaidCustomerStatusTile totals={totals} />
 
-        {/* Total Customers — rich tile with trend badge + sparkline +
-            target chip, matching what the old KPICards row showed. */}
+        {/* 2. Paid Customers (period-filtered) — count + trend + sparkline
+            + "% of target" chip. Matches the old Total Customers tile
+            exactly; just renamed so the row vocabulary stays aligned
+            with "Paid Customer Status" above. */}
         <div className="relative px-5 py-5 first:pl-6 last:pr-6">
           <div className="flex items-baseline justify-between mb-3 gap-2">
             <p className="text-[44px] xl:text-[52px] leading-none font-bold text-white tracking-tight tabular-nums">
@@ -202,12 +241,29 @@ export default function PaidCustomerMetricsRow({
             <TrendBadge delta={kpis.deltas.customers} />
           </div>
           <div className="flex items-center justify-between gap-2">
-            <p className="text-[12px] text-[#8B92A3] font-medium truncate">Total Customers</p>
+            <p className="text-[12px] text-[#8B92A3] font-medium truncate">Paid Customers</p>
             <Sparkline data={kpis.sparkline.customers} color={COLOR_ACTUAL} width={56} height={22} />
           </div>
           {customerTarget !== undefined && (
             <TargetChip actual={kpis.totalCustomers} target={customerTarget} />
           )}
+        </div>
+
+        {/* 3. Trials (period-filtered) — count + trend + sparkline.
+            No target chip because trial volume isn't a planned
+            number; it's a top-of-funnel reading alongside the two
+            customer-focused tiles. */}
+        <div className="relative px-5 py-5 first:pl-6 last:pr-6">
+          <div className="flex items-baseline justify-between mb-3 gap-2">
+            <p className="text-[44px] xl:text-[52px] leading-none font-bold text-white tracking-tight tabular-nums">
+              {kpis.totalTrials.toLocaleString()}
+            </p>
+            <TrendBadge delta={kpis.deltas.trials} />
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[12px] text-[#8B92A3] font-medium truncate">Trials</p>
+            <Sparkline data={kpis.sparkline.trials} color={COLOR_ACTUAL} width={56} height={22} />
+          </div>
         </div>
       </div>
     </div>
