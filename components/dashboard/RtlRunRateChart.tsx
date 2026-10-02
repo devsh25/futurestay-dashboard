@@ -15,6 +15,11 @@ import {
 // for the percentage).
 type MetricKey = "metaSpend" | "googleSpend" | "rtl" | "rtlToTrial" | "costPerRtl" | "costPerTrial" | "customers" | "costPerCustomer";
 
+// Order matters: this is also the chip-row order and the default
+// toggle set is the first two (Cost / RTL + Cost / Customer). The
+// efficiency metrics lead because this card is the "Efficiency
+// Chart" — the volume + budget series below are secondary context
+// you toggle in when a cost shift needs an explanation.
 const METRICS: {
   key: MetricKey;
   label: string;
@@ -24,29 +29,28 @@ const METRICS: {
   isCurrency?: boolean;
   description: string;
 }[] = [
-  { key: "metaSpend",   label: "Meta budget",   color: "#F59E0B", axis: "money", isCurrency: true, description: "Meta account-level daily spend" },
-  { key: "googleSpend", label: "Google budget", color: "#A78BFA", axis: "money", isCurrency: true, description: "Google Ads account-level daily spend" },
-  { key: "rtl",         label: "RTLs",          color: "#1E6FFF", axis: "count",                   description: "Contacts flagged property_ready_to_launch on that day (qualified signups)" },
-  { key: "rtlToTrial",  label: "RTL → Trial %", color: "#60A5FA", axis: "count", isPercent: true,  description: "For RTLs signed up in the bucket, share that started a trial" },
-  // Customers — contacts who entered the real paid-customer stage in
-  // this bucket. Green so it reads distinct from the two blue
-  // RTL / RTL% lines on the count axis.
-  { key: "customers",    label: "Customers",    color: "#10B981", axis: "count",                   description: "Contacts who became a real paid customer in that bucket (same filter as the top Paid Customers tile)" },
-  // Cost per RTL sits on the money axis with the two spend lines, and
-  // is dashed like them. Scale in $10-$500 range, so it renders as a
-  // low line near the bottom of the money axis when Meta/Google spend
-  // are also enabled — toggle those off to zoom in on this metric.
-  { key: "costPerRtl",   label: "Cost / RTL",   color: "#F87171", axis: "money", isCurrency: true, description: "(Meta + Google spend) / RTL count for the bucket" },
-  // Cost per Trialist — same shape as Cost / RTL but divided by trials
-  // instead. Runs a bit hotter numerically (trials are ~40% of RTLs on
-  // average, so $/Trial is roughly 2.5x $/RTL). Warm orange colour to
-  // read as related-to-cost-efficiency but distinct from Cost / RTL.
-  { key: "costPerTrial", label: "Cost / Trial", color: "#FB923C", axis: "money", isCurrency: true, description: "(Meta + Google spend) / Trial count for the bucket" },
+  // Cost per RTL — the primary efficiency reading. Sits on the money
+  // axis; dashed stroke so it reads as a derived $/ratio rather than
+  // a raw spend amount.
+  { key: "costPerRtl",      label: "Cost / RTL",      color: "#F87171", axis: "money", isCurrency: true, description: "(Meta + Google spend) / RTL count for the bucket" },
   // Cost per Customer — the money-axis sibling of Customers. Hottest
   // numerically (customers are a fraction of trials), so expect it to
   // sit well above $/Trial and $/RTL on the same axis. Teal to tie
   // visually to the green Customers line without colliding.
   { key: "costPerCustomer", label: "Cost / Customer", color: "#2DD4BF", axis: "money", isCurrency: true, description: "(Meta + Google spend) / Customer count for the bucket" },
+  // Cost per Trialist — same shape as Cost / RTL but divided by trials
+  // instead. Runs a bit hotter numerically (trials are ~40% of RTLs on
+  // average, so $/Trial is roughly 2.5x $/RTL). Warm orange colour to
+  // read as related-to-cost-efficiency but distinct from Cost / RTL.
+  { key: "costPerTrial",    label: "Cost / Trial",    color: "#FB923C", axis: "money", isCurrency: true, description: "(Meta + Google spend) / Trial count for the bucket" },
+  { key: "metaSpend",       label: "Meta budget",     color: "#F59E0B", axis: "money", isCurrency: true, description: "Meta account-level daily spend" },
+  { key: "googleSpend",     label: "Google budget",   color: "#A78BFA", axis: "money", isCurrency: true, description: "Google Ads account-level daily spend" },
+  { key: "rtl",             label: "RTLs",            color: "#1E6FFF", axis: "count",                   description: "Contacts flagged property_ready_to_launch on that day (qualified signups)" },
+  { key: "rtlToTrial",      label: "RTL → Trial %",   color: "#60A5FA", axis: "count", isPercent: true,  description: "For RTLs signed up in the bucket, share that started a trial" },
+  // Customers — contacts who entered the real paid-customer stage in
+  // this bucket. Green so it reads distinct from the two blue
+  // RTL / RTL% lines on the count axis.
+  { key: "customers",       label: "Customers",       color: "#10B981", axis: "count",                   description: "Contacts who became a real paid customer in that bucket (same filter as the top Paid Customers tile)" },
 ];
 
 type Granularity = "day" | "week" | "month";
@@ -93,8 +97,11 @@ export default function RtlRunRateChart() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [granularity, setGranularity] = useState<Granularity>("week");
+  // Default toggle set: Cost / RTL + Cost / Customer. The card is
+  // framed as the "Efficiency Chart", so these two are the headline
+  // lines on load; everything else is one click away.
   const [active, setActive] = useState<Set<MetricKey>>(
-    new Set<MetricKey>(["metaSpend", "googleSpend", "rtl", "rtlToTrial"]),
+    new Set<MetricKey>(["costPerRtl", "costPerCustomer"]),
   );
 
   useEffect(() => {
@@ -213,7 +220,7 @@ export default function RtlRunRateChart() {
     <Card className="bg-[#11182B] border border-[#1F2937] rounded-2xl shadow-none">
       <CardHeader className="pb-4 border-b border-[#1F2937]">
         <CardTitle className="flex items-center justify-between text-[17px] font-semibold text-white tracking-tight">
-          <span>RTL Run Rate</span>
+          <span>Efficiency Chart</span>
           <Badge className="bg-[#1E6FFF]/15 text-[#60A5FA] border-[#1E6FFF]/25 text-[11px] font-medium">
             Account-level · last 90 days
           </Badge>

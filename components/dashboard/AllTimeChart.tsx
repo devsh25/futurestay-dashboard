@@ -476,7 +476,7 @@ export default function AllTimeChart({ onReady }: { onReady?: () => void } = {})
     <Card className="bg-[#11182B] border border-[#1F2937] rounded-2xl shadow-none">
       <CardHeader className="pb-4 border-b border-[#1F2937]">
         <CardTitle className="flex items-center justify-between text-[17px] font-semibold text-white tracking-tight">
-          <span>Run Rate</span>
+          <span>Funnel Chart</span>
           <Badge className="bg-[#1E6FFF]/15 text-[#60A5FA] border-[#1E6FFF]/25 text-[11px] font-medium">
             {data ? `${data.days[0]} → ${data.days[data.days.length - 1]}` : "—"}
           </Badge>
