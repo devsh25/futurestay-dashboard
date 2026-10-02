@@ -55,13 +55,20 @@ function TrendBadge({ delta }: { delta: TrendDelta }) {
 function TargetChip({ actual, target }: { actual: number; target: number }) {
   if (target <= 0) return null;
   const pct = (actual / target) * 100;
-  const tone = pct >= 100 ? "text-[#10B981]" : "text-white";
+  // Colored chip so the pace reading jumps off the tile the way the
+  // Surplus/Deficit chip does. Green at or above goal, blue above 50,
+  // amber below 50 — the three bands you actually care about on a
+  // single number.
+  const styles =
+    pct >= 100 ? "bg-[#0F2A1F] border-[#10B981]/35 text-[#10B981]" :
+    pct >= 50  ? "bg-[#0E1D33] border-[#1E6FFF]/35 text-[#60A5FA]" :
+                 "bg-[#2A1F0F] border-[#F59E0B]/35 text-[#F59E0B]";
   return (
-    <p className="text-[11px] text-[#8B92A3] mt-2 tabular-nums">
-      <span className={`font-semibold ${tone}`}>{pct.toFixed(0)}%</span>
-      <span className="ml-1">of target</span>
-      <span className="ml-1 opacity-60">({actual.toLocaleString()} / {target.toLocaleString()})</span>
-    </p>
+    <div className={`mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[13px] font-semibold tabular-nums ${styles}`}>
+      <span className="text-[15px]">{pct.toFixed(0)}%</span>
+      <span>of target</span>
+      <span className="opacity-70 font-normal">({actual.toLocaleString()} / {target.toLocaleString()})</span>
+    </div>
   );
 }
 
@@ -172,17 +179,25 @@ export function PaidCustomerFourTiles({ totals }: { totals: PaidCustomerSummary 
  * reading because the three numbers only ever get interpreted
  * together.
  */
+// Label matches the fact that the tile covers the full chart horizon
+// (Aug 1 onward — the first configured target month), not the top
+// filter bar's window. Updating this string? Also update the "since"
+// language if the earliest month in MONTHLY_CUSTOMER_TARGETS changes.
+const PAID_CUSTOMER_TILE_LABEL = "Paid Customer Bucket (since August 1st)";
+
 function PaidCustomerStatusTile({ totals }: { totals: PaidCustomerSummary | null }) {
   if (!totals) {
     return (
       <div className="relative px-5 py-5 first:pl-6 last:pr-6">
         <p className="text-[44px] xl:text-[52px] leading-none font-bold text-white tracking-tight tabular-nums mb-3">…</p>
-        <p className="text-[12px] text-[#8B92A3] font-medium">Paid Customer Status</p>
+        <p className="text-[12px] text-[#8B92A3] font-medium">{PAID_CUSTOMER_TILE_LABEL}</p>
       </div>
     );
   }
   const isSurplus = totals.surplus >= 0;
-  const toneClass = isSurplus ? "text-[#10B981]" : "text-[#EF4444]";
+  const styles = isSurplus
+    ? "bg-[#0F2A1F] border-[#10B981]/35 text-[#10B981]"
+    : "bg-[#2A0F13] border-[#EF4444]/35 text-[#EF4444]";
   const word = isSurplus ? "Surplus" : "Deficit";
   const signed = `${totals.surplus > 0 ? "+" : ""}${totals.surplus.toLocaleString()}`;
   return (
@@ -192,10 +207,11 @@ function PaidCustomerStatusTile({ totals }: { totals: PaidCustomerSummary | null
         <span className="opacity-40 mx-1.5">/</span>
         <span className="opacity-70">{totals.targetCum.toLocaleString()}</span>
       </p>
-      <p className="text-[12px] text-[#8B92A3] font-medium">Paid Customer Status</p>
-      <p className={`text-[12px] mt-1 font-semibold tabular-nums ${toneClass}`}>
-        {word} {signed}
-      </p>
+      <p className="text-[12px] text-[#8B92A3] font-medium">{PAID_CUSTOMER_TILE_LABEL}</p>
+      <div className={`mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[13px] font-semibold tabular-nums ${styles}`}>
+        <span>{word}</span>
+        <span className="text-[15px]">{signed}</span>
+      </div>
     </div>
   );
 }

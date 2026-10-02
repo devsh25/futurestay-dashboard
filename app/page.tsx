@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { DashboardData, PeriodFilter } from "@/lib/types";
-import { tzStartOfDay, tzStartOfMonth, tzAddDays, tzDateKey } from "@/lib/timezone";
+import { tzStartOfDay, tzStartOfMonth, tzDateKey } from "@/lib/timezone";
 import { fullMonthTargetForRange } from "@/lib/customer-targets";
 import FilterBar from "@/components/FilterBar";
 import PaidCustomerMetricsRow from "@/components/dashboard/PaidCustomerMetricsRow";
@@ -14,7 +14,6 @@ import RetentionCurveChart from "@/components/dashboard/RetentionCurveChart";
 import FunnelCard from "@/components/dashboard/FunnelCard";
 import AdSpendCard from "@/components/dashboard/AdSpendCard";
 import SectionHeading, { Icons } from "@/components/dashboard/SectionHeading";
-import ActiveFilterChips from "@/components/ActiveFilterChips";
 import DownloadPdfButton from "@/components/DownloadPdfButton";
 import DownloadDataButton from "@/components/DownloadDataButton";
 import GrowthReportButton from "@/components/GrowthReportButton";
@@ -42,30 +41,17 @@ export default function Dashboard() {
   // back to a single-day or trailing window via the filter bar when a
   // narrower cut is wanted.
   //
-  // All date arithmetic in ET so the default + maturity warning are
-  // stable for any user regardless of their browser timezone.
+  // All date arithmetic in ET so the default is stable for any user
+  // regardless of their browser timezone.
   const nowEt = tzStartOfDay(new Date());
   const todayIso = tzDateKey(nowEt);
   const monthStartIso = tzDateKey(tzStartOfMonth(nowEt));
-  // Kept alongside the new default for the "Cohort still maturing"
-  // warning banner, which nudges the user back to T−14d if they
-  // extend the window into the recent 14 days.
-  const tMinus14Iso = tzDateKey(tzAddDays(nowEt, -14));
 
   const [period, setPeriod] = useState<PeriodFilter>("custom");
   const [customStart, setCustomStart] = useState(monthStartIso);
   const [customEnd, setCustomEnd] = useState(todayIso);
   const [countries, setCountries] = useState<string[]>([]);
   const [channels, setChannels] = useState<string[]>([]);
-
-  // Cohort-maturity warning: end date inside the last 14 days (ET) means
-  // trial and customer counts for recent signups haven't fully materialized.
-  const isMaturityRisky = (() => {
-    if (period !== "custom") return false;
-    const endEt = tzStartOfDay(new Date(customEnd + "T12:00:00Z"));
-    const cutoffEt = tzAddDays(nowEt, -14);
-    return endEt > cutoffEt;
-  })();
 
   // Headline customer target for the KPI chip: sum of the FULL monthly
   // targets for every calendar month the window overlaps. A single day
@@ -197,33 +183,6 @@ export default function Dashboard() {
         >
           {data && (
             <>
-              {isMaturityRisky && (
-                <div className="bg-[#11182B] border border-[#1F2937] rounded-xl p-4 flex items-start gap-3">
-                  <span className="text-[#60A5FA] text-lg leading-none mt-0.5">ⓘ</span>
-                  <div className="flex-1">
-                    <p className="font-semibold text-[13px] text-white">
-                      Cohort still maturing
-                    </p>
-                    <p className="text-[12px] mt-1 text-[#8B92A3] leading-relaxed">
-                      Your end date <span className="font-mono text-[#C9D1DC]">{customEnd}</span> is within the last 14 days. Trial and Customer counts for recent signups will be undercounted because the median signup-to-customer time is ~14 days. Set the end date to{" "}
-                      <button onClick={() => setCustomEnd(tMinus14Iso)} className="text-[#60A5FA] hover:text-white underline font-mono transition-colors">{tMinus14Iso}</button>{" "}
-                      for fully-matured numbers.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              <ActiveFilterChips
-                period={period}
-                customStart={customStart}
-                customEnd={customEnd}
-                countries={countries}
-                channels={channels}
-                onCountriesChange={setCountries}
-                onChannelsChange={setChannels}
-                onPeriodChange={setPeriod}
-              />
-
               <SectionHeading
                 icon={Icons.Gauge}
                 title="Overview"
