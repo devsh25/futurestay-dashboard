@@ -9,6 +9,7 @@ import {
 } from "recharts";
 import { MONTHLY_CUSTOMER_TARGETS } from "@/lib/customer-targets";
 import { tzDateKey } from "@/lib/timezone";
+import { PaidCustomerFourTiles, summarize } from "./PaidCustomerMetricsRow";
 
 /**
  * Paid Customer Run Rate — cumulative actual vs cumulative monthly
@@ -238,34 +239,9 @@ export default function PaidCustomerRunRateChart() {
     } as Record<string, number | string | boolean | null>));
   }, [data, granularity]);
 
-  const totals = useMemo(() => {
-    if (!data) return null;
-    // Only sum from the first target day forward (so the chip agrees
-    // with the trimmed series the chart draws) AND only through today
-    // (future days carry a projected target but no actual, so including
-    // them would overstate the target denominator in the chip).
-    let firstTargetDay = data.target.findIndex((t) => t > 0);
-    if (firstTargetDay === -1) firstTargetDay = 0;
-    const future = data.isFuture ?? new Array(data.days.length).fill(false);
-    let sumActual = 0, sumTarget = 0, sumProjectedTarget = 0;
-    for (let i = firstTargetDay; i < data.days.length; i++) {
-      if (future[i]) sumProjectedTarget += data.target[i];
-      else {
-        sumActual += (data.actual[i] ?? 0);
-        sumTarget += data.target[i];
-      }
-    }
-    return {
-      actualCum: sumActual,
-      targetCum: sumTarget,
-      // Round + `+ 0` normalises negative-zero so the chip never
-      // reads "Deficit -0" because of a float-arithmetic sliver.
-      surplus: Math.round(sumActual - sumTarget) + 0,
-      // Projected (future-days) target total — exposed so the chip row
-      // can show the full horizon goal next to the to-date figures.
-      projectedTargetToHorizon: sumTarget + sumProjectedTarget,
-    };
-  }, [data]);
+  // Shared summary helper — same four numbers the top-of-dashboard
+  // metrics row shows, so the chart card's headline tiles always match.
+  const totals = useMemo(() => (data ? summarize(data) : null), [data]);
 
   return (
     <Card className="bg-[#11182B] border border-[#1F2937] rounded-2xl shadow-none">
@@ -297,45 +273,20 @@ export default function PaidCustomerRunRateChart() {
 
         {data && totals && (
           <>
-            <div className="flex flex-wrap items-center gap-2 mb-5">
-              {METRICS.map((m) => {
-                const raw = totals[m.key];
-                return (
-                  <span
-                    key={m.key}
-                    className="inline-flex items-center gap-2 h-8 px-3 rounded-full bg-[#1A2235] border border-[#1F2937] text-[12px] font-medium text-white"
-                    title={m.description}
-                  >
-                    <span className="h-2 w-2 rounded-full" style={{ backgroundColor: m.color }} />
-                    <span>{m.label}</span>
-                    <span className="text-[11px] tabular-nums opacity-60">
-                      {Math.round(raw).toLocaleString()}
-                    </span>
-                  </span>
-                );
-              })}
-              <span
-                className={`inline-flex items-center gap-2 h-8 px-3 rounded-full border text-[12px] font-medium tabular-nums ${
-                  totals.surplus >= 0
-                    ? "bg-[#0F2A1F] border-[#10B981]/25 text-[#10B981]"
-                    : "bg-[#2A0F13] border-[#EF4444]/25 text-[#EF4444]"
-                }`}
-                title="Cumulative surplus (positive) or deficit (negative) through today"
-              >
-                {totals.surplus >= 0 ? "Surplus" : "Deficit"}
-                <span>{totals.surplus > 0 ? "+" : ""}{totals.surplus.toLocaleString()}</span>
-              </span>
-              {totals.projectedTargetToHorizon > totals.targetCum && (
-                <span
-                  className="inline-flex items-center gap-2 h-8 px-3 rounded-full bg-[#1A2235] border border-[#1F2937] text-[12px] font-medium text-[#C9D1DC] tabular-nums"
-                  title="Full-horizon target: sum of monthly goals from the start of the window through Dec 2026"
-                >
-                  <span className="h-2 w-2 rounded-full flex-none" style={{ backgroundColor: "#A78BFA", opacity: 0.5 }} />
-                  <span>Horizon target</span>
-                  <span>{Math.round(totals.projectedTargetToHorizon).toLocaleString()}</span>
-                </span>
-              )}
-              <div className="ml-auto inline-flex h-8 rounded-full bg-[#0E1422] border border-[#1F2937] p-0.5">
+            {/* Headline tiles — same four big metrics the top-of-dashboard
+                row shows, kept inside the card so the chart reads as
+                self-contained and the metrics act as a legend for the
+                lines below. */}
+            <div className="bg-[#0E1422] border border-[#1F2937] rounded-xl overflow-hidden mb-4">
+              <div className="grid grid-cols-2 lg:grid-cols-4 divide-y lg:divide-y-0 divide-x divide-[#1F2937]">
+                <PaidCustomerFourTiles totals={totals} />
+              </div>
+            </div>
+
+            {/* Granularity toggle — moved to its own row so it keeps the
+                same right-aligned pill it had next to the old chip row. */}
+            <div className="flex items-center justify-end mb-5">
+              <div className="inline-flex h-8 rounded-full bg-[#0E1422] border border-[#1F2937] p-0.5">
                 {(["day", "week", "month"] as const).map((g) => (
                   <button
                     key={g}

@@ -1,0 +1,215 @@
+"use client";
+
+import React, { useEffect, useMemo, useState } from "react";
+import { KPIs, TrendDelta } from "@/lib/types";
+import Sparkline from "./Sparkline";
+
+/**
+ * Headline metrics row shown at the top of the dashboard.
+ *
+ * Five big tiles in one divided container (same visual pattern the hero
+ * KPI row used to use):
+ *   1. Actual (cumulative)      — paid customers acquired since the
+ *                                 start of the chart window
+ *   2. Target (cumulative)      — prorated monthly target through today
+ *   3. Current Status           — Surplus / Deficit label plus the
+ *                                 signed gap number, color-coded
+ *   4. Horizon target           — full-horizon goal through Dec 2026
+ *   5. Total Customers (filtered) — the filter-bar-scoped Total
+ *                                 Customers tile, with its trend badge,
+ *                                 sparkline and "% of target" chip
+ *
+ * The first four come from the Paid Customer Run Rate endpoint and are
+ * invariant to the top filter bar (they always cover the full chart
+ * horizon). The fifth is the per-filter count, kept for the detail /
+ * drill-down story the filter bar supports.
+ *
+ * The chart card below reuses the same four big tiles — see
+ * PaidCustomerRunRateChart — so the top-of-dashboard numbers and the
+ * card's own headline numbers always match.
+ */
+
+interface ApiResponse {
+  days: string[];
+  actual: (number | null)[];
+  target: number[];
+  isFuture: boolean[];
+}
+
+// Palette aligned with the chart's own line colors so the small dot in
+// each tile corner reads as a legend.
+const COLOR_ACTUAL  = "#1E6FFF";
+const COLOR_TARGET  = "#A78BFA";
+
+function TrendBadge({ delta }: { delta: TrendDelta }) {
+  if (delta.previous === 0 && delta.current === 0) {
+    return <span className="text-[10px] text-[#5B6478] font-medium">—</span>;
+  }
+  const up = delta.pct >= 0;
+  const styles = up ? "text-[#10B981] bg-[#0F2A1F]" : "text-[#EF4444] bg-[#2A0F13]";
+  const arrow = up ? "↑" : "↓";
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-[11px] font-semibold px-2 py-0.5 rounded-full tabular-nums ${styles}`}>
+      {arrow} {Math.abs(delta.pct).toFixed(1)}%
+    </span>
+  );
+}
+
+function TargetChip({ actual, target }: { actual: number; target: number }) {
+  if (target <= 0) return null;
+  const pct = (actual / target) * 100;
+  const tone = pct >= 100 ? "text-[#10B981]" : "text-white";
+  return (
+    <p className="text-[11px] text-[#8B92A3] mt-2 tabular-nums">
+      <span className={`font-semibold ${tone}`}>{pct.toFixed(0)}%</span>
+      <span className="ml-1">of target</span>
+      <span className="ml-1 opacity-60">({actual.toLocaleString()} / {target.toLocaleString()})</span>
+    </p>
+  );
+}
+
+export type PaidCustomerSummary = {
+  actualCum: number;
+  targetCum: number;
+  surplus: number;
+  horizonTarget: number;
+};
+
+/** Compute the four Paid Customer headline numbers from the API payload. */
+export function summarize(data: ApiResponse): PaidCustomerSummary {
+  let firstTargetDay = data.target.findIndex((t) => t > 0);
+  if (firstTargetDay === -1) firstTargetDay = 0;
+  const future = data.isFuture ?? new Array(data.days.length).fill(false);
+  let sumActual = 0, sumTarget = 0, sumProjected = 0;
+  for (let i = firstTargetDay; i < data.days.length; i++) {
+    if (future[i]) sumProjected += data.target[i];
+    else {
+      sumActual += (data.actual[i] ?? 0);
+      sumTarget += data.target[i];
+    }
+  }
+  return {
+    actualCum:     sumActual,
+    targetCum:     Math.round(sumTarget),
+    // Math.round(+0 or -0 float sliver) can keep a negative sign; `+ 0`
+    // normalises -0 to +0 so the chip never reads "-0".
+    surplus:       Math.round(sumActual - sumTarget) + 0,
+    horizonTarget: Math.round(sumTarget + sumProjected),
+  };
+}
+
+/** One big tile. Mirrors the KPI hero row's cell geometry. */
+export function BigMetricTile({
+  label, value, dotColor, valueTone,
+}: {
+  label: React.ReactNode;
+  value: string;
+  dotColor?: string;
+  valueTone?: string;
+}) {
+  return (
+    <div className="relative px-5 py-5 first:pl-6 last:pr-6">
+      {dotColor && (
+        <span
+          className="absolute top-3 right-3 h-2 w-2 rounded-full"
+          style={{ backgroundColor: dotColor }}
+        />
+      )}
+      <p className={`text-[44px] xl:text-[52px] leading-none font-bold tracking-tight tabular-nums mb-3 ${valueTone ?? "text-white"}`}>
+        {value}
+      </p>
+      <p className="text-[12px] text-[#8B92A3] font-medium">{label}</p>
+    </div>
+  );
+}
+
+/**
+ * The four Paid Customer tiles rendered inline — reused by this row and
+ * by the chart card below. Pass `null` while the data is still loading.
+ */
+export function PaidCustomerFourTiles({ totals }: { totals: PaidCustomerSummary | null }) {
+  const isSurplus = (totals?.surplus ?? 0) >= 0;
+  const fmt = (v: number) => v.toLocaleString();
+  return (
+    <>
+      <BigMetricTile
+        label="Actual (cumulative)"
+        value={totals ? fmt(totals.actualCum) : "…"}
+        dotColor={COLOR_ACTUAL}
+      />
+      <BigMetricTile
+        label="Target (cumulative)"
+        value={totals ? fmt(totals.targetCum) : "…"}
+        dotColor={COLOR_TARGET}
+      />
+      <BigMetricTile
+        label={
+          totals
+            ? (
+              <>
+                Current Status · {" "}
+                <span className={isSurplus ? "text-[#10B981]" : "text-[#EF4444]"}>
+                  {isSurplus ? "Surplus" : "Deficit"}
+                </span>
+              </>
+            )
+            : "Current Status"
+        }
+        value={totals ? `${totals.surplus > 0 ? "+" : ""}${totals.surplus.toLocaleString()}` : "…"}
+        valueTone={totals ? (isSurplus ? "text-[#10B981]" : "text-[#EF4444]") : undefined}
+      />
+      <BigMetricTile
+        label="Horizon target"
+        value={totals ? fmt(totals.horizonTarget) : "…"}
+        dotColor={COLOR_TARGET}
+      />
+    </>
+  );
+}
+
+export default function PaidCustomerMetricsRow({
+  kpis,
+  customerTarget,
+}: {
+  kpis: KPIs;
+  customerTarget?: number;
+}) {
+  const [data, setData] = useState<ApiResponse | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/paid-customer-run-rate")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d: ApiResponse) => { if (!cancelled) setData(d); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const totals = useMemo(() => (data ? summarize(data) : null), [data]);
+
+  return (
+    <div className="bg-[#11182B] border border-[#1F2937] rounded-2xl overflow-hidden">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-[#1F2937]">
+        <PaidCustomerFourTiles totals={totals} />
+
+        {/* Total Customers — rich tile with trend badge + sparkline +
+            target chip, matching what the old KPICards row showed. */}
+        <div className="relative px-5 py-5 first:pl-6 last:pr-6">
+          <div className="flex items-baseline justify-between mb-3 gap-2">
+            <p className="text-[44px] xl:text-[52px] leading-none font-bold text-white tracking-tight tabular-nums">
+              {kpis.totalCustomers.toLocaleString()}
+            </p>
+            <TrendBadge delta={kpis.deltas.customers} />
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[12px] text-[#8B92A3] font-medium truncate">Total Customers</p>
+            <Sparkline data={kpis.sparkline.customers} color={COLOR_ACTUAL} width={56} height={22} />
+          </div>
+          {customerTarget !== undefined && (
+            <TargetChip actual={kpis.totalCustomers} target={customerTarget} />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

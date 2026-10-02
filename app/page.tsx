@@ -5,7 +5,7 @@ import { DashboardData, PeriodFilter } from "@/lib/types";
 import { tzStartOfDay, tzStartOfMonth, tzAddDays, tzDateKey } from "@/lib/timezone";
 import { fullMonthTargetForRange } from "@/lib/customer-targets";
 import FilterBar from "@/components/FilterBar";
-import KPICards from "@/components/dashboard/KPICards";
+import PaidCustomerMetricsRow from "@/components/dashboard/PaidCustomerMetricsRow";
 import AllTimeChart from "@/components/dashboard/AllTimeChart";
 import RtlRunRateChart from "@/components/dashboard/RtlRunRateChart";
 import PaidCustomerRunRateChart from "@/components/dashboard/PaidCustomerRunRateChart";
@@ -227,10 +227,10 @@ export default function Dashboard() {
               <SectionHeading
                 icon={Icons.Gauge}
                 title="Overview"
-                description="Headline metrics with 14-day trend vs prior period"
+                description="Paid customer run-rate against the monthly plan"
                 iconColor="#60A5FA"
               />
-              <KPICards kpis={data.kpis} cohort={data.cohort} customerTarget={customerTarget} />
+              <PaidCustomerMetricsRow kpis={data.kpis} customerTarget={customerTarget} />
 
               {/* Headline timeseries — independent of period filter,
                   shows daily milestone counts since first signup. */}
