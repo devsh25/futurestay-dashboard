@@ -183,12 +183,6 @@ export default function Dashboard() {
         >
           {data && (
             <>
-              <SectionHeading
-                icon={Icons.Gauge}
-                title="Overview"
-                description="Paid customer run-rate against the monthly plan"
-                iconColor="#60A5FA"
-              />
               <PaidCustomerMetricsRow kpis={data.kpis} customerTarget={customerTarget} />
 
               {/* Headline timeseries — independent of period filter,
