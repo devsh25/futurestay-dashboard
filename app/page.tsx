@@ -12,7 +12,6 @@ import PaidCustomerRunRateChart from "@/components/dashboard/PaidCustomerRunRate
 import DashboardSkeleton from "@/components/dashboard/DashboardSkeleton";
 import RetentionCurveChart from "@/components/dashboard/RetentionCurveChart";
 import FunnelCard from "@/components/dashboard/FunnelCard";
-import DQChartCard from "@/components/dashboard/DQChartCard";
 import AdSpendCard from "@/components/dashboard/AdSpendCard";
 import SectionHeading, { Icons } from "@/components/dashboard/SectionHeading";
 import ActiveFilterChips from "@/components/ActiveFilterChips";
@@ -270,11 +269,10 @@ export default function Dashboard() {
               <SectionHeading
                 icon={Icons.Shield}
                 title="Retention & Quality"
-                description="How long paying customers stick around, plus DQ reasons"
+                description="How long paying customers stick around"
                 iconColor="#93C5FD"
               />
               <RetentionCurveChart />
-              <DQChartCard data={data.dqWeekly} />
             </>
           )}
         </div>

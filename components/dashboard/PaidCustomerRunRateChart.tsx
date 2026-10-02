@@ -8,6 +8,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import { MONTHLY_CUSTOMER_TARGETS } from "@/lib/customer-targets";
+import { tzDateKey } from "@/lib/timezone";
 
 /**
  * Paid Customer Run Rate — cumulative actual vs cumulative monthly
@@ -31,8 +32,12 @@ type Granularity = "day" | "week" | "month";
 
 interface ApiResponse {
   days: string[];
-  actual: number[];
+  actual: (number | null)[];
   target: number[];
+  // Per-day flag for days strictly after today ET. The chart uses it
+  // to split the target line into actual-to-date vs projected, and
+  // to stop the actual line at today.
+  isFuture: boolean[];
 }
 
 type MetricKey = "actualCum" | "targetCum";
@@ -101,86 +106,131 @@ export default function PaidCustomerRunRateChart() {
     //    the first target day puts both series on equal footing.
     let firstTargetDay = data.target.findIndex((t) => t > 0);
     if (firstTargetDay === -1) firstTargetDay = 0;
-    const days   = data.days.slice(firstTargetDay);
-    const actual = data.actual.slice(firstTargetDay);
-    const target = data.target.slice(firstTargetDay);
+    const days     = data.days.slice(firstTargetDay);
+    const actual   = data.actual.slice(firstTargetDay);
+    const target   = data.target.slice(firstTargetDay);
+    const isFuture = (data.isFuture ?? new Array(data.days.length).fill(false)).slice(firstTargetDay);
 
-    // 2) Bucket daily actual + target into day / week / month totals.
-    type Agg = { actual: number; target: number };
+    // 2) Bucket daily actual + target + future-flag into day/week/month
+    //    totals. We also track which calendar role each bucket plays —
+    //    "past" (fully before today), "current" (contains today) or
+    //    "future" (fully after today) — so the chart can stop the
+    //    actual line at today while the target line projects forward.
+    type Agg = { actual: number; target: number; hasToday: boolean; hasFuture: boolean; hasPast: boolean };
     const buckets = new Map<string, Agg>();
     const order: string[] = [];
+    const todayIso = tzDateKey(new Date());
     for (let i = 0; i < days.length; i++) {
-      const k = bucketKey(days[i], granularity);
+      const d = days[i];
+      const k = bucketKey(d, granularity);
       let b = buckets.get(k);
-      if (!b) { b = { actual: 0, target: 0 }; buckets.set(k, b); order.push(k); }
-      b.actual += actual[i] || 0;
+      if (!b) { b = { actual: 0, target: 0, hasToday: false, hasFuture: false, hasPast: false }; buckets.set(k, b); order.push(k); }
+      const a = actual[i];
+      if (a !== null && a !== undefined) b.actual += a;
       b.target += target[i] || 0;
+      if (isFuture[i]) b.hasFuture = true;
+      else if (d === todayIso) b.hasToday = true;
+      else b.hasPast = true;
+    }
+    type Kind = "past" | "current" | "future";
+    function kindOf(b: Agg): Kind {
+      if (b.hasToday) return "current";
+      if (b.hasFuture && !b.hasPast) return "future";
+      return "past";
     }
 
     // 3) Walk the buckets in order and compute CUMULATIVE actual + target.
-    //    These are the series the chart plots. The per-bucket raw values
-    //    stay in the row so the tooltip can show both. For monthly
-    //    buckets we also carry the FULL-month target (from the lookup
-    //    map) so the tooltip can show the real monthly goal — 165 for
-    //    Oct on day 1 — rather than the day-prorated share (5) that
-    //    the running cumulative line uses.
+    //    Target accumulates all the way through the horizon. Actual stops
+    //    accumulating in future buckets and is set to null there so the
+    //    chart gaps the actual line at today.
+    //
+    //    For monthly buckets we also carry the FULL-month target (from
+    //    the lookup map) so the tooltip can show the real monthly goal
+    //    (165 for Oct, 174 for Nov, 182 for Dec) rather than the
+    //    day-prorated share the cumulative line uses.
     type Row = {
       label: string;
-      actualBucket: number; targetBucket: number; monthlyTargetFull: number | null;
-      actualCum: number;    targetCum: number;
-      surplus: number;
+      actualBucket: number | null;
+      targetBucket: number;
+      monthlyTargetFull: number | null;
+      actualCum: number | null;
+      targetCum: number;
+      surplus: number | null;
+      kind: Kind;
     };
     let aCum = 0, tCum = 0;
     const base: Row[] = order.map((k) => {
       const b = buckets.get(k)!;
-      aCum += b.actual;
+      const kind = kindOf(b);
       tCum += b.target;
-      // Monthly bucket labels are "YYYY-MM-01" — strip the day to
-      // index into MONTHLY_CUSTOMER_TARGETS. Other granularities
-      // leave monthlyTargetFull null (not meaningful across week /
-      // day boundaries).
+      if (kind !== "future") aCum += b.actual;
+      const actualCum = kind === "future" ? null : aCum;
       const monthlyTargetFull = granularity === "month"
         ? (MONTHLY_CUSTOMER_TARGETS[k.slice(0, 7)] ?? null)
         : null;
       return {
         label: k,
-        actualBucket: b.actual, targetBucket: b.target, monthlyTargetFull,
-        actualCum: aCum,        targetCum: tCum,
-        surplus: aCum - tCum,
+        actualBucket: kind === "future" ? null : b.actual,
+        targetBucket: b.target,
+        monthlyTargetFull,
+        actualCum,
+        targetCum: tCum,
+        surplus: actualCum === null ? null : actualCum - tCum,
+        kind,
       };
     });
 
-    // 4) Mark the last bucket as partial so the current period renders
-    //    dotted. Split-array trick lifted from RtlRunRateChart: each
-    //    cumulative series gets a solid-only copy and a dashed-only copy
-    //    with the boundary point duplicated so the line is continuous.
+    // 4) Split each cumulative series into solid + dashed segments so
+    //    the chart can style them differently.
+    //      actual: past → solid, current → dashed, future → null
+    //      target: past → solid, current + future → dashed (projection
+    //              uses the same stroke as the current partial bucket)
+    //    Boundary points are duplicated into the dashed series so lines
+    //    connect visually at past → current / past → future transitions
+    //    instead of leaving a gap.
     const N = base.length;
-    const partial: boolean[] = new Array(N).fill(false);
-    if (N > 0) partial[N - 1] = true;
-    function split(values: (number | null)[]): { solid: (number | null)[]; dashed: (number | null)[] } {
+    function splitActual(values: (number | null)[]) {
       const solid: (number | null)[] = new Array(N).fill(null);
       const dashed: (number | null)[] = new Array(N).fill(null);
-      for (let i = 0; i < N; i++) (partial[i] ? dashed : solid)[i] = values[i];
+      for (let i = 0; i < N; i++) {
+        const k = base[i].kind;
+        if (k === "past") solid[i] = values[i];
+        else if (k === "current") dashed[i] = values[i];
+      }
       for (let i = 1; i < N; i++) {
-        if (partial[i] && !partial[i - 1]) dashed[i - 1] = values[i - 1];
-        else if (!partial[i] && partial[i - 1]) solid[i - 1] = values[i - 1];
+        if (base[i].kind === "current" && base[i - 1].kind === "past") {
+          dashed[i - 1] = values[i - 1];
+        }
+      }
+      return { solid, dashed };
+    }
+    function splitTarget(values: (number | null)[]) {
+      const solid: (number | null)[] = new Array(N).fill(null);
+      const dashed: (number | null)[] = new Array(N).fill(null);
+      for (let i = 0; i < N; i++) {
+        const k = base[i].kind;
+        if (k === "past") solid[i] = values[i];
+        else dashed[i] = values[i];
+      }
+      for (let i = 1; i < N; i++) {
+        if (base[i].kind !== "past" && base[i - 1].kind === "past") {
+          dashed[i - 1] = values[i - 1];
+        }
       }
       return { solid, dashed };
     }
     const splits = {
-      actualCum: split(base.map((r) => r.actualCum)),
-      targetCum: split(base.map((r) => r.targetCum)),
+      actualCum: splitActual(base.map((r) => r.actualCum)),
+      targetCum: splitTarget(base.map((r) => r.targetCum)),
     };
 
     return base.map((r, i) => ({
       ...r,
-      // isPartial is tracked explicitly here so the tooltip can tell
-      // "this bucket is the current, incomplete one" apart from "this
-      // bucket is complete but it's the boundary point duplicated into
-      // the dashed series so the line visually connects". Reading the
-      // dashed field as the partial signal (as RtlRunRateChart does)
-      // mislabels the last complete bucket when the hover lands on it.
-      isPartial: partial[i],
+      // isPartial / isFuture let the tooltip caption describe the bucket
+      // correctly: "partial" for current (today's in-flight bucket),
+      // "projected" for future buckets past the horizon.
+      isPartial: r.kind === "current",
+      isFuture:  r.kind === "future",
       actualCum_solid:  splits.actualCum.solid[i],
       actualCum_dashed: splits.actualCum.dashed[i],
       targetCum_solid:  splits.targetCum.solid[i],
@@ -190,20 +240,30 @@ export default function PaidCustomerRunRateChart() {
 
   const totals = useMemo(() => {
     if (!data) return null;
-    // Only sum from the first target day forward so the chip totals
-    // agree with the trimmed series the chart draws (otherwise the
-    // chip "Actual" would be ~150 higher than the chart's rightmost
-    // Actual point from the pre-target July days that aren't plotted).
+    // Only sum from the first target day forward (so the chip agrees
+    // with the trimmed series the chart draws) AND only through today
+    // (future days carry a projected target but no actual, so including
+    // them would overstate the target denominator in the chip).
     let firstTargetDay = data.target.findIndex((t) => t > 0);
     if (firstTargetDay === -1) firstTargetDay = 0;
-    const sumActual = data.actual.slice(firstTargetDay).reduce((s, v) => s + v, 0);
-    const sumTarget = data.target.slice(firstTargetDay).reduce((s, v) => s + v, 0);
-    // Round + `+ 0` normalises negative-zero so the chip never
-    // reads "Deficit -0" because of a float-arithmetic sliver.
+    const future = data.isFuture ?? new Array(data.days.length).fill(false);
+    let sumActual = 0, sumTarget = 0, sumProjectedTarget = 0;
+    for (let i = firstTargetDay; i < data.days.length; i++) {
+      if (future[i]) sumProjectedTarget += data.target[i];
+      else {
+        sumActual += (data.actual[i] ?? 0);
+        sumTarget += data.target[i];
+      }
+    }
     return {
       actualCum: sumActual,
       targetCum: sumTarget,
-      surplus:   Math.round(sumActual - sumTarget) + 0,
+      // Round + `+ 0` normalises negative-zero so the chip never
+      // reads "Deficit -0" because of a float-arithmetic sliver.
+      surplus: Math.round(sumActual - sumTarget) + 0,
+      // Projected (future-days) target total — exposed so the chip row
+      // can show the full horizon goal next to the to-date figures.
+      projectedTargetToHorizon: sumTarget + sumProjectedTarget,
     };
   }, [data]);
 
@@ -213,15 +273,16 @@ export default function PaidCustomerRunRateChart() {
         <CardTitle className="flex items-center justify-between text-[17px] font-semibold text-white tracking-tight">
           <span>Paid Customer Run Rate</span>
           <Badge className="bg-[#1E6FFF]/15 text-[#60A5FA] border-[#1E6FFF]/25 text-[11px] font-medium">
-            Cumulative vs target · last 90 days
+            Cumulative actual vs projected target · through Dec 2026
           </Badge>
         </CardTitle>
         <p className="text-[13px] text-[#8B92A3] mt-2 leading-relaxed">
           <span className="text-[#1E6FFF] font-medium">Period-based.</span>{" "}
           Running total of real paid customers (date = <code className="text-[#C9D1DC]">hs_v2_date_entered_customer</code>) alongside the
-          running total of the monthly customer target, prorated per day. The gap at any point is the surplus
-          or deficit since the start of the window. Target months currently loaded: Aug to Dec 2026. Excludes
-          partner referrals and Futurestay test contacts.
+          running total of the monthly customer target, prorated per day. The actual line stops at today;
+          the target line projects forward through the end of the last target month so the remaining goal
+          is visible. Target months currently loaded: Aug to Dec 2026. Excludes partner referrals and
+          Futurestay test contacts.
         </p>
       </CardHeader>
 
@@ -259,11 +320,21 @@ export default function PaidCustomerRunRateChart() {
                     ? "bg-[#0F2A1F] border-[#10B981]/25 text-[#10B981]"
                     : "bg-[#2A0F13] border-[#EF4444]/25 text-[#EF4444]"
                 }`}
-                title="Cumulative surplus (positive) or deficit (negative) over the last 90 days"
+                title="Cumulative surplus (positive) or deficit (negative) through today"
               >
                 {totals.surplus >= 0 ? "Surplus" : "Deficit"}
                 <span>{totals.surplus > 0 ? "+" : ""}{totals.surplus.toLocaleString()}</span>
               </span>
+              {totals.projectedTargetToHorizon > totals.targetCum && (
+                <span
+                  className="inline-flex items-center gap-2 h-8 px-3 rounded-full bg-[#1A2235] border border-[#1F2937] text-[12px] font-medium text-[#C9D1DC] tabular-nums"
+                  title="Full-horizon target: sum of monthly goals from the start of the window through Dec 2026"
+                >
+                  <span className="h-2 w-2 rounded-full flex-none" style={{ backgroundColor: "#A78BFA", opacity: 0.5 }} />
+                  <span>Horizon target</span>
+                  <span>{Math.round(totals.projectedTargetToHorizon).toLocaleString()}</span>
+                </span>
+              )}
               <div className="ml-auto inline-flex h-8 rounded-full bg-[#0E1422] border border-[#1F2937] p-0.5">
                 {(["day", "week", "month"] as const).map((g) => (
                   <button
@@ -309,14 +380,20 @@ export default function PaidCustomerRunRateChart() {
                       if (!isActive || !payload || payload.length === 0) return null;
                       const raw = payload[0]?.payload ?? {};
                       const isPartial = raw.isPartial === true;
-                      const aCum = Number(raw.actualCum ?? 0);
+                      const isFutureBucket = raw.isFuture === true;
+                      const aCumRaw = raw.actualCum;
+                      const aBktRaw = raw.actualBucket;
+                      // actualCum / actualBucket are null for future
+                      // buckets (we don't know the customer count
+                      // yet). Carry that nullability through so the
+                      // tooltip can show a plain em-dash instead of
+                      // "0" where there is no data.
+                      const aCum = aCumRaw === null || aCumRaw === undefined ? null : Number(aCumRaw);
+                      const aBkt = aBktRaw === null || aBktRaw === undefined ? null : Number(aBktRaw);
                       const tCum = Number(raw.targetCum ?? 0);
-                      const aBkt = Number(raw.actualBucket ?? 0);
                       // In monthly view, swap in the FULL-month target
-                      // (165 for Oct) in place of the day-prorated share
-                      // (5 for Oct on day 1). The user wants to read
-                      // the actual against the real monthly goal in the
-                      // tooltip's per-month section. Daily / weekly
+                      // (165 for Oct, 174 for Nov, 182 for Dec) in
+                      // place of the day-prorated share. Daily / weekly
                       // keep the bucket's own prorated target because
                       // "full-month target" doesn't apply across
                       // sub-month windows.
@@ -331,8 +408,8 @@ export default function PaidCustomerRunRateChart() {
                       // never prints "-0". The `+ 0` is load-bearing:
                       // `-0 + 0 === +0` while `Math.round` alone
                       // keeps the negative sign.
-                      const surplus       = Math.round(aCum - tCum) + 0;
-                      const bucketSurplus = Math.round(aBkt - tBkt) + 0;
+                      const surplus       = aCum === null ? null : Math.round(aCum - tCum) + 0;
+                      const bucketSurplus = aBkt === null ? null : Math.round(aBkt - tBkt) + 0;
                       // "this month / week / day" copy follows the
                       // granularity so the per-bucket block reads
                       // naturally regardless of toggle.
@@ -340,11 +417,28 @@ export default function PaidCustomerRunRateChart() {
                         granularity === "month" ? "This month" :
                         granularity === "week"  ? "This week"  :
                                                   "This day";
+                      const tagText =
+                        isFutureBucket ? "projected" :
+                        isPartial      ? "partial"   :
+                                         null;
+                      // Common renderer so null actuals print as a plain
+                      // em-dash instead of "0" or "NaN" — future buckets
+                      // have no customer data yet.
+                      const fmtNum  = (v: number | null) => v === null ? "—" : v.toLocaleString();
+                      const fmtRnd  = (v: number | null) => v === null ? "—" : Math.round(v).toLocaleString();
+                      const fmtDelta = (v: number | null) => {
+                        if (v === null) return "—";
+                        return `${v > 0 ? "+" : ""}${v.toLocaleString()}`;
+                      };
+                      const deltaTone = (v: number | null) => {
+                        if (v === null) return "text-[#5B6478]";
+                        return v >= 0 ? "text-[#10B981]" : "text-[#EF4444]";
+                      };
                       return (
                         <div className="bg-[#0E1422] border border-[#1F2937] rounded-lg p-3 text-[11px] min-w-[240px]">
                           <div className="text-[#8B92A3] mb-2">
                             {label ? fmtTooltipDate(String(label), granularity) : ""}
-                            {isPartial && <span className="ml-1 text-[#F59E0B]">· partial</span>}
+                            {tagText && <span className="ml-1 text-[#F59E0B]">· {tagText}</span>}
                           </div>
 
                           {/* Per-bucket block — the actual and target
@@ -357,7 +451,7 @@ export default function PaidCustomerRunRateChart() {
                                 <span className="h-2 w-2 rounded-full flex-none" style={{ backgroundColor: "#1E6FFF" }} />
                                 <span className="text-white">Actual</span>
                               </span>
-                              <span className="font-mono tabular-nums text-white">{aBkt.toLocaleString()}</span>
+                              <span className="font-mono tabular-nums text-white">{fmtNum(aBkt)}</span>
                             </div>
                             <div className="flex items-center justify-between gap-3">
                               <span className="flex items-center gap-2 min-w-0">
@@ -368,19 +462,25 @@ export default function PaidCustomerRunRateChart() {
                             </div>
                             <div className="flex items-center justify-between gap-3">
                               <span className="text-[#8B92A3]">Surplus / deficit</span>
-                              <span className={`font-mono tabular-nums font-semibold ${bucketSurplus >= 0 ? "text-[#10B981]" : "text-[#EF4444]"}`}>
-                                {bucketSurplus > 0 ? "+" : ""}{bucketSurplus.toLocaleString()}
+                              <span className={`font-mono tabular-nums font-semibold ${deltaTone(bucketSurplus)}`}>
+                                {fmtDelta(bucketSurplus)}
                               </span>
                             </div>
                           </div>
 
-                          {/* Cumulative block — totals from the start of
-                              the window to the end of this bucket. */}
+                          {/* Cumulative block — totals from the start
+                              of the window to the end of this bucket's
+                              period. For past buckets this is the real
+                              to-date value; for current + future it
+                              carries the target line's projection to
+                              the end of the bucket, with actual either
+                              frozen at today (current) or dashed as
+                              unknown (future). */}
                           <div className="pt-2 border-t border-[#1F2937]">
-                            <div className="text-[10px] uppercase tracking-wider text-[#5B6478] mb-1">Cumulative to date</div>
+                            <div className="text-[10px] uppercase tracking-wider text-[#5B6478] mb-1">Cumulative at end of period</div>
                             <div className="flex items-center justify-between gap-3">
                               <span className="text-white">Actual</span>
-                              <span className="font-mono tabular-nums text-white">{Math.round(aCum).toLocaleString()}</span>
+                              <span className="font-mono tabular-nums text-white">{fmtRnd(aCum)}</span>
                             </div>
                             <div className="flex items-center justify-between gap-3">
                               <span className="text-white">Target</span>
@@ -388,8 +488,8 @@ export default function PaidCustomerRunRateChart() {
                             </div>
                             <div className="flex items-center justify-between gap-3">
                               <span className="text-[#8B92A3]">Surplus / deficit</span>
-                              <span className={`font-mono tabular-nums font-semibold ${surplus >= 0 ? "text-[#10B981]" : "text-[#EF4444]"}`}>
-                                {surplus > 0 ? "+" : ""}{surplus.toLocaleString()}
+                              <span className={`font-mono tabular-nums font-semibold ${deltaTone(surplus)}`}>
+                                {fmtDelta(surplus)}
                               </span>
                             </div>
                           </div>

@@ -98,3 +98,16 @@ export function fullMonthTargetForRange(startIso: string, endIso: string): numbe
 export function currentMonthKey(): string {
   return tzDateKey(new Date()).slice(0, 7);
 }
+
+/**
+ * ISO date for the last day of the last month in MONTHLY_CUSTOMER_TARGETS.
+ * Used to extend the run-rate chart's target line forward through the
+ * end of the planning horizon (today → end of the last target month).
+ * Returns null if the map is empty.
+ */
+export function lastTargetDateIso(): string | null {
+  const months = Object.keys(MONTHLY_CUSTOMER_TARGETS).sort();
+  if (months.length === 0) return null;
+  const last = months[months.length - 1];
+  return `${last}-${String(daysInMonth(last)).padStart(2, "0")}`;
+}
