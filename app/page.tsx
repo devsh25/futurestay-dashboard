@@ -6,8 +6,7 @@ import { tzStartOfDay, tzStartOfMonth, tzDateKey } from "@/lib/timezone";
 import { fullMonthTargetForRange } from "@/lib/customer-targets";
 import FilterBar from "@/components/FilterBar";
 import PaidCustomerMetricsRow from "@/components/dashboard/PaidCustomerMetricsRow";
-import AllTimeChart from "@/components/dashboard/AllTimeChart";
-import RtlRunRateChart from "@/components/dashboard/RtlRunRateChart";
+import GrowthRunRateChart from "@/components/dashboard/GrowthRunRateChart";
 import PaidCustomerRunRateChart from "@/components/dashboard/PaidCustomerRunRateChart";
 import DashboardSkeleton from "@/components/dashboard/DashboardSkeleton";
 import RetentionCurveChart from "@/components/dashboard/RetentionCurveChart";
@@ -179,8 +178,7 @@ export default function Dashboard() {
 
               {/* Headline timeseries — independent of period filter,
                   shows daily milestone counts since first signup. */}
-              <AllTimeChart onReady={handleRunRateReady} />
-              <RtlRunRateChart />
+              <GrowthRunRateChart onReady={handleRunRateReady} />
               <PaidCustomerRunRateChart />
 
               <SectionHeading
