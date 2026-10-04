@@ -234,6 +234,12 @@ function PaidCustomerStatusTile({ totals }: { totals: PaidCustomerSummary | null
     : "bg-[#2A0F13] border-[#EF4444]/35 text-[#EF4444]";
   const word = isSurplus ? "Surplus" : "Deficit";
   const signed = `${totals.surplus > 0 ? "+" : ""}${totals.surplus.toLocaleString()}`;
+  // Surplus / deficit as a share of the target denominator — gives a
+  // relative sense of the gap (e.g. "+47 (15%)" vs just "+47").
+  // Signed too, so a deficit reads as "-15 (-5%)". Only shown when
+  // the target is non-zero; otherwise the ratio is undefined.
+  const pct = totals.targetCum > 0 ? (totals.surplus / totals.targetCum) * 100 : null;
+  const signedPct = pct === null ? null : `${pct > 0 ? "+" : ""}${pct.toFixed(0)}%`;
   return (
     <div className="relative px-5 py-5 first:pl-6 last:pr-6">
       <p className="text-[44px] xl:text-[52px] leading-none font-bold text-white tracking-tight tabular-nums mb-3">
@@ -245,6 +251,7 @@ function PaidCustomerStatusTile({ totals }: { totals: PaidCustomerSummary | null
       <div className={`mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[13px] font-semibold tabular-nums ${styles}`}>
         <span>{word}</span>
         <span className="text-[15px]">{signed}</span>
+        {signedPct && <span className="opacity-80 font-normal">({signedPct})</span>}
       </div>
     </div>
   );
