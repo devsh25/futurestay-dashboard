@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { KPIs, TrendDelta } from "@/lib/types";
 import Sparkline from "./Sparkline";
+import { tzAddDays, tzDateKey, tzStartOfDay } from "@/lib/timezone";
 
 /**
  * Headline metrics row shown at the top of the dashboard.
@@ -52,9 +53,32 @@ function TrendBadge({ delta }: { delta: TrendDelta }) {
   );
 }
 
+/**
+ * Fraction of the current ET calendar month that has elapsed, 0-100.
+ * Day-of-month plus the fraction of today elapsed (hours + minutes),
+ * divided by total days in this month. Lets the "% of month completed"
+ * chip tick up continuously through the day in step with the "% of
+ * target" chip's actual count.
+ */
+function monthElapsedPct(nowMs = Date.now()): number {
+  const now = new Date(nowMs);
+  const key = tzDateKey(now);
+  const [y, m, d] = key.split("-").map(Number);
+  const dim = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const todayStart = tzStartOfDay(now);
+  const tomorrowStart = tzStartOfDay(tzAddDays(now, 1));
+  const todayFraction = Math.max(
+    0,
+    Math.min(1, (nowMs - todayStart.getTime()) / (tomorrowStart.getTime() - todayStart.getTime())),
+  );
+  const elapsedDays = (d - 1) + todayFraction;
+  return Math.max(0, Math.min(100, (elapsedDays / dim) * 100));
+}
+
 function TargetChip({ actual, target }: { actual: number; target: number }) {
   if (target <= 0) return null;
   const pct = (actual / target) * 100;
+  const monthPct = monthElapsedPct();
   // Colored chip so the pace reading jumps off the tile the way the
   // Surplus/Deficit chip does. Green at or above goal, blue above 50,
   // amber below 50 — the three bands you actually care about on a
@@ -64,10 +88,20 @@ function TargetChip({ actual, target }: { actual: number; target: number }) {
     pct >= 50  ? "bg-[#0E1D33] border-[#1E6FFF]/35 text-[#60A5FA]" :
                  "bg-[#2A1F0F] border-[#F59E0B]/35 text-[#F59E0B]";
   return (
-    <div className={`mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[13px] font-semibold tabular-nums ${styles}`}>
-      <span className="text-[15px]">{pct.toFixed(0)}%</span>
-      <span>of target</span>
-      <span className="opacity-70 font-normal">({actual.toLocaleString()} / {target.toLocaleString()})</span>
+    <div className="mt-3 flex flex-wrap items-center gap-2">
+      <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-[13px] font-semibold tabular-nums ${styles}`}>
+        <span className="text-[15px]">{pct.toFixed(0)}%</span>
+        <span>of target</span>
+        <span className="opacity-70 font-normal">({actual.toLocaleString()} / {target.toLocaleString()})</span>
+      </div>
+      {/* Neutral chip — "% of month completed" is context, not a
+          judgment, so no tone-based coloring. Lets the reader
+          triangulate: "we're at 10% of target but 13% of the month
+          is already done" says we're slightly behind pace. */}
+      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border bg-[#11182B] border-[#1F2937] text-[#C9D1DC] text-[13px] font-semibold tabular-nums">
+        <span className="text-[15px] text-white">{monthPct.toFixed(0)}%</span>
+        <span className="font-normal">of month completed</span>
+      </div>
     </div>
   );
 }
