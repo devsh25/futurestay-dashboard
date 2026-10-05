@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchAllContacts } from "@/lib/hubspot";
+import { fetchContactsForConversionMetrics } from "@/lib/hubspot";
 import { computeTimeSeries } from "@/lib/funnel";
 import { fetchMetaInsights } from "@/lib/meta";
 import { fetchGoogleAdsDaily } from "@/lib/google";
@@ -30,7 +30,10 @@ export const maxDuration = 60;
  */
 export async function GET() {
   try {
-    const contacts = await fetchAllContacts();
+    // Merged roster so pre-2026 signups who converted to paid this year
+    // still land on the Customers line. fetchAllContacts alone filters
+    // to createdate >= 2026-01-01 and silently drops those conversions.
+    const contacts = await fetchContactsForConversionMetrics();
     const series = computeTimeSeries(contacts);
 
     // Align spend to the same days[] the funnel series uses. Cap the

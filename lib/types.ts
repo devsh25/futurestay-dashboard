@@ -8,7 +8,14 @@ export interface HubSpotContact {
   user_clicked_launch_property: string | null;
   property_ready_to_launch: string | null;  // "true" / "false" / null
   trial__start_date: string | null;
-  cb_subcst_trial_end: string | null; // Chargebee trial end — authoritative
+  cb_subcst_trial_end: string | null; // Chargebee trial end, authoritative
+  /** Chargebee subscription cancellation timestamp. Populated the moment
+   *  Chargebee cancels; preferred over hs_v2_date_exited_customer because
+   *  the HubSpot workflow that stamps the lifecycle exit date is
+   *  unreliable (seen ~140 contacts cancelled in Chargebee with the
+   *  HubSpot exit field still blank in Aug/Sep 2026). Used by
+   *  isQuickCancel as a secondary signal. */
+  cb_subcst_cancelled_at: string | null;
   subscription_status: string | null;
   subscription_type: string | null;
   plan_name: string | null;                    // canonical enum {Amplify, Flex} — sparse

@@ -358,12 +358,37 @@ function everBecameCustomer(c: HubSpotContact): boolean {
 // Per product rule: these are NOT real conversions — treat as Failed Trialist.
 const QUICK_CANCEL_THRESHOLD_DAYS = 2;
 
+// Two cancellation signals, both compared against hs_v2_date_entered_customer:
+//   1. HubSpot's own hs_v2_date_exited_customer (set by the lifecycle
+//      workflow when the stage flips out of Customer).
+//   2. Chargebee's cb_subcst_cancelled_at (set the moment Chargebee
+//      cancels the subscription).
+//
+// We used to check (1) only. In Oct 2026 we found ~140 contacts in a
+// 60-day window where Chargebee had a cancellation on file but the
+// HubSpot exit date was still blank — the Chargebee → HubSpot workflow
+// isn't stamping the exit field reliably. The result was 9 Aug + 12 Sep
+// quick cancels silently counted as real customers.
+//
+// Either signal firing inside the 2-day window is enough. HubSpot date
+// is checked first (same behavior as before); Chargebee is a fallback
+// when HubSpot missed the stamp.
 function isQuickCancel(c: HubSpotContact): boolean {
-  if (!c.hs_v2_date_entered_customer || !c.hs_v2_date_exited_customer) return false;
+  if (!c.hs_v2_date_entered_customer) return false;
   const entered = new Date(c.hs_v2_date_entered_customer).getTime();
-  const exited = new Date(c.hs_v2_date_exited_customer).getTime();
-  if (isNaN(entered) || isNaN(exited)) return false;
-  const diffDays = (exited - entered) / (1000 * 60 * 60 * 24);
+  if (isNaN(entered)) return false;
+
+  const earliest = (iso: string | null): number | null => {
+    if (!iso) return null;
+    const t = new Date(iso).getTime();
+    return isNaN(t) ? null : t;
+  };
+  const candidates = [earliest(c.hs_v2_date_exited_customer), earliest(c.cb_subcst_cancelled_at)]
+    .filter((t): t is number => t !== null);
+  if (!candidates.length) return false;
+  const cancelled = Math.min(...candidates);
+
+  const diffDays = (cancelled - entered) / (1000 * 60 * 60 * 24);
   return diffDays >= 0 && diffDays < QUICK_CANCEL_THRESHOLD_DAYS;
 }
 

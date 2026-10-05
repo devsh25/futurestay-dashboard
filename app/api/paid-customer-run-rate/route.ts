@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchAllContacts } from "@/lib/hubspot";
+import { fetchContactsForConversionMetrics } from "@/lib/hubspot";
 import {
   everBecameRealCustomer, isPartnerReferral, isTestContact,
 } from "@/lib/funnel";
@@ -77,7 +77,10 @@ export async function GET() {
 
     const dayIndex = new Map(days.map((d, i) => [d, i] as const));
 
-    const contacts = await fetchAllContacts();
+    // Merged roster so pre-2026 signups who converted this year still
+    // land on the actual-customer line. fetchAllContacts alone filters
+    // to createdate >= 2026-01-01 and silently drops those conversions.
+    const contacts = await fetchContactsForConversionMetrics();
 
     // Fraction of today (ET) that has elapsed. Scales today's target
     // contribution so the top-of-dashboard "actual / target" chip

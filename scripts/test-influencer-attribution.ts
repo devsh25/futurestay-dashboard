@@ -21,6 +21,7 @@ const base: HubSpotContact = {
   property_ready_to_launch: null,
   trial__start_date: null,
   cb_subcst_trial_end: null,
+  cb_subcst_cancelled_at: null,
   subscription_status: null,
   subscription_type: null,
   plan_name: null,

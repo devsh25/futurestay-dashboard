@@ -32,6 +32,10 @@ const CONTACT_PROPERTIES = [
   // Chargebee's authoritative trial end date. Preferred over a hardcoded
   // trial length because it honors extensions, failed renewals, etc.
   "cb_subcst_trial_end",
+  // Chargebee cancellation timestamp. Required for the secondary
+  // quick-cancel check — HubSpot's hs_v2_date_exited_customer isn't
+  // stamped reliably by the Chargebee workflow (verified Oct 2026).
+  "cb_subcst_cancelled_at",
   "subscription_status",
   "subscription_type",
   "plan_name",
@@ -280,6 +284,7 @@ async function doFetchAllContacts(): Promise<HubSpotContact[]> {
         property_ready_to_launch: p.property_ready_to_launch || null,
         trial__start_date: p.trial__start_date || null,
         cb_subcst_trial_end: p.cb_subcst_trial_end || null,
+        cb_subcst_cancelled_at: p.cb_subcst_cancelled_at || null,
         subscription_status: p.subscription_status || null,
         subscription_type: p.subscription_type || null,
         plan_name: p.plan_name || null,
@@ -418,6 +423,7 @@ async function doFetchAllCustomers(): Promise<HubSpotContact[]> {
         property_ready_to_launch: p.property_ready_to_launch || null,
         trial__start_date: p.trial__start_date || null,
         cb_subcst_trial_end: p.cb_subcst_trial_end || null,
+        cb_subcst_cancelled_at: p.cb_subcst_cancelled_at || null,
         subscription_status: p.subscription_status || null,
         subscription_type: p.subscription_type || null,
         plan_name: p.plan_name || null,
@@ -458,6 +464,34 @@ async function doFetchAllCustomers(): Promise<HubSpotContact[]> {
 
   // In-memory cache is populated by fetchAllCustomers wrapper.
   return all;
+}
+
+/**
+ * Union of fetchAllContacts (createdate >= 2026-01-01) and
+ * fetchAllCustomers (all customer-lifecycle contacts regardless of
+ * createdate), deduped by HubSpot contact id.
+ *
+ * Use this for any metric that counts conversions by their customer-
+ * entry date — the Run Rate chart, the paid-customer target chart,
+ * exports. Reason: a host who signed up in 2024 or 2025 and only
+ * converted to a paid plan this year is a real conversion that fetch-
+ * AllContacts' date filter silently drops. Without the merge, those
+ * conversions are invisible to the chart; verified Oct 2026 against
+ * live HubSpot (5 Aug + 7 Sep customers were being dropped).
+ *
+ * Both underlying fetches are Blob-cached, so this is cheap on warm
+ * cache and single-flight-deduped on cold.
+ */
+export async function fetchContactsForConversionMetrics(): Promise<HubSpotContact[]> {
+  const [main, customers] = await Promise.all([
+    fetchAllContacts(),
+    fetchAllCustomers(),
+  ]);
+  const seen = new Set<string>();
+  const merged: HubSpotContact[] = [];
+  for (const c of main) { if (!seen.has(c.id)) { seen.add(c.id); merged.push(c); } }
+  for (const c of customers) { if (!seen.has(c.id)) { seen.add(c.id); merged.push(c); } }
+  return merged;
 }
 
 // Owners rarely change; same Blob-backed cache treatment.

@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# local audit output (contains customer PII)
+/verify-output/
+
 # production
 /build
 
