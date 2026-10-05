@@ -16,7 +16,10 @@ const BASE_URL = "https://api.hubapi.com";
 //
 // Bump the version suffix when CONTACT_PROPERTIES changes so old
 // cached payloads are not deserialised against a new shape.
-const BLOB_KEY_VERSION = "v1";
+// v2 (2026-10-04): added cb_subcst_cancelled_at to CONTACT_PROPERTIES
+// so the Chargebee cancellation check in isQuickCancel has data to work
+// with. Old v1 blobs don't carry the field; bumping forces a re-fetch.
+const BLOB_KEY_VERSION = "v2";
 const CONTACTS_BLOB_PATH = `cache/hubspot/all-contacts-${BLOB_KEY_VERSION}.json`;
 const CUSTOMERS_BLOB_PATH = `cache/hubspot/all-customers-${BLOB_KEY_VERSION}.json`;
 const OWNERS_BLOB_PATH = `cache/hubspot/all-owners-${BLOB_KEY_VERSION}.json`;
